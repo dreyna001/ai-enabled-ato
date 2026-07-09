@@ -1,6 +1,6 @@
 # ATO Block 1 Technical Spec
 
-**Project home:** `C:\Users\dreyn\OneDrive\Desktop\Cursor\ato-evidence-analysis\` (sibling to `llm_notable_analysis`). Block 1 code is implemented in **this folder** — not inside the notable analysis monorepo.
+**Project home:** `C:\Users\dreyn\OneDrive\Desktop\Cursor\ai-enabled-ato\` (sibling to `llm_notable_analysis`). Block 1 code is implemented in **this folder** — not inside the notable analysis monorepo.
 
 Related docs in this folder: [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md), [`ATO_PORTAL_DEMO_TALKING_TRACK.md`](ATO_PORTAL_DEMO_TALKING_TRACK.md). **This spec is normative for Block 1.**
 
@@ -118,7 +118,7 @@ data/incoming/<package_id>.{json,txt}   # any shape; file type + size only
 
 ## Repository layout
 
-Repo root **is** the project root. Suggested repo name: `ato-evidence-analysis` (your choice).
+Repo root **is** the project root. Suggested repo name: `ai-enabled-ato` (your choice).
 
 ```text
 <repo-root>/

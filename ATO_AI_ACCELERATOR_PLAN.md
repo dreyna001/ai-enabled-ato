@@ -2,7 +2,7 @@
 
 ## Status
 
-- Planning + **Block 1 technical spec** ([`ATO_BLOCK1_TECHNICAL_SPEC.md`](ATO_BLOCK1_TECHNICAL_SPEC.md)). **Project home:** `C:\Users\dreyn\OneDrive\Desktop\Cursor\ato-evidence-analysis\` (sibling to `llm_notable_analysis`, not inside that monorepo).
+- Planning + **Block 1 technical spec** ([`ATO_BLOCK1_TECHNICAL_SPEC.md`](ATO_BLOCK1_TECHNICAL_SPEC.md)). **Project home:** `C:\Users\dreyn\OneDrive\Desktop\Cursor\ai-enabled-ato\` (sibling to `llm_notable_analysis`, not inside that monorepo).
 - Block 1: `dev_local` + OpenAI API first for **synthetic/redacted non-CUI prototyping only**; on-prem VM (systemd, `/etc`, local vLLM) deferred.
 - End-state product plan. Assistive, evidence-bound, draft-only.
 - Target: government ATO analysis layer. Pattern: mirror notable analysis scope.
