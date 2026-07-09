@@ -443,6 +443,30 @@ One control per LLM call is allowed for debugging only; not the production defau
 
 **Audit** `data/audit/<package_id>-<run_id>.json`: `package_id`, `run_id`, `timestamp`, `runtime_profile`, `model`, `input_hash`, `report_paths`, `llm_call_count`, `preflight_score`, `status`
 
+### `package_run_summary` (Block 5 — additive)
+
+Block 1 emits a text `summary` with status counts. Block 5 adds structured rollups for the portal analysis header (see Evidence portal UI in [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md)). Deterministic — no LLM.
+
+```json
+{
+  "control_count": 296,
+  "evidence_count": 142,
+  "sufficiency_counts": {
+    "supported": 31,
+    "partial": 12,
+    "unsupported": 2,
+    "insufficient_evidence": 5
+  },
+  "needs_attention_count": 19,
+  "stale_evidence_count": 8,
+  "validation_warning_count": 3,
+  "run_id": "<uuid>",
+  "analysis_timestamp": "<iso8601>"
+}
+```
+
+`needs_attention_count` = `partial` + `unsupported` + `insufficient_evidence`. Portal must show the draft-readiness banner; never use Passing/Gaps/Attestations labels.
+
 ---
 
 ## CLI
@@ -511,12 +535,12 @@ OpenAI dev mode may remain for local dev via `LLM_BACKEND=openai|local`.
 | Block | Focus |
 | --- | --- |
 | **1** | This spec — dev_local, OpenAI, fixtures, sufficiency matrix, report, audit |
-| 2 | OSCAL + `fedramp` / `dod_rmf` |
-| 3 | PDF/DOCX/diagram/scanner intake |
-| 4 | Full-draft SSP/SAR/POA&M/SAP catalog |
-| 5 | Evidence portal SPA |
-| 6 | Consistency, advisor, assessor pack, chat, RAG |
-| 7 | GRC import, ConMon Option 1, gated writeback |
+| 2 | OSCAL + `fedramp` / `dod_rmf`; path-aware upload checklist; optional KSI catalog intake |
+| 3 | PDF/DOCX/diagram/scanner/attestation-export intake; evidence link suggestions |
+| 4 | Full-draft SSP/SAR/POA&M/SAP catalog; paired OSCAL + markdown export |
+| 5 | Evidence portal SPA — run summary, matrix filters, evidence search, targeted re-analysis |
+| 6 | Consistency, gap clusters, assessor checklist/walkthrough, narrative flags, chat, RAG |
+| 7 | GRC import, package delta, OSCAL validate-before-export, ConMon Option 1, gated writeback |
 
 ---
 

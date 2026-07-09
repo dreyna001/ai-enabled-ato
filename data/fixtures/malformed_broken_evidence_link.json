@@ -1,0 +1,130 @@
+{
+  "package_id": "malformed_broken_evidence_link",
+  "authorization_path": "fisma_agency",
+  "baseline": "NIST-SP-800-53-R5",
+  "impact_level": "Moderate",
+  "data_classification": "Unclassified",
+  "system_name": "Lab Scheduling System (LSS-001)",
+  "authorization_boundary": "LSS-001 comprises the web application tier, PostgreSQL database, and scheduled batch jobs hosted in the fictional Meridian Research Lab private cloud. External integrations are limited to campus LDAP for authentication and a read-only calendar API. Out of scope: physical lab instruments, guest Wi-Fi, and legacy mainframe batch exports.",
+  "assessment_date": "2026-06-15",
+  "freshness_threshold_days": 365,
+  "controls": [
+    {
+      "control_id": "AC-2",
+      "control_title": "Account Management",
+      "control_requirement": "Define and manage system accounts, including establishing conditions for group and role membership; specify authorized users, group and role membership, and access authorizations for each account; require approvals for account creation; monitor account usage; disable accounts within defined time periods; and notify account managers when accounts are no longer required.",
+      "implementation_statement": "LSS-001 provisions accounts through ServiceNow requests approved by the system owner. Role-based access is enforced via LDAP group mappings. Quarterly access reviews are documented in the GRC tool. Privileged accounts require secondary approval.",
+      "linked_evidence_ids": ["EV-AC2-POLICY", "EV-AC2-REVIEW"]
+    },
+    {
+      "control_id": "AU-6",
+      "control_title": "Audit Record Review, Analysis, and Reporting",
+      "control_requirement": "Review and analyze system audit records for indications of inappropriate or unusual activity and report findings to designated organizational officials.",
+      "implementation_statement": "Security operations reviews application and authentication logs weekly using a documented SOP. Findings are tracked in the lab ticketing system. Sample reviews are retained as evidence each quarter.",
+      "linked_evidence_ids": ["EV-AU6-SOP", "EV-AU6-REVIEW"]
+    },
+    {
+      "control_id": "CM-6",
+      "control_title": "Configuration Settings",
+      "control_requirement": "Establish and document configuration settings for information technology products employed within the system using security configuration checklists that reflect the most restrictive mode consistent with operational requirements.",
+      "implementation_statement": "LSS-001 servers are hardened per DISA STIG guidance. Ansible playbooks enforce baseline settings on deploy. The implementation statement claims full STIG alignment for RHEL 9 and PostgreSQL 15, though evidence retention focuses on policy rather than scan output.",
+      "linked_evidence_ids": ["EV-CM6-POLICY", "EV-CM6-BASELINE", "EV-DOES-NOT-EXIST"]
+    },
+    {
+      "control_id": "IR-4",
+      "control_title": "Incident Handling",
+      "control_requirement": "Implement an incident handling capability for incidents that includes preparation, detection and analysis, containment, eradication, and recovery.",
+      "implementation_statement": "The lab IR plan covers LSS-001 as a Moderate-impact system. On-call rotation includes the application owner. Tabletop exercises are conducted annually and after major releases.",
+      "linked_evidence_ids": ["EV-IR4-PLAN", "EV-IR4-TTX"]
+    },
+    {
+      "control_id": "RA-5",
+      "control_title": "Vulnerability Monitoring and Scanning",
+      "control_requirement": "Monitor and scan for vulnerabilities in the system and hosted applications, analyze vulnerability scan reports, and remediate legitimate vulnerabilities in accordance with organizational risk tolerance.",
+      "implementation_statement": "Weekly authenticated scans run against LSS-001 production hosts. Critical findings are remediated within 30 days. Scan summaries are uploaded to the GRC evidence repository each month.",
+      "linked_evidence_ids": ["EV-RA5-SCAN"]
+    }
+  ],
+  "evidence_items": [
+    {
+      "evidence_id": "EV-AC2-POLICY",
+      "title": "LSS Account Management Policy v2.1",
+      "source_type": "policy",
+      "source_owner": "Meridian Lab ISSO Office",
+      "collected_at": "2026-03-10",
+      "text": "Policy LSS-AC-001 requires documented approval for all LSS-001 account creation and role changes. Standard users receive the LSS-User role; administrators receive LSS-Admin only after manager and ISSO dual approval. Accounts for contractors expire automatically after 90 days unless renewed. The policy defines quarterly access certification requirements and mandates disabling accounts within 24 hours of termination notification from HR."
+    },
+    {
+      "evidence_id": "EV-AC2-REVIEW",
+      "title": "Q1 FY2025 LSS-001 Access Certification Export",
+      "source_type": "access_review",
+      "source_owner": "Meridian Lab GRC Team",
+      "collected_at": "2025-01-22",
+      "text": "Access certification completed for 47 LSS-001 accounts. Reviewers: system owner Jane Doe (fictional), ISSO proxy. Results: 2 role downgrades applied, 1 contractor account disabled. Certification signed in GRC workflow ID CERT-2025-0142. Note: this review predates the current assessment cycle and has not been repeated since collection."
+    },
+    {
+      "evidence_id": "EV-AU6-SOP",
+      "title": "Log Review SOP for Lab Applications",
+      "source_type": "sop",
+      "source_owner": "Meridian Lab Security Operations",
+      "collected_at": "2026-02-01",
+      "text": "SOP SEC-LOG-004 defines weekly review of authentication failures, privilege escalation events, and application error spikes for Moderate systems including LSS-001. Analysts use the central SIEM dashboard LSS-App-Auth and LSS-App-Errors. Findings rated High are escalated within 4 hours; Medium within 24 hours. Review completion is attested in ticket template LOG-REVIEW-001."
+    },
+    {
+      "evidence_id": "EV-AU6-REVIEW",
+      "title": "May 2026 LSS-001 Log Review Record",
+      "source_type": "log_review",
+      "source_owner": "Meridian Lab Security Operations",
+      "collected_at": "2026-05-28",
+      "text": "Weekly log review ticket LOG-2026-0522 completed by analyst Alex Chen (fictional). Reviewed 12,847 auth events; flagged 3 repeated failed logins from single IP (resolved as misconfigured lab terminal). No privilege escalation anomalies. SIEM rule LSS-001-Anomaly-01 fired zero times. Reviewer attestation: 'Log review complete; no unauthorized activity identified.'"
+    },
+    {
+      "evidence_id": "EV-CM6-POLICY",
+      "title": "Configuration Management Policy for Lab Systems",
+      "source_type": "policy",
+      "source_owner": "Meridian Lab Configuration Board",
+      "collected_at": "2026-01-15",
+      "text": "Policy CM-LAB-002 requires documented baselines for all production systems. Changes require CAB approval. LSS-001 must maintain hardened images aligned with DISA STIGs for operating system and database tiers. Deviations require risk acceptance by the ISSO."
+    },
+    {
+      "evidence_id": "EV-CM6-BASELINE",
+      "title": "Generic Linux Baseline Checklist (Template)",
+      "source_type": "configuration",
+      "source_owner": "Meridian Lab Infrastructure Team",
+      "collected_at": "2026-04-05",
+      "text": "Generic checklist covering SSH hardening, password policy, and firewall defaults for RHEL-based systems. Document references DISA STIG IDs in appendix but does not include LSS-001-specific scan results, hostnames, or evidence that STIG rules were validated on production instances. Several checklist items marked 'N/A - verify during assessment' without supporting scan output."
+    },
+    {
+      "evidence_id": "EV-IR4-PLAN",
+      "title": "Meridian Lab Incident Response Plan Excerpt - LSS-001",
+      "source_type": "plan",
+      "source_owner": "Meridian Lab CISO Office",
+      "collected_at": "2026-03-20",
+      "text": "IR plan section 4.2 covers LSS-001 incident categories: unauthorized access, data integrity loss, and availability events. Contact tree includes application owner, ISSO, and lab SOC. Containment steps include isolating app tier VMs and preserving PostgreSQL WAL logs. Recovery RTO target: 4 hours for Moderate impact."
+    },
+    {
+      "evidence_id": "EV-IR4-TTX",
+      "title": "April 2026 LSS-001 Tabletop Exercise Summary",
+      "source_type": "exercise",
+      "source_owner": "Meridian Lab CISO Office",
+      "collected_at": "2026-04-18",
+      "text": "Tabletop scenario: compromised service account used to export scheduling data. Participants: app owner, DBA, SOC analyst, ISSO. Exercise validated contact tree reachability within 15 minutes. Gap identified: backup restore runbook missing PostgreSQL point-in-time steps (POA&M item opened). Overall exercise rated successful for detection and containment decision paths."
+    },
+    {
+      "evidence_id": "EV-RA5-SCAN",
+      "title": "May 2026 LSS-001 Vulnerability Scan Summary",
+      "source_type": "scan_report",
+      "source_owner": "Meridian Lab Vulnerability Management",
+      "collected_at": "2026-05-10",
+      "text": "Authenticated scan of 3 LSS-001 hosts (app-01, app-02, db-01). Total findings: 2 Medium, 5 Low. Medium findings: outdated OpenSSL library (POA&M VM-2026-044, remediation due 2026-06-30). No Critical or High open findings. Scan report lists IP addresses but does not include a current asset inventory mapping hostnames to authorization boundary components or data sensitivity labels."
+    },
+    {
+      "evidence_id": "EV-ORPHAN-DOC",
+      "title": "Legacy LSS Backup Procedure Draft (Unlinked)",
+      "source_type": "procedure",
+      "source_owner": "Meridian Lab Infrastructure Team",
+      "collected_at": "2026-02-14",
+      "text": "Draft procedure describing nightly file-level backups for LSS-001 application data to lab NAS share BACKUP-LSS-01. Document marked DRAFT and not yet mapped to any control in the GRC tool. Intended for future CP-9 evidence linkage pending review."
+    }
+  ]
+}

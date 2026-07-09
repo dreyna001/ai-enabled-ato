@@ -1,0 +1,1 @@
+"""Canonical package schema models."""

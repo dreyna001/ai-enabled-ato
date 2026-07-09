@@ -1,0 +1,17 @@
+.venv/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+config.local.env
+.env
+data/incoming/*
+!data/incoming/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/quarantine/*
+!data/quarantine/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/audit/*
+!data/audit/.gitkeep

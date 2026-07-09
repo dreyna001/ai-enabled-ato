@@ -135,13 +135,18 @@ A **control** is a specific security requirement from **NIST SP 800-53 Rev 5**. 
 
 ## Control status labels in the portal
 
+Aligned with Block 1 matrix rubric — four sufficiency statuses, all draft:
+
 | Status | Meaning | Official? |
 | --- | --- | --- |
-| **Supported** | Evidence appears to support the implementation claim | No — draft analysis only |
-| **Partial** | Some support, but gaps/stale/contradictory items | No |
-| **Needs review** | Human must decide; AI sees ambiguity or missing context | No |
+| **Supported** | Linked evidence appears to substantiate the implementation claim | No — draft analysis only |
+| **Partial** | Evidence exists but gaps, stale items, or weak linkage remain | No |
+| **Unsupported** | Evidence contradicts or does not show implementation | No |
+| **Insufficient evidence** | No linked evidence, or too thin to assess | No |
 
-**Demo line:** "Green/yellow/orange here is our analysis readiness — not the official control status in GRC or eMASS."
+**Derived rollup — Needs attention:** count of Partial + Unsupported + Insufficient evidence. Used in the package run summary header, not a fifth matrix status.
+
+**Demo line:** "These counts are draft analysis readiness for this package run — not Passing/Gaps in GRC, eMASS, or a pipeline compliance dashboard."
 
 ---
 
@@ -199,8 +204,8 @@ Standard JSON/XML format for SSP, SAP, assessment results, POA&M. We import/expo
 **FedRAMP Moderate**  
 FedRAMP baseline for moderate-impact cloud systems — common for CSPs. Header pill shows path + impact context.
 
-**Readiness bar (31 / 52 controls ready)**  
-Share of controls our analysis marked supported vs total in package — **readiness for human review**, not ATO granted.
+**Readiness summary (package run summary header)**  
+Deterministic rollups from the latest analysis run: Supported / Partial / Unsupported / Insufficient evidence counts, **Needs attention** total, evidence items in package, stale evidence flags, validation warnings. **Not** live pass/gap or attestation inventory from a pipeline tool.
 
 **ConMon (Continuous Monitoring)**  
 FedRAMP ongoing monthly monitoring after initial authorization. **Locked strategy:** ConMon prep and gated export to GRC (Option 1) — delta analysis, POA&M update drafts, narrative draft; GRC and FedRAMP process remain authoritative. We do **not** replace the ConMon workflow or submit to FedRAMP Marketplace (Option 2). See ConMon strategy in [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md).
@@ -224,28 +229,40 @@ Material system change that may require re-assessment. Our **significant-change 
   | **Controls** | 800-53 Rev 5 IDs in scope, implementation statements, linked evidence IDs |
   | **Evidence artifacts** | Policies, SOPs, access reviews, log review records, IR plans, configs, tickets, screenshots — PDF, DOCX, XLSX, text/markdown |
   | **Scanner / STIG exports** | Qualys, Tenable, SCAP/STIG, SCC, CCRI findings imported as read-only inputs |
+  | **Attestation exports (optional)** | Pipeline attestation bundles the customer exported (JSON/OSCAL/in-toto) — we ingest, we do not collect from CI/CD |
   | **OSCAL (optional)** | Partial or full SSP, POA&M, SAP, assessment-results from GRC/eMASS |
   | **Architecture (optional)** | Boundary/network diagrams — PNG, PDF pages, or structured exports from draw.io / Visio |
   | **Prior package (optional)** | Last SSP/POA&M/evidence snapshot for delta, ConMon prep, or significant-change comparison |
 
   **Demo line:** "Same idea as our notable payload — everything the ISSO would assemble for one assessor review cycle, bounded and citeable. GRC and scanners stay authoritative; we analyze the bundle they export or drop."
 
-- **Controls ready / need attention** — aggregate from our matrix, not GRC
+- **Package run summary** — per-run rollups: Supported / Partial / Unsupported / Insufficient evidence, Needs attention, evidence in package, stale flags, validation warnings (from `package_run_summary` in report JSON)
 - **Drafts awaiting review** — AI-generated full draft documents not yet human-approved
 
-**Behind the scenes:** Portal reads archived analysis runs. Stats aggregate control matrix from latest report JSON — not live GRC sync.
+**Behind the scenes:** Portal reads archived analysis runs. Summary counts are deterministic rollups from the latest matrix — not live GRC sync, not pipeline pass/gap.
 
-### Control Review
+### Control Review (control matrix)
 
-- **Control list** — 800-53 controls in scope for this system
+- **Control list** — 800-53 controls in scope; filter by sufficiency status, stale evidence, or open gaps
 - **AI evidence finding** — LLM summary bounded to linked evidence
 - **Draft SAR finding** — creates assessor-facing finding draft for that control
+- **Re-analyze controls needing attention** — after customer re-ingests new evidence, re-run matrix for flagged controls only (does not trigger external scans)
 
-**Behind the scenes:** Controls from OSCAL SSP or package manifest. LLM output schema-validated; stale dates and broken links caught deterministically first.
+**Behind the scenes:** Controls from OSCAL SSP or package manifest. LLM output schema-validated; stale dates and broken links caught deterministically first. Gap clusters (Block 6) group related weaknesses by control family for POA&M prep.
+
+### Readiness (assessor checklist)
+
+- **Assessor readiness checklist** — draft flags for common rejection patterns before export (stale evidence, missing links, narrative gaps, OSCAL validation failures)
+- **Upload checklist** — path-aware list of what is still missing before a full analysis run
+
+**Demo line:** "This simulates what a 3PAO might push back on — it is not an authorization decision."
+
+**Behind the scenes:** Deterministic checks first; bounded LLM for narrative completeness flags. Inspired by reviewer simulation in Boundera/Paramify; scoped to one imported package.
 
 ### Draft Artifacts
 
-- **Export OSCAL** — machine-readable draft for GRC import
+- **Export OSCAL** — machine-readable draft for GRC import (validated before gated writeback)
+- **Paired export** — OSCAL plus ISSO-readable markdown from the same run
 - **Send to approval** — human gate before writeback
 
 **Behind the scenes:** Path-aware field mapping (FedRAMP vs eMASS vs agency). Export writes draft OSCAL models; official records unchanged until GRC import after approval.
@@ -267,6 +284,7 @@ Material system change that may require re-assessment. Our **significant-change 
 ### Audit Trail
 
 - **Run** — one analysis execution (validate -> LLM -> reports -> audit log)
+- **Package delta** — when a prior package is linked, what changed in controls, evidence, and matrix status
 - **Validation warnings** — schema/date/link issues caught before trusting output
 
 **Behind the scenes:** Append-only audit record per run: package_id, path, timestamp, model profile, input hash, output paths, warning count.
@@ -284,6 +302,7 @@ Material system change that may require re-assessment. Our **significant-change 
 | SAR | Assessor's official findings report |
 | POA&M | Official remediation tracker for weaknesses |
 | Partial | Some proof, but gaps — not ready for assessor without fixes |
+| Needs attention | Partial + Unsupported + Insufficient evidence — rollup only |
 | Stale | Evidence too old to trust |
 | Draft | AI wrote it; human must review before it's official |
 | GRC/eMASS | Where official records live — we don't replace them |
@@ -292,12 +311,13 @@ Material system change that may require re-assessment. Our **significant-change 
 
 ## Leadership one-liner per screen
 
-1. **Overview** — "Which systems are close to ready and what needs human attention?"
-2. **Control Review** — "Does the evidence actually prove each NIST requirement?"
-3. **Draft Artifacts** — "Turn evidence and gaps into full draft ATO documents humans can review."
-4. **Assistant** — "Ask questions about this package — with citations, not guesses."
-5. **Approvals** — "Nothing hits GRC without a person."
-6. **Audit Trail** — "Every AI run is logged."
+1. **Overview** — "For this package run, how many controls look supported vs need attention?"
+2. **Control Review** — "Filter to gaps and stale evidence — does the proof actually hold up?"
+3. **Readiness** — "What would an assessor likely push back on before we export?"
+4. **Draft Artifacts** — "Turn evidence and gaps into full draft ATO documents humans can review."
+5. **Assistant** — "Ask questions about this package — with citations, not guesses."
+6. **Approvals** — "Nothing hits GRC without a person."
+7. **Audit Trail** — "Every AI run is logged; deltas show what changed since last month."
 
 ---
 
@@ -305,10 +325,11 @@ Material system change that may require re-assessment. Our **significant-change 
 
 1. **Overview** — three packages, one ready for review
 2. **Control Review** — AC-2 stale evidence and unsupported claim
-3. **Draft Artifacts** — full draft SSP / POA&M export for human review
-4. **Assistant** — citation discipline; refuse authorization decision
-5. **Approvals** — human gate before writeback
-6. **Audit Trail** — traceable runs
+3. **Readiness** — assessor checklist flags before export (not a pass/fail decision)
+4. **Draft Artifacts** — full draft SSP / POA&M export for human review
+5. **Assistant** — citation discipline; refuse authorization decision
+6. **Approvals** — human gate before writeback
+7. **Audit Trail** — traceable runs; package delta if prior month linked
 
 **Close:** "The ATO process does not go away. We make the manual analysis inside it faster, more consistent, and reviewable."
 

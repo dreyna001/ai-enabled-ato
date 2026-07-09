@@ -165,7 +165,63 @@ Mirror analyst portal pattern: calm read-only SPA, sidebar nav, list+detail+chat
 
 **Routes:** `/` home; `/packages` list; `/packages/:id` detail (matrix, drafts, citations); package chat in detail pane.
 
-**UX:** Read-only default; writeback only with `action_gated`; show path/baseline/impact/classification; label all AI/draft content; fail-visible empty/error states; tabs: summary, control matrix, draft artifacts, evidence index, architecture/boundary; package chat supports **expanded bounded intents** (explain, compare, draft language, gap advisor — not authorization decisions).
+**UX:** Read-only default; writeback only with `action_gated`; show path/baseline/impact/classification; label all AI/draft content; fail-visible empty/error states; tabs: **summary**, **readiness** (assessor checklist), control matrix, draft artifacts, evidence index (with search), architecture/boundary; package chat supports **expanded bounded intents** (explain, compare, draft language, gap advisor — not authorization decisions).
+
+### Package run summary (analysis header)
+
+Every package detail view opens with a **run summary** — deterministic rollups from the latest analysis run for that package. This is **not** a live GRC or continuous-compliance dashboard; it reflects one bounded evidence snapshot plus the most recent analyzer output.
+
+| Portal metric | Source | Meaning |
+| --- | --- | --- |
+| **Supported** | Matrix row count | Draft: linked evidence appears to substantiate the claim |
+| **Partial** | Matrix row count | Draft: evidence exists but gaps, stale items, or weak linkage remain |
+| **Unsupported** | Matrix row count | Draft: evidence contradicts or does not show implementation |
+| **Insufficient evidence** | Matrix row count | Draft: no linked evidence or too thin to assess |
+| **Needs attention** | Derived | `partial` + `unsupported` + `insufficient_evidence` |
+| **Evidence in package** | `package_metadata.evidence_count` | Artifacts in this snapshot — not pipeline attestation inventory |
+| **Stale evidence flags** | Deterministic pre-matrix | Items past freshness threshold |
+| **Validation warnings** | Pre-flight + schema | Broken links, orphans, metadata gaps |
+
+Mandatory banner on summary and matrix tabs: **"Draft analysis readiness — not official control status in GRC, eMASS, or FedRAMP."** Never label these metrics as Passing, Gaps, or Attestations.
+
+Structured JSON field `package_run_summary` (Block 5 portal; additive to Block 1 text `summary`) holds the counts above for API and UI. Block 1 may emit a minimal deterministic rollup from matrix rows without portal work.
+
+### Control matrix (review table)
+
+Use a **review table** pattern familiar from pipeline-native CCM tools, with our semantics:
+
+- Columns: control ID, title (when available), family, sufficiency status, stale flag, gap count
+- Filters: All | Supported | Partial | Unsupported | Insufficient evidence | Has stale evidence | Has open gaps
+- Default sort: control ID; optional sort by family or needs-attention first
+- Row drill-down: finding summary, gaps, assessor questions, citations — same data as report matrix
+
+**Gap clusters (Block 6):** deterministic grouping by control family plus shared gap themes across rows; feeds gap-closure advisor and POA&M draft prep. Advisory only — not official weakness tracking.
+
+### Targeted re-analysis
+
+When the customer adds or replaces evidence and re-ingests the package, the portal offers **Re-analyze controls needing attention** — re-run the sufficiency matrix for rows flagged `partial`, `unsupported`, or `insufficient_evidence` only (plus any controls whose linked evidence changed). Analysis-only: does **not** trigger scanner runs, pipeline jobs, or external tool scans. Full package re-analysis remains the default after material intake changes.
+
+Deferred: scheduled re-analysis on unchanged package without re-upload (`CCM polling` row in deferred scope) — same selective scope, cron-driven.
+
+### Evidence index and search (portal)
+
+**Evidence index tab:** browse all `evidence_items` in the package — ID, title, source type, collected date, stale flag, linked controls, source ref.
+
+**Package-scoped search (Block 5/6):** keyword search over evidence titles and extracted text; optional embedding retrieval for chat and index (one package only — not org-wide GRC search). Helps ISSOs find “where is the access review?” without opening every PDF. Inspired by semantic retrieval in ezRMF/Boundera; scoped to archived package boundary.
+
+### Assessor readiness checklist (Block 6)
+
+Deterministic + bounded LLM pass over the **imported package** before gated export — inspired by Boundera/Paramify “reviewer simulation,” but draft-only:
+
+- Stale or missing evidence on high-weight controls
+- Implementation statements with `TBD — input missing` on in-scope controls
+- Broken evidence links, orphan artifacts
+- SSP claims without linked evidence (from consistency brief)
+- Scanner findings contradicting implementation narrative
+- OSCAL draft fails schema validation (when `oscal` profile enabled)
+- FedRAMP: KSI catalog present but indicators without supporting evidence (when 20x inputs included)
+
+Output: checklist with citations and severity hints — not a pass/fail authorization decision. Portal tab: **Readiness** alongside Summary.
 
 **Backend:** FastAPI on loopback; nginx TLS + SPA + proxy auth (`X-Forwarded-User`, portal secret). Layout: `frontend/evidence-portal/`, `onprem_service/portal_app.py`, nginx/systemd units. AWS GovCloud / Azure Government: same SPA/API; I/O triggers only.
 
@@ -292,7 +348,7 @@ Order: readiness -> install/air-gap -> profiles/benchmark -> portal network/secu
 
 ### Analysis outputs (not standalone deliverables)
 
-Feed full drafts; not official ATO artifacts alone: evidence sufficiency matrix; assessor questions (in SAR pack); STIG/CCRI impact brief; gap-to-owner task export; inheritance/shared-responsibility review; readiness delta; pre-flight readiness; cross-artifact consistency brief; gap-closure advisor notes; assessor response pack; architecture/boundary consistency flags; audience summary views.
+Feed full drafts; not official ATO artifacts alone: evidence sufficiency matrix; **package run summary rollups**; **gap clusters by control family**; assessor questions (in SAR pack); STIG/CCRI impact brief; gap-to-owner task export; inheritance/shared-responsibility review; readiness delta; pre-flight readiness; cross-artifact consistency brief; gap-closure advisor notes; assessor response pack; architecture/boundary consistency flags; audience summary views.
 
 ## Differentiation, ConMon, deferred scope
 
@@ -306,6 +362,8 @@ Feed full drafts; not official ATO artifacts alone: evidence sufficiency matrix;
 | Path-aware shaping   | FISMA/FedRAMP/DoD from one core                 | Path-specific forms only                  |
 | OSCAL round-trip     | Full-draft import/export                        | Varying OSCAL; rarely AI-assisted         |
 | Package delta        | Gaps resolved/stale; ConMon prep                | Status tracking; weak narrative delta     |
+| Package run summary    | Draft sufficiency rollups per analysis run      | Live pass/gap dashboards; attestation inventory |
+| Assessor readiness     | Pre-export checklist on imported package        | Official assessor sign-off or 3PAO portal SoR   |
 | Posture              | Draft + human review + gated writeback          | Often positioned as SoR                   |
 
 
@@ -323,6 +381,65 @@ Reference competitors (not exhaustive): RegScale, ezRMF, Anitian FedFlex, ASSYST
 | Anitian FedFlex      | FedRAMP lifecycle for CSPs; agentic SSP/evidence/ConMon; often infra + 3PAO | SaaS vendor pursuing FedRAMP listing                      |
 | ASSYST ComplySyncATO | DevSecOps pipeline compliance, GRC RPA, continuous ATO                      | ISSO tying CI/CD scans to GRC controls                    |
 
+
+### Competitive landscape — pipeline-native CCM (TestifySec pattern)
+
+Reference: TestifySec and similar — CI/CD observer, cryptographically signed attestations, continuous pass/gap control dashboard, OSCAL SSP generation, auditor assistant from an evidence base.
+
+
+| Tool / pattern | What they optimize | Typical buyer |
+| --- | --- | --- |
+| TestifySec | SDLC attestations mapped to 800-53 pass/gap; OSCAL SSP; re-scan gap controls | FedRAMP CSP / DevSecOps-mature product team |
+| Vanta / Drata / Secureframe (as sinks) | Pipeline tools push signed evidence into GRC | SaaS vendor continuous compliance |
+
+
+**What we adopt (analysis-only, not their platform model):** see **Patterns borrowed across the market** table below (TestifySec rows included there).
+
+**What we do not adopt:** CI/CD observer, attestation signing, continuous compliance SoR, live control pass/fail from telemetry, framework-as-product workspace, triggering external scans.
+
+**Positioning vs TestifySec:** They **generate** pipeline evidence continuously. We **analyze** whatever the customer already exported — policies, scans, OSCAL, attestation bundles, diagrams — in one bounded package. Complementary when the customer exports TestifySec or OSCAL output into our intake path; not a replacement for their pipeline collector.
+
+### Competitive landscape — OSCAL-native and FedRAMP 20x tools
+
+Reference: Boundera, Paramify, NISTCompliance.AI (Quzara), RegScale 20x prototypes — OSCAL/SSDR generation, KSI validation, reviewer simulation, dual human+machine export. RegScale also appears in full RMF platforms above; listed here for **documentation and 20x** patterns.
+
+
+| Tool | What they optimize | Typical buyer |
+| --- | --- | --- |
+| Boundera | KSI evidence mapping, cloud-signal collection, OSCAL packages, gap analysis | FedRAMP 20x CSP with strong cloud integrations |
+| Paramify | SSDR/OSCAL generation, KSI validation, MCP evidence automation, trust center | FedRAMP CSP pursuing 20x path |
+| NISTCompliance.AI | AI SSP/POA&M across 800-53, cross-framework mapping, auditor co-pilot | Multi-framework agency or CSP |
+| RegScale (20x) | KSI catalog import, OSCAL SSP export, OSCAL CLI validation loop | cATO / OSCAL-first programs |
+
+
+**What we do not adopt from this category:** live cloud/IdP polling, KSI validation schedulers, MCP evidence collectors, SSDR as system of record, trust-center hosting, auto-submit to FedRAMP PMO.
+
+### Patterns borrowed across the market (ours — analysis-only)
+
+Good ideas from TestifySec, RegScale, Boundera, Paramify, ezRMF, NISTCompliance.AI, and similar tools — reframed for **imported package analysis**, not platform replacement.
+
+
+| Market pattern | Who does it | Our adaptation | Block |
+| --- | --- | --- | --- |
+| Run summary KPIs | TestifySec, RegScale dashboards | **Package run summary** — draft sufficiency rollups per analysis run | 5 |
+| Control table + gap filter | TestifySec, RegScale | **Control matrix** with family/status/stale/gap filters | 5 |
+| Re-check failed controls | TestifySec | **Targeted re-analysis** after customer re-ingests evidence | 5 |
+| Attestations as evidence | TestifySec | **Read-only intake** of exported attestation bundles | 3 |
+| Reviewer / 3PAO simulation | Boundera, Paramify | **Assessor readiness checklist** — common rejection patterns on imported package before export | 6 |
+| OSCAL validate before submit | RegScale, Boundera toolkit, Paramify | **OSCAL validate-before-export** — schema + semantic checks on draft exports | 2 / 7 |
+| FedRAMP 20x KSI rollup | Boundera, Paramify, RegScale | **KSI readiness rollup** — map matrix + evidence to imported KSI catalog (`fedramp` only); no live KSI polling | 2+ |
+| Suggested evidence-to-control links | Boundera, ezRMF | **Link suggestions** on document intake; human confirms before matrix | 3 |
+| Semantic evidence retrieval | ezRMF | **Package-scoped evidence search** — index + chat retrieval over one archived package | 5 / 6 |
+| What changed since last package | Boundera, RegScale ConMon | **Package delta report** — control, evidence, and matrix diffs vs `prior_package_id` | 7 |
+| Dual machine + human export | Paramify | **Paired export** — OSCAL JSON/XML plus ISSO-readable markdown (optional HTML) from same run | 4 / 7 |
+| Auditor co-pilot / walkthrough | NISTCompliance.AI | **Assessor walkthrough pack** — cited Q&A trail for 3PAO/SCA review sessions | 6 |
+| Narrative completeness gaps | Boundera | **Implementation narrative flags** — missing required elements in statements vs control requirement (RAG-grounded) | 6 |
+| Path-specific intake checklist | Paramify intake, Vanta | **Pre-flight upload checklist** — path-aware “still missing before full run” list | 2 |
+| STIG/CCI → control narrative | ezRMF | **Scanner-to-ATO brief** (existing) — finding impact language for SAR/POA&M | 4 |
+| “What's blocking ATO?” chat | TestifySec, Boundera | **Package chat** gap-advisor intent with citations | 6 |
+
+
+**What we never adopt from any vendor category:** CI/CD/cloud observers, attestation signing, continuous compliance SoR, live pass/fail posture, eMASS/GRC bidirectional sync as SoR, agent swarms with write access, environment discovery, scan execution, FedRAMP PMO submit, trust-center hosting.
 
 **Where full RMF / cATO platforms miss (our wedge):**
 
@@ -347,7 +464,7 @@ Reference competitors (not exhaustive): RegScale, ezRMF, Anitian FedFlex, ASSYST
 
 **Positioning line vs category 1:** They sell “run your ATO on our platform.” We sell “analyze the package you already have, faster and more consistently, then push drafts back to the tools you already own.”
 
-**Not a direct fight when:** customer has no GRC, wants cATO platform + CCM, or is a FedRAMP CSP buying infra + 3PAO + authorization path (Anitian/Paramify territory).
+**Not a direct fight when:** customer has no GRC, wants cATO platform + CCM, pursues greenfield FedRAMP CSP with pipeline-native evidence (TestifySec / Anitian / Paramify territory), or buys infra + 3PAO + authorization path bundled.
 
 **Direct fight when:** ISSO/SCA already lives in Archer/eMASS/CSAM; assessor questions evidence quality; team has scanner + policy PDFs + partial OSCAL and needs **review-ready drafts** without replatforming.
 
@@ -360,16 +477,21 @@ Assistive, evidence-bound, draft-only. Deterministic validation before and after
 
 | P   | Capability                    | Output                                                                              | Guardrails                                              |
 | --- | ----------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| 1   | Document ingestion            | PDF/DOCX/XLSX -> bounded `evidence_items`; proposed control links for human confirm | Extract/cite source doc; no invented policy text        |
-| 2   | Pre-flight readiness          | Completeness score, block/warn before full run, “upload next” list                  | Deterministic checks first; LLM explains gaps only      |
+| 1   | Document ingestion            | PDF/DOCX/XLSX -> bounded `evidence_items`; **proposed control link suggestions** for human confirm | Extract/cite source doc; no invented policy text        |
+| 2   | Pre-flight readiness          | Completeness score, block/warn before full run, **path-aware upload checklist**     | Deterministic checks first; LLM explains gaps only      |
 | 3   | Cross-artifact consistency    | SSP vs evidence vs scans vs POA&M contradiction brief                               | Citations only; feeds SAR/POA&M drafts                  |
 | 4   | Gap-closure advisor           | Per-gap: evidence types needed, assessor Q hints, draft remediation steps           | Advisory; not official POA&M until approved             |
 | 5   | Assessor response pack        | Map inbound assessor comments -> controls/evidence; draft response language         | Human review; no authoritative rebuttal                 |
 | 6   | SAP test-focus optimization   | Risk-ranked assessment focus, sampling hints from gap matrix                        | Draft SAP input; assessor owns official SAP             |
-| 7   | ConMon / SCR intelligence     | Monthly delta narrative, POA&M update suggestions, SCR trigger hints                | Option 1 only; no PMO submit or POA&M SoR               |
+| 7   | ConMon / SCR intelligence     | **Package delta report** (control/evidence/matrix diffs), ConMon narrative, POA&M update suggestions, SCR trigger hints | Option 1 only; no PMO submit or POA&M SoR               |
 | 8   | Audience-specific summaries   | ISSO working, AO readiness, assessor prep brief (same cited facts)                  | No new facts; labeled draft views                       |
 | 9   | Expanded package chat         | Multiple bounded chat intents (see below)                                           | One package; citations required; refuse auth decisions  |
 | 10  | Architecture / diagram intake | Boundary/component/flow extraction for SSP + consistency checks                     | Intake now; cite diagram artifact; no invented topology |
+| 11  | Assessor readiness checklist  | Pre-export rejection-pattern flags with citations                                   | Draft checklist only; not assessor sign-off             |
+| 12  | Implementation narrative flags | Missing required elements in implementation statements vs control requirement       | RAG-grounded; cite requirement text; feeds SSP draft    |
+| 13  | Assessor walkthrough pack     | Cited Q&A trail for 3PAO/SCA review sessions                                        | Human-led session; AI prepares cited talking points       |
+| 14  | KSI readiness rollup          | Map sufficiency matrix + evidence to imported KSI catalog (`fedramp` / 20x inputs)   | No live KSI polling; imported catalog + evidence only   |
+| 15  | Package-scoped evidence search | Keyword + optional embedding retrieval over one archived package                 | No cross-package or GRC-wide search                     |
 | —   | Enhanced reference RAG        | Overlay-aware control interpretation; cite 800-53/agency/path template clauses      | Approved corpus only; no open web                       |
 
 
@@ -419,9 +541,9 @@ Required for SSP boundary sections and consistency analysis. Intake at package i
 
 ### ConMon (locked): Option 1 — feed GRC
 
-Ingest monthly OSCAL/GRC + scans + prior package -> delta analysis -> ConMon narrative + POA&M **update** drafts -> approval-gated OSCAL/GRC export (`action_gated`). GRC/FedRAMP own POA&M status, cadence, PMO/Marketplace submit, task routing.
+Ingest monthly OSCAL/GRC + scans + prior package -> **package delta report** (added/removed/changed controls, evidence items, matrix status transitions) -> ConMon narrative + POA&M **update** drafts -> approval-gated OSCAL/GRC export (`action_gated`). GRC/FedRAMP own POA&M status, cadence, PMO/Marketplace submit, task routing.
 
-Implement: `prior_package_id`; delta report; FedRAMP POA&M updates; ConMon narrative; manual/scheduled re-ingest; no ConMon scheduler as SoR.
+Implement: `prior_package_id`; **control-level and evidence-level diffs**; matrix status transitions (e.g. partial -> supported); FedRAMP POA&M updates; ConMon narrative; manual/scheduled re-ingest; no ConMon scheduler as SoR.
 
 ### Option 2 — replace ConMon (not chosen)
 
@@ -440,8 +562,9 @@ Would require: POA&M SoR, workflow engine, FedRAMP submission pipeline, SCR work
 | SCRM (800-161)                       | Specialized domain                         | Vendor evidence analysis demand         |
 | Assessor collaboration threads       | Overlaps GRC/assessor portals              | High 3PAO review volume                 |
 | CMDB inventory cross-check           | No CMDB SoR integration                    | SSP vs scan inventory mismatches        |
-| CCM polling                          | Snapshot import simpler/safer              | Scheduled re-analysis without re-upload |
+| CCM polling                          | Snapshot import simpler/safer              | Scheduled **targeted re-analysis** (needs-attention controls only) without full re-upload |
 | eMASS-native beyond OSCAL            | OSCAL-first DoD path                       | eMASS field parity required             |
+| Cross-framework mapping (CMMC, SOC 2 from one base)                  | Path-specific shaping sufficient for now   | Multi-framework agency demand           |
 | Org-wide common controls             | Exceeds single-package scope               | Agency PMO use case                     |
 | FedRAMP auto-submit                  | Blurs into Option 2                        | Never under current posture             |
 | Full ConMon platform (Option 2)      | See ConMon section                         | Product pivot only                      |
@@ -453,11 +576,13 @@ Would require: POA&M SoR, workflow engine, FedRAMP submission pipeline, SCR work
 
 **Fixed model names (not customer-specific):** `system-security-plan` (SSP), `assessment-plan` (SAP), `assessment-results` (SAR inputs), `plan-of-action-and-milestones` (POA&M). Path varies **field content**, tool behavior, extensions, which models exist — not model type names. Partial import OK; fail per model.
 
-**Import:** OSCAL JSON/XML for all four models -> internal package; preserve citations.
+**Import:** OSCAL JSON/XML for all four models -> internal package; preserve citations. Optional FedRAMP 20x **KSI catalog** JSON as reference input for KSI readiness rollup (`fedramp` path).
 
-**Export:** Full-draft OSCAL for all four; mark draft/machine-generated; round-trip GRC -> analyze -> export -> human edit.
+**Export:** Full-draft OSCAL for all four; mark draft/machine-generated; round-trip GRC -> analyze -> export -> human edit. **Paired export:** same run produces OSCAL plus ISSO-readable markdown (optional HTML profile) — human and machine formats stay in sync from one analysis.
 
-**Alternate intake:** custom JSON manifest; evidence documents; architecture diagrams (see Evidence package contract).
+**Validate-before-export (Block 2/7):** Before `action_gated` writeback, run OSCAL schema validation (NIST OSCAL schemas / CLI-compatible checks) and package-specific semantic rules (required fields for path, broken back-mrefs). Fail export with actionable errors; do not ship invalid OSCAL. Inspired by RegScale/Boundera validation loops; validation is deterministic — not LLM.
+
+**Alternate intake:** custom JSON manifest; evidence documents; architecture diagrams; attestation exports (see Evidence package contract).
 
 ## Data, governance, audit
 
@@ -498,6 +623,13 @@ Would require: POA&M SoR, workflow engine, FedRAMP submission pipeline, SCR work
 | Cross-artifact consistency                                          | Assess/Monitor    | Contradiction brief (SSP, evidence, scans, POA&M)       |
 | Gap-closure advisor                                                 | Assess            | Evidence needed, remediation draft steps                |
 | Assessor response pack                                              | Assess            | Draft responses to inbound assessor comments            |
+| Assessor readiness checklist                                        | Assess/Authorize  | Pre-export rejection-pattern flags with citations       |
+| Assessor walkthrough pack                                           | Assess            | Cited Q&A trail for 3PAO/SCA sessions                   |
+| Implementation narrative flags                                      | Implement/Assess  | Missing elements in statements vs requirement           |
+| KSI readiness rollup                                                | Assess (`fedramp`)| Matrix mapped to imported KSI catalog                   |
+| Package delta report                                                | Monitor           | Control/evidence/matrix diffs vs prior package        |
+| Package-scoped evidence search                                      | Assess            | Index + retrieval over one archived package             |
+| OSCAL validate-before-export                                        | Implement/Monitor | Schema + semantic gate before gated writeback           |
 | SAP test-focus optimization                                         | Assess            | Risk-ranked focus areas for SAP draft                   |
 | ConMon / SCR intelligence                                           | Monitor           | Delta narrative, POA&M suggestions, SCR hints           |
 | Audience summaries                                                  | Authorize         | ISSO / AO / assessor brief views                        |
@@ -521,6 +653,7 @@ Would require: POA&M SoR, workflow engine, FedRAMP submission pipeline, SCR work
 | `scanner_readonly` / `grc_readonly` / `emass_readonly` | Imports                                                             |
 | `ticket_draft`                                         | POA&M/ticket payloads                                               |
 | `conmon_grc_feed`                                      | ConMon delta, POA&M updates, narrative, gated export (`fedramp`)    |
+| `oscal_validation`                                     | Schema + semantic gate before gated OSCAL export                    |
 | `action_gated`                                         | Approval-gated writeback                                            |
 
 
@@ -540,11 +673,15 @@ incoming/<package_id>/architecture/*.{png,jpg,jpeg,webp,svg,pdf,json,xml}
 
 **Evidence fields:** `evidence_id`, `title`, `source_type`, `source_owner`, `collected_at`, `text` or OSCAL ref; optional `source_document_ref`, `page_or_section`, `extraction_method`.
 
+**Attestation export intake (read-only, Block 3+):** Customers may include exported pipeline attestations as evidence — not collected by us. Accept JSON, OSCAL fragments, or signed-bundle exports the customer drops into `evidence/`. Set `source_type` to one of: `pipeline_attestation`, `signed_attestation_bundle`, `in_toto_statement`. Normalize to bounded text + metadata for matrix reasoning; preserve `source_document_ref` for auditor traceability. No CI/CD observer, no signing, no webhook collector.
+
+**KSI catalog intake (optional, `fedramp` / 20x):** Customer may include FedRAMP 20x KSI catalog JSON (or OSCAL conversion) as reference metadata for rollup analysis — not live validation. Store as `ksi_catalog_ref` on package; KSI readiness rollup maps matrix rows and evidence to indicator IDs. No cloud polling or scheduled KSI re-validation.
+
 **Architecture artifact fields:** `diagram_id`, `title`, `source_type`, `collected_at`, `boundary_scope_claim`, `extracted_components[]`, `extracted_flows[]`, `extraction_method`, `linked_control_ids[]`, optional `source_document_ref`.
 
 **Outputs:** `reports/<id>.{md,json,oscal.json}`, `audit/<id>-<run_id>.json`.
 
-**Report sections:** summary, AI disclosure, pre-flight readiness, readiness, evidence matrix, architecture/boundary consistency, stale/missing/contradictory evidence, cross-artifact consistency brief, scanner impact, full-draft index, assessor Qs, assessor response pack (when provided), inheritance, supporting-plan status, SCR/ConMon summary (if prior package), gap-to-owner export, audience summaries (optional), citations, validation warnings.
+**Report sections:** summary, **`package_run_summary`** (structured rollups for portal), AI disclosure, pre-flight readiness, **upload checklist**, readiness, **assessor readiness checklist**, evidence matrix, **implementation narrative flags**, **gap clusters** (Block 6), **KSI readiness rollup** (when catalog present), architecture/boundary consistency, stale/missing/contradictory evidence, cross-artifact consistency brief, scanner impact, full-draft index, assessor Qs, assessor response pack (when provided), **assessor walkthrough pack** (optional), inheritance, supporting-plan status, **package delta report** (if prior package), SCR/ConMon summary (if prior package), gap-to-owner export, audience summaries (optional), citations, validation warnings, **oscal_validation** (when export attempted).
 
 ## Product boundaries
 
@@ -558,7 +695,7 @@ Qualys/Tenable/STIG: technical findings. GRC/eMASS: official records. Repos: off
 - OSCAL primary interop; portal stack React/Vite/Tailwind/shadcn.
 - ConMon Option 1 (feed GRC); not Option 2.
 - Full draft model + mandatory human review before GRC/eMASS publish.
-- AI expansion in scope: document ingestion, diagram intake (now), pre-flight, consistency, gap advisor, assessor response pack, SAP focus, ConMon/SCR intelligence, audience summaries, expanded package chat intents, enhanced RAG.
+- AI expansion in scope: document ingestion, diagram intake (now), pre-flight, consistency, gap advisor, assessor response pack, **assessor readiness checklist**, **assessor walkthrough pack**, **implementation narrative flags**, **KSI readiness rollup**, **package-scoped evidence search**, **OSCAL validate-before-export**, **paired export**, SAP focus, ConMon/SCR intelligence, audience summaries, expanded package chat intents, enhanced RAG.
 - On-prem hardware sizing in this plan (small single-host vs enterprise tiered).
 - Out of scope: privacy, AO/3PAO sign-off, ungated writeback, FedRAMP PMO submit, ConMon Option 2.
 
@@ -567,6 +704,11 @@ Qualys/Tenable/STIG: technical findings. GRC/eMASS: official records. Repos: off
 ## Open items
 
 - [ ] **Block 1 implementation:** scaffold code in this project folder per [`ATO_BLOCK1_TECHNICAL_SPEC.md`](ATO_BLOCK1_TECHNICAL_SPEC.md) (includes synthetic golden fixture spec).
+- [ ] **Block 5 portal:** package run summary header, control matrix filters, targeted re-analysis, evidence index search (spec in Evidence portal UI section).
+- [ ] **Block 3 intake:** attestation export adapter; document link suggestions on ingest.
+- [ ] **Block 6 analysis:** assessor readiness checklist, implementation narrative flags, assessor walkthrough pack, gap clusters, package-scoped evidence search.
+- [ ] **Block 2/7 OSCAL:** validate-before-export gate; paired OSCAL + markdown export; optional KSI catalog intake for `fedramp`.
+- [ ] **Block 7 ConMon:** package delta report (control/evidence/matrix diffs vs `prior_package_id`).
 - [ ] ATO package wall-time benchmark on `a6000-96gb-ultra9-285k` (include document + diagram intake fixtures).
 - [ ] ATO deployment profiles (full-draft + expanded AI concurrency defaults).
 - [ ] Architecture intake limits (max diagram size/pages) and vision extraction validation fixtures.
