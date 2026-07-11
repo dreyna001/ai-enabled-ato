@@ -11,6 +11,11 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
+from ato_service.audit import AuditUnavailableError, require_audit_hmac_key
+from ato_service.credentials import (
+    CredentialResolutionError,
+    resolve_secret_bytes_from_credential_reference,
+)
 from ato_service.db.dsn import (
     DatabaseDsnError,
     resolve_database_dsn_from_credential_reference,
@@ -685,4 +690,22 @@ def resolve_runtime_database_dsn(config: RuntimeConfig) -> str:
             enforce_root_owned_file_metadata=enforce_root_owned_file_metadata,
         )
     except DatabaseDsnError as error:
+        raise RuntimeConfigError(str(error)) from error
+
+
+def resolve_runtime_audit_hmac_key(config: RuntimeConfig) -> bytes:
+    """Resolve and validate the audit HMAC key referenced by runtime configuration."""
+    reference = config.document.get("AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE")
+    if not isinstance(reference, dict):
+        raise RuntimeConfigError(
+            "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE is required to resolve the audit HMAC key"
+        )
+    enforce_root_owned_file_metadata = config.runtime_profile == "onprem_production"
+    try:
+        key_bytes = resolve_secret_bytes_from_credential_reference(
+            reference,
+            enforce_root_owned_file_metadata=enforce_root_owned_file_metadata,
+        )
+        return require_audit_hmac_key(key_bytes)
+    except (CredentialResolutionError, AuditUnavailableError) as error:
         raise RuntimeConfigError(str(error)) from error

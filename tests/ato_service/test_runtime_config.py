@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.runtime_config import (
     RuntimeConfig,
     RuntimeConfigError,
@@ -20,6 +21,7 @@ from ato_service.runtime_config import (
     _resolve_storage_data_path,
     load_runtime_config,
     load_runtime_config_from_dict,
+    resolve_runtime_audit_hmac_key,
     resolve_runtime_database_dsn,
 )
 
@@ -797,3 +799,93 @@ def test_onprem_bedrock_accepts_config_without_text_endpoint_url(
 
     assert config.text_model_provider == "aws_bedrock"
     assert config.document["AWS_REGION"] == "us-gov-west-1"
+
+
+def test_resolve_runtime_audit_hmac_key_reads_root_owned_file_reference(
+    tmp_path: Path,
+) -> None:
+    key_file = tmp_path / "audit-hmac-key"
+    key_bytes = b"k" * MIN_AUDIT_HMAC_KEY_BYTES
+    key_file.write_bytes(key_bytes)
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+        "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+            "source": "root_owned_file",
+            "path": str(key_file.resolve()),
+        },
+    }
+    config = RuntimeConfig(
+        runtime_profile="dev_local",
+        storage_data_path=tmp_path,
+        document=document,
+    )
+
+    assert resolve_runtime_audit_hmac_key(config) == key_bytes
+
+
+def test_resolve_runtime_audit_hmac_key_requires_credential_reference(
+    tmp_path: Path,
+) -> None:
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+    }
+    config = RuntimeConfig(
+        runtime_profile="dev_local",
+        storage_data_path=tmp_path,
+        document=document,
+    )
+
+    with pytest.raises(RuntimeConfigError, match="AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE"):
+        resolve_runtime_audit_hmac_key(config)
+
+
+def test_resolve_runtime_audit_hmac_key_rejects_short_key(tmp_path: Path) -> None:
+    key_file = tmp_path / "audit-hmac-key"
+    key_file.write_bytes(b"short")
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+        "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+            "source": "root_owned_file",
+            "path": str(key_file.resolve()),
+        },
+    }
+    config = RuntimeConfig(
+        runtime_profile="dev_local",
+        storage_data_path=tmp_path,
+        document=document,
+    )
+
+    with pytest.raises(RuntimeConfigError, match="at least 32 bytes"):
+        resolve_runtime_audit_hmac_key(config)
+
+
+def test_resolve_runtime_audit_hmac_key_enables_metadata_enforcement_for_onprem(
+    tmp_path: Path,
+) -> None:
+    key_file = tmp_path / "audit-hmac-key"
+    key_bytes = b"k" * MIN_AUDIT_HMAC_KEY_BYTES
+    key_file.write_bytes(key_bytes)
+    document = _minimal_onprem_document()
+    reference = {
+        "source": "root_owned_file",
+        "path": str(key_file.resolve()),
+    }
+    document["AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE"] = reference
+    config = RuntimeConfig(
+        runtime_profile="onprem_production",
+        storage_data_path=Path("/var/ato-packages"),
+        document=document,
+    )
+
+    with patch(
+        "ato_service.runtime_config.resolve_secret_bytes_from_credential_reference",
+        return_value=key_bytes,
+    ) as resolve_mock:
+        assert resolve_runtime_audit_hmac_key(config) == key_bytes
+        resolve_mock.assert_called_once_with(
+            reference,
+            enforce_root_owned_file_metadata=True,
+        )

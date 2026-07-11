@@ -34,6 +34,7 @@ from ato_service.runtime_config import (
     RuntimeConfig,
     RuntimeConfigError,
     load_runtime_config,
+    resolve_runtime_audit_hmac_key,
     resolve_runtime_database_dsn,
 )
 
@@ -109,6 +110,27 @@ def resolve_database_dsn(config: RuntimeConfig) -> str:
     raise RuntimeConfigError(
         "DATABASE_DSN_CREDENTIAL_REFERENCE is required to resolve the database DSN"
     )
+
+
+def _resolve_audit_hmac_key_for_startup(
+    config: RuntimeConfig,
+    *,
+    injected_key: bytes | None,
+) -> bytes | None:
+    """Resolve audit HMAC key bytes for startup, honoring explicit test injection."""
+    if injected_key is not None:
+        return injected_key
+
+    reference = config.document.get("AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE")
+    if isinstance(reference, dict):
+        return resolve_runtime_audit_hmac_key(config)
+
+    if config.runtime_profile == "onprem_production":
+        raise RuntimeConfigError(
+            "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE is required for onprem_production"
+        )
+
+    return None
 
 
 def _custom_openapi(app: FastAPI) -> dict[str, Any]:
@@ -193,6 +215,11 @@ def build_app_from_config(
             manifest_path,
             project_root=root,
         )
+        resolved_audit_hmac_key = await asyncio.to_thread(
+            _resolve_audit_hmac_key_for_startup,
+            config,
+            injected_key=audit_hmac_key,
+        )
         runtime.engine = create_async_engine_from_url(resolved_dsn)
         runtime.session_factory = create_session_factory(runtime.engine)
         setattr(
@@ -206,7 +233,7 @@ def build_app_from_config(
                     project_root=root,
                 ),
                 session_factory=runtime.session_factory,
-                audit_hmac_key=audit_hmac_key,
+                audit_hmac_key=resolved_audit_hmac_key,
             ),
         )
         try:

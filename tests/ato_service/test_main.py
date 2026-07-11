@@ -14,16 +14,22 @@ from fastapi.testclient import TestClient
 from ato_service.authority_manifest import AuthorityManifestVerificationError
 from ato_service.db.dsn import DATABASE_DSN_FILE_ENV_VAR
 from ato_service.db.session import DatabaseConfigurationError
+from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.main import (
     RUNTIME_CONFIG_PATH_ENV_VAR,
     RUNTIME_STATE_ATTR,
     AppRuntimeState,
+    _resolve_audit_hmac_key_for_startup,
     build_app_from_config,
     create_app,
     load_app_from_config_path,
     resolve_database_dsn,
 )
-from ato_service.runtime_config import RuntimeConfig, load_runtime_config_from_dict
+from ato_service.runtime_config import (
+    RuntimeConfig,
+    RuntimeConfigError,
+    load_runtime_config_from_dict,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 POSTGRES_URL = "postgresql+asyncpg://ato:secret@localhost:5432/ato_test"
@@ -342,6 +348,85 @@ def test_build_app_from_config_disposes_engine_on_lifespan_failure(
         runtime_state = getattr(app.state, RUNTIME_STATE_ATTR)
         assert runtime_state.session_factory is None
         assert runtime_state.audit_hmac_key is None
+
+
+def test_resolve_audit_hmac_key_for_startup_reads_credential_reference(
+    tmp_path: Path,
+) -> None:
+    key_file = tmp_path / "audit-hmac-key"
+    key_bytes = b"k" * MIN_AUDIT_HMAC_KEY_BYTES
+    key_file.write_bytes(key_bytes)
+    config = RuntimeConfig(
+        runtime_profile="dev_local",
+        storage_data_path=tmp_path,
+        document={
+            "schema_version": "1.0.0",
+            "runtime_profile": "dev_local",
+            "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+                "source": "root_owned_file",
+                "path": str(key_file.resolve()),
+            },
+        },
+    )
+
+    assert (
+        _resolve_audit_hmac_key_for_startup(config, injected_key=None) == key_bytes
+    )
+
+
+def test_resolve_audit_hmac_key_for_startup_injection_precedence(
+    tmp_path: Path,
+) -> None:
+    key_file = tmp_path / "audit-hmac-key"
+    key_file.write_bytes(b"file-key-should-not-be-read")
+    config = RuntimeConfig(
+        runtime_profile="dev_local",
+        storage_data_path=tmp_path,
+        document={
+            "schema_version": "1.0.0",
+            "runtime_profile": "dev_local",
+            "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+                "source": "root_owned_file",
+                "path": str(key_file.resolve()),
+            },
+        },
+    )
+
+    with patch("ato_service.main.resolve_runtime_audit_hmac_key") as resolve_mock:
+        assert (
+            _resolve_audit_hmac_key_for_startup(
+                config,
+                injected_key=b"injected-audit-key",
+            )
+            == b"injected-audit-key"
+        )
+        resolve_mock.assert_not_called()
+
+
+def test_resolve_audit_hmac_key_for_startup_fails_onprem_without_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    onprem_example = ROOT / "deployment" / "config" / "runtime-config.onprem.example.json"
+    document = json.loads(onprem_example.read_text(encoding="utf-8"))
+    document.pop("AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE", None)
+    monkeypatch.setattr(Path, "is_absolute", lambda self: True)
+    config = RuntimeConfig(
+        runtime_profile="onprem_production",
+        storage_data_path=Path("/var/ato-packages"),
+        document=document,
+    )
+
+    with pytest.raises(RuntimeConfigError, match="AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE"):
+        _resolve_audit_hmac_key_for_startup(config, injected_key=None)
+
+
+def test_resolve_audit_hmac_key_for_startup_allows_dev_local_without_reference(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+
+    assert _resolve_audit_hmac_key_for_startup(config, injected_key=None) is None
 
 
 def test_load_app_from_config_path_builds_app(
