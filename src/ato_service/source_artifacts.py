@@ -648,6 +648,21 @@ def _read_stored_blob_bytes(
     return blob_bytes
 
 
+def read_source_artifact_bytes(
+    blob_store: BlobStore,
+    source_artifact: SourceArtifact,
+) -> bytes:
+    """Read and re-verify one persisted source artifact from durable storage."""
+    return _read_stored_blob_bytes(
+        blob_store,
+        StoredBlob(
+            storage_key=source_artifact.storage_key,
+            sha256=source_artifact.sha256,
+            size_bytes=source_artifact.size_bytes,
+        ),
+    )
+
+
 __all__ = [
     "DuplicateSourceArtifactError",
     "OPERATION",
@@ -659,5 +674,6 @@ __all__ = [
     "SourceTypeMismatchError",
     "UnsupportedMediaTypeError",
     "UploadSourceArtifactResult",
+    "read_source_artifact_bytes",
     "upload_source_artifact",
 ]
