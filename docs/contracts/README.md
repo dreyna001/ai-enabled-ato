@@ -17,6 +17,9 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
 P-1 gate outcome is recorded in [`../P1_GATE_RECORD.md`](../P1_GATE_RECORD.md).
+The implemented P1.2 development boundary is specified in
+`LIFECYCLE_AND_ERRORS.md` Section 2.1.6: only `dev_local` synthetic JSON intake,
+with no production scanner/customer extraction or OIDC claim.
 
 ## Rules
 

@@ -19,6 +19,7 @@ from ato_service.blobs import BlobStore
 from ato_service.db.models import FactProposal, PackageRevision, SourceArtifact
 from ato_service.lifecycle_transitions import PackageRevisionStatus
 from ato_service.runtime_config import load_runtime_config_from_dict
+from ato_service.source_artifacts import SourceArtifactStorageError
 from ato_service.synthetic_intake import (
     SyntheticIntakeConfigurationError,
     SyntheticIntakeInvariantError,
@@ -343,6 +344,150 @@ def test_duplicate_canonical_pointers_invalidate_without_partial_proposals(
     assert mock_audit.await_args.kwargs["reason_code"] == "duplicate_canonical_id"
 
 
+@patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
+def test_corrupt_blob_transitions_to_invalid_as_source_type_mismatch(
+    mock_audit: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    mock_audit.return_value = MagicMock()
+    revision = _revision(status="extracting", version=3)
+    blob_store = BlobStore(tmp_path)
+    artifact = _artifact(
+        blob_store,
+        b'{"name":"good"}',
+        scan_status="clean",
+    )
+    prefix, digest = artifact.storage_key.split("/", 1)
+    (tmp_path / "blobs" / prefix / digest).write_bytes(
+        b"x" * artifact.size_bytes
+    )
+    session = _RecordingSession(
+        [
+            _scalar_optional(revision),
+            _scalar(False),
+            _scalars([artifact]),
+        ]
+    )
+
+    result = _run(
+        process_next_synthetic_extraction(
+            session,
+            blob_store=blob_store,
+            hmac_key=HMAC_KEY,
+            now=NOW,
+        )
+    )
+
+    assert result is not None
+    assert result.status == "invalid"
+    assert artifact.extraction_status == "failed"
+    assert session.added == []
+    assert mock_audit.await_args.kwargs["reason_code"] == "source_type_mismatch"
+
+
+@patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
+def test_missing_blob_fails_visibly_without_changing_extraction_state(
+    mock_audit: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    revision = _revision(status="extracting", version=3)
+    blob_store = BlobStore(tmp_path)
+    artifact = _artifact(
+        blob_store,
+        b'{"name":"good"}',
+        scan_status="clean",
+    )
+    prefix, digest = artifact.storage_key.split("/", 1)
+    (tmp_path / "blobs" / prefix / digest).unlink()
+    session = _RecordingSession(
+        [
+            _scalar_optional(revision),
+            _scalar(False),
+            _scalars([artifact]),
+        ]
+    )
+
+    with pytest.raises(SourceArtifactStorageError):
+        _run(
+            process_next_synthetic_extraction(
+                session,
+                blob_store=blob_store,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert revision.status == "extracting"
+    assert revision.revision_version == 3
+    assert artifact.extraction_status == "pending"
+    assert session.added == []
+    mock_audit.assert_not_awaited()
+
+
+@pytest.mark.parametrize("content", [b"42", b"{}", b"[]"])
+@patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
+def test_json_without_addressable_fact_transitions_to_invalid(
+    mock_audit: AsyncMock,
+    content: bytes,
+    tmp_path: Path,
+) -> None:
+    mock_audit.return_value = MagicMock()
+    revision = _revision(status="extracting", version=3)
+    blob_store = BlobStore(tmp_path)
+    artifact = _artifact(blob_store, content, scan_status="clean")
+    session = _RecordingSession(
+        [
+            _scalar_optional(revision),
+            _scalar(False),
+            _scalars([artifact]),
+        ]
+    )
+
+    result = _run(
+        process_next_synthetic_extraction(
+            session,
+            blob_store=blob_store,
+            hmac_key=HMAC_KEY,
+            now=NOW,
+        )
+    )
+
+    assert result is not None
+    assert result.status == "invalid"
+    assert mock_audit.await_args.kwargs["reason_code"] == "source_parse_failed"
+
+
+@patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
+def test_defense_in_depth_rejects_non_synthetic_claim_without_mutation(
+    mock_audit: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    revision = _revision(status="scanning", version=2)
+    revision.data_origin = "customer_production"
+    artifact = _artifact(
+        BlobStore(tmp_path),
+        b'{"name":"customer"}',
+        scan_status="pending",
+    )
+    session = _RecordingSession(
+        [_scalar_optional(revision), _scalars([artifact])]
+    )
+
+    with pytest.raises(SyntheticIntakeInvariantError):
+        _run(
+            process_next_synthetic_scan(
+                session,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert revision.status == "scanning"
+    assert revision.revision_version == 2
+    assert artifact.malware_scan_status == "pending"
+    mock_audit.assert_not_awaited()
+
+
 def test_extraction_refuses_existing_proposals_for_replay_safety(
     tmp_path: Path,
 ) -> None:
@@ -394,3 +539,32 @@ def test_process_next_finishes_extraction_before_claiming_new_scan(
     assert result is expected
     mock_extract.assert_awaited_once()
     mock_scan.assert_not_awaited()
+
+
+@patch("ato_service.synthetic_intake.process_next_synthetic_scan", new_callable=AsyncMock)
+@patch(
+    "ato_service.synthetic_intake.process_next_synthetic_extraction",
+    new_callable=AsyncMock,
+)
+def test_process_next_claims_scan_when_no_extraction_is_available(
+    mock_extract: AsyncMock,
+    mock_scan: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    expected = MagicMock()
+    mock_extract.return_value = None
+    mock_scan.return_value = expected
+    session = MagicMock()
+
+    result = _run(
+        process_next_synthetic_intake(
+            session,
+            blob_store=BlobStore(tmp_path),
+            hmac_key=HMAC_KEY,
+            now=NOW,
+        )
+    )
+
+    assert result is expected
+    mock_extract.assert_awaited_once()
+    mock_scan.assert_awaited_once()

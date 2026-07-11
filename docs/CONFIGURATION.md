@@ -94,7 +94,9 @@ all detected and declared `application/json`, commits one lifecycle transition
 per transaction, drains until idle, and exits. It refuses
 `onprem_production`; it has no production systemd unit, OIDC dependency, model
 call, external scanner call, or customer extraction path. **HS-005** remains
-open.
+open. Synthetic `text/plain` revisions are intentionally not claimed and
+remain `scanning` for a later supported worker or explicit operator action;
+the P1.2 command does not silently reinterpret them as JSON.
 
 ## Text LLM (OpenAI or Bedrock)
 

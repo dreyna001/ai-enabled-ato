@@ -155,7 +155,10 @@ commits at most one lifecycle transition per transaction. A rollback therefore
 leaves the prior state and no partial proposals; a committed transition is no
 longer eligible for the same step. Missing audit credentials fail closed. The
 command has no production unit, external scanner, customer extraction path, or
-model call and does not close **HS-005**.
+model call and does not close **HS-005**. A durable source size or digest
+mismatch transitions extraction to `invalid` with `source_type_mismatch`;
+missing or temporarily unreadable storage rolls back, remains `extracting`,
+and fails visibly as `storage_unavailable`.
 
 Every immutable object contains or is referenced by a SHA-256 digest. Stored JSON contains `schema_version`. User display names and external IDs are never filesystem paths.
 

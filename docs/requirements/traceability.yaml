@@ -115,7 +115,8 @@
         "tests/ato_service/test_jobs.py",
         "tests/ato_service/test_lifecycle_transitions.py",
         "tests/ato_service/test_synthetic_intake.py",
-        "tests/ato_service/test_synthetic_intake_worker.py"
+        "tests/ato_service/test_synthetic_intake_worker.py",
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically"
       ],
       "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, expired-lease recovery, and transaction-per-transition synthetic intake tests plus Alembic head 20260711_0004; P1.2 advances only dev_local synthetic JSON revisions through awaiting_confirmation, while analysis-run replay, analyzer worker loop, proposal review, and full EP-02 gate remain planned/partial",
       "status": "partial"
@@ -132,7 +133,8 @@
       ],
       "test_ids": [
         "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_deterministic_pending_proposals_with_provenance",
-        "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_proposals"
+        "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_proposals",
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically"
       ],
       "verification_type": "P1.2 deterministic synthetic JSON extraction creates pending FactProposal rows with source SHA-256 and matching RFC 6901 target/source pointers; proposal review, confirmation, and sealed canonical-fact persistence remain planned",
       "status": "partial"
@@ -274,7 +276,11 @@
         "tests/ato_service/test_source_artifacts.py::test_rejects_single_file_size_limit",
         "tests/ato_service/test_synthetic_intake.py::test_claim_query_is_skip_locked_synthetic_and_json_only",
         "tests/ato_service/test_synthetic_intake.py::test_invalid_json_transitions_to_invalid_without_partial_proposals",
-        "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local"
+        "tests/ato_service/test_synthetic_intake.py::test_corrupt_blob_transitions_to_invalid_as_source_type_mismatch",
+        "tests/ato_service/test_synthetic_intake.py::test_missing_blob_fails_visibly_without_changing_extraction_state",
+        "tests/ato_service/test_synthetic_intake.py::test_defense_in_depth_rejects_non_synthetic_claim_without_mutation",
+        "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local",
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically"
       ],
       "verification_type": "P1.1 upload enforces MIME and configured limits; P1.2 adds only a dev_local, data_origin=synthetic, all-JSON deterministic path with durable blob re-verification and no external scanner/model call. Production malware scanning, customer extraction, archive/XML/Office/SVG controls, and HS-005 closure remain planned/partial",
       "status": "partial"
@@ -377,7 +383,10 @@
         "tests/ato_service/test_runtime_config.py::test_load_onprem_config_from_external_path_without_base_dir",
         "tests/ato_service/test_runtime_config.py::test_rejects_remote_http_model_endpoint_despite_loopback_opt_in",
         "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local",
-        "tests/ato_service/test_synthetic_intake_worker.py",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_drain_uses_one_transaction_per_transition_and_stops_when_idle",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_worker_resolves_dependencies_and_disposes_engine",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_worker_rejects_production_before_creating_engine",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_worker_requires_audit_credential_before_creating_engine",
         "tests/test_deployment_contract.py::test_systemd_unit_points_to_canonical_runtime_config",
         "tests/test_deployment_contract.py::test_install_script_is_idempotent_and_explicit_about_side_effects",
         "tests/test_deployment_contract.py::test_deployment_readme_matches_current_installer_contract"

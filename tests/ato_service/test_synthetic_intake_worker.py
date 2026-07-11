@@ -14,7 +14,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ato_service.blobs import BlobStore
-from ato_service.runtime_config import load_runtime_config_from_dict
+from ato_service.runtime_config import (
+    RuntimeConfigError,
+    load_runtime_config_from_dict,
+)
 from ato_service.synthetic_intake import (
     SyntheticIntakeConfigurationError,
     SyntheticIntakeResult,
@@ -150,6 +153,25 @@ def test_worker_rejects_production_before_creating_engine(
                 config,
                 dsn="postgresql+asyncpg://example.test/ato",
                 audit_hmac_key=b"x" * 32,
+            )
+        )
+    mock_engine_factory.assert_not_called()
+
+
+@patch("ato_service.synthetic_intake_worker.create_async_engine_from_url")
+def test_worker_requires_audit_credential_before_creating_engine(
+    mock_engine_factory: MagicMock,
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    with pytest.raises(
+        RuntimeConfigError,
+        match="AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE",
+    ):
+        _run(
+            run_synthetic_intake_worker(
+                config,
+                dsn="postgresql+asyncpg://example.test/ato",
             )
         )
     mock_engine_factory.assert_not_called()

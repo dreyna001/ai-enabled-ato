@@ -261,6 +261,20 @@ Invalid UTF-8/JSON or duplicate canonical pointers produces the legal
 `extracting -> invalid` transition with no partial proposals. No model or
 external scanner call is permitted in this path.
 
+The stable service audit actions are:
+
+| Transition | Audit action |
+| --- | --- |
+| `scanning -> extracting` | `package_revision.synthetic_scan_completed` |
+| `extracting -> awaiting_confirmation` | `package_revision.synthetic_extraction_completed` |
+| `extracting -> invalid` | `package_revision.synthetic_extraction_invalidated` |
+
+A durable size or SHA-256 mismatch establishes invalid source content and uses
+`source_type_mismatch` on `extracting -> invalid`. Missing or temporarily
+unreadable storage remains `extracting`, rolls back all attempted side effects,
+and fails visibly as `storage_unavailable`; it MUST NOT be mislabeled invalid
+or quarantined.
+
 ### 2.2 FactProposal review
 
 A proposal decision is legal only while its owning `PackageRevision` is

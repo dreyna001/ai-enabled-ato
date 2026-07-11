@@ -27,7 +27,10 @@ from ato_service.lifecycle_transitions import (
     require_package_revision_transition,
 )
 from ato_service.runtime_config import RuntimeConfig, RuntimeConfigError
-from ato_service.source_artifacts import read_source_artifact_bytes
+from ato_service.source_artifacts import (
+    SourceTypeMismatchError,
+    read_source_artifact_bytes,
+)
 
 SYNTHETIC_INTAKE_ACTOR_ID = "synthetic-intake-worker"
 SYNTHETIC_DATA_ORIGIN = "synthetic"
@@ -256,6 +259,15 @@ async def process_next_synthetic_extraction(
             hmac_key=hmac_key,
             now=validated_now,
             reason_code=exc.error_code,
+        )
+    except SourceTypeMismatchError:
+        return await _invalidate_extraction(
+            session,
+            revision=revision,
+            artifacts=artifacts,
+            hmac_key=hmac_key,
+            now=validated_now,
+            reason_code="source_type_mismatch",
         )
 
     require_package_revision_transition(
