@@ -179,7 +179,11 @@ def test_valid_draft_manifest_starts_and_disposes_engine(
     with patch("ato_service.main.create_async_engine_from_url") as create_engine:
         engine = MagicMock()
         connect_cm = AsyncMock()
-        connect_cm.__aenter__.return_value = AsyncMock()
+        connection = AsyncMock()
+        query_result = MagicMock()
+        query_result.scalar_one.return_value = 0
+        connection.execute = AsyncMock(return_value=query_result)
+        connect_cm.__aenter__.return_value = connection
         connect_cm.__aexit__.return_value = None
         engine.connect.return_value = connect_cm
         engine.dispose = AsyncMock()
@@ -319,7 +323,11 @@ def test_load_app_from_config_path_builds_app(
     with patch("ato_service.main.create_async_engine_from_url") as create_engine:
         engine = MagicMock()
         connect_cm = AsyncMock()
-        connect_cm.__aenter__.return_value = AsyncMock()
+        connection = AsyncMock()
+        query_result = MagicMock()
+        query_result.scalar_one.return_value = 0
+        connection.execute = AsyncMock(return_value=query_result)
+        connect_cm.__aenter__.return_value = connection
         connect_cm.__aexit__.return_value = None
         engine.connect.return_value = connect_cm
         engine.dispose = AsyncMock()

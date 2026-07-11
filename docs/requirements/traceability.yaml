@@ -94,17 +94,21 @@
         "src/ato_service/db/session.py",
         "src/ato_service/lifecycle_transitions.py",
         "migrations/versions/20260710_0001_initial_p1_domain.py",
+        "migrations/versions/20260711_0002_jobs_and_job_attempts.py",
+        "src/ato_service/jobs.py",
         "alembic.ini"
       ],
       "test_ids": [
         "tests/ato_service/test_blobs.py",
         "tests/ato_service/test_content_manifests.py::test_orders_artifacts_deterministically_and_replays_idempotently",
         "tests/ato_service/test_session_and_storage_reconciliation.py",
-        "tests/ato_service/test_db.py::test_alembic_head_exists_and_initial_migration_references_all_tables",
+        "tests/ato_service/test_db.py::test_alembic_head_is_jobs_migration",
         "tests/ato_service/test_db.py::test_require_database_dsn_reads_absolute_utf8_file",
+        "tests/ato_service/test_job_persistence.py",
+        "tests/ato_service/test_jobs.py",
         "tests/ato_service/test_lifecycle_transitions.py"
       ],
-      "verification_type": "Deterministic blob, content-manifest, and staging-reconciliation tests plus schema and migration review; full immutable DB, run, and job replay remains planned for P1",
+      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, and expired-lease recovery tests plus schema and migration review; full API/worker end-to-end run replay remains planned for P1",
       "status": "partial"
     },
     {
@@ -392,6 +396,10 @@
         "src/ato_service/content_manifests.py",
         "src/ato_service/storage_reconciliation.py",
         "src/ato_service/db/session.py",
+        "src/ato_service/db/models.py",
+        "src/ato_service/jobs.py",
+        "src/ato_service/readiness.py",
+        "migrations/versions/20260711_0002_jobs_and_job_attempts.py",
         "docs/contracts/LIFECYCLE_AND_ERRORS.md",
         "docs/contracts/domain.schema.json"
       ],
@@ -402,10 +410,14 @@
         "tests/ato_service/test_content_manifests.py::test_cleans_temp_after_manifest_write_failure",
         "tests/ato_service/test_session_and_storage_reconciliation.py::test_session_scope_rolls_back_reraises_and_closes_on_error",
         "tests/ato_service/test_session_and_storage_reconciliation.py::test_cleanup_deletes_only_stale_recognized_staging_files",
+        "tests/ato_service/test_job_persistence.py",
+        "tests/ato_service/test_jobs.py",
+        "tests/ato_service/test_jobs_readiness.py",
         "tests/test_contracts.py::test_job_status_enum_matches_lifecycle_contract",
-        "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields"
+        "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields",
+        "tests/test_contracts.py::test_job_attempt_status_field_invariants"
       ],
-      "verification_type": "Filesystem replay and corruption helpers plus published P1.0 job/attempt lease contract in LIFECYCLE_AND_ERRORS Section 2.7 and domain.schema.json; Postgres jobs table, worker claim/heartbeat/completion, and crash recovery remain planned/partial for P1 persistence",
+      "verification_type": "Filesystem recovery helpers plus published job/attempt contracts, PostgreSQL jobs and attempts tables, lease-safe claim/heartbeat/completion/failure operations, expired-lease recovery, and real jobs readiness tests; the analyzer worker loop and end-to-end API pipeline remain planned for P1",
       "status": "partial"
     },
     {
@@ -505,7 +517,7 @@
         "tests/ato_service/test_matrix_coverage.py::test_duplicate_actual_rows_reports_sorted_duplicate_ids",
         "tests/ato_service/test_matrix_coverage.py::test_extra_rows_reports_sorted_extra_ids"
       ],
-      "verification_type": "CI `.github/workflows/contracts.yml` runs contract tests and the full `python -m pytest -m \"not integration\"` gate; P1 job lease, API mutation routes, and automatic pipeline wiring remain tracked by their own partial requirements, not claimed here",
+      "verification_type": "CI `.github/workflows/contracts.yml` runs contract tests and the full `python -m pytest -m \"not integration\"` gate; job lease persistence and repository operations are now tracked under P0-005, while API mutation routes, a worker loop, and automatic pipeline wiring remain partial and are not claimed here",
       "status": "implemented"
     },
     {
@@ -679,10 +691,11 @@
       "test_ids": [
         "tests/test_contracts.py::test_job_status_enum_matches_lifecycle_contract",
         "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields",
+        "tests/test_contracts.py::test_job_attempt_status_field_invariants",
         "tests/test_contracts.py::test_pending_approval_expiry_uses_approval_expiry_days_default",
         "tests/test_contracts.py::test_disposition_decision_graph_is_contract_only"
       ],
-      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, HS-010 pending_approval expiry formula, and EP-06-bounded disposition decision graph; persistence and portal routes remain unimplemented",
+      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, HS-010 pending_approval expiry formula, and EP-06-bounded disposition decision graph; job persistence implements the contract while public package and portal routes remain unimplemented",
       "status": "implemented"
     },
     {
