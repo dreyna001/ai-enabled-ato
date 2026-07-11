@@ -26,9 +26,10 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 
 - **Normative target:** FedRAMP 20x Program Class C package preparation plus security-only agency FISMA, one on-prem installation per customer enterprise
 - **P-1 status:** Internal schemas, OpenAPI, lifecycle/error taxonomy, threat model, AI evaluation guide, operations/config contracts, API-only deployment contracts, traceability, and hard-stop register are published and recorded in [`docs/P1_GATE_RECORD.md`](docs/P1_GATE_RECORD.md)
-- **P0 status:** Deterministic foundation helpers, regression coverage, and CI gate are recorded in [`docs/P0_GATE_RECORD.md`](docs/P0_GATE_RECORD.md); API, analyzer-worker, and pipeline wiring remain partial
-- **Implemented today:** durable `ato_service` foundation (validated runtime config, content-addressed storage, lifecycle/model-routing policy, PostgreSQL models/migrations, lease-safe jobs and attempts, real jobs readiness, health/Problem API boundary, config-driven text LLM clients for OpenAI-compatible and AWS Bedrock APIs)
-- **Not implemented yet:** full `/api/v1` surface, workers, portal UI, secure multi-file intake, approvals, production operations, and AI qualification
+- **P0 status:** Deterministic foundation helpers, regression coverage, and CI gate are recorded in [`docs/P0_GATE_RECORD.md`](docs/P0_GATE_RECORD.md); analyzer worker loop and full intake-to-analysis pipeline remain partial
+- **Implemented today:** durable `ato_service` foundation plus the bounded **P1.1** `/api/v1` System + PackageRevision slice (create/list/get systems, create/list/get package revisions, JSON/text upload with all contract `artifact_kind` values, finalize to `scanning`, confirm with `If-Match`/`ETag`, idempotency with 24-hour retention and `response_headers` replay, fail-closed HTTP `401` without injected auth, audit HMAC credential resolution at startup when configured)
+- **Not implemented yet:** analyzer worker, malware scanner integration, extraction, proposals/runs API, portal UI, OIDC/session runtime, approvals, production operations, and AI qualification
+- **Next step:** worker and synthetic intake progression (scanning → extracting → awaiting_confirmation) without claiming full package flow or EP-02 gate completion
 - **Deployment scaffold (API only):** redacted runtime template, `ato-api.service`, inactive nginx template, and explicit install/smoke scripts under [`deployment/`](deployment/); not proof of RHEL validation or production release
 - **Model boundary:** OpenAI-compatible endpoints; external routing is restricted to synthetic or explicitly approved redacted non-production data by default
 

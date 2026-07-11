@@ -137,6 +137,11 @@ processing. Customer extraction remains blocked while **HS-005** is open.
   `revision_version` exactly once.
 - New artifacts initialize `malware_scan_status=pending` and
   `extraction_status=pending`. The API does not perform scan or extraction.
+- `artifact_kind` accepts every value in the published domain enum, but P1.1
+  accepts only declared `Content-Type` values `application/json` and
+  `text/plain` until scanning and extraction workers exist (**HS-005** remains
+  open for production extraction).
+- At most one `SourceArtifact` row exists per `(package_revision_id, sha256)`.
 
 **Finalize** (`POST /api/v1/package-revisions/{id}/finalize`):
 
@@ -202,6 +207,12 @@ Replay semantics:
 - same key + different digest → HTTP 409 `idempotency_key_conflict`, no state
   change.
 
+Concurrent requests for the same `(principal, operation, Idempotency-Key)` are
+serialized with a transaction-scoped PostgreSQL advisory lock before the
+idempotency row is read or written. Successful outcomes persist
+`response_headers` (for example `ETag`) so replays return the original headers
+without recomputing `revision_version`.
+
 Idempotency records are retained for 24 hours from first successful
 completion. This retention interval is a protocol invariant, not an operator
 setting.
@@ -215,9 +226,11 @@ For applicable package mutations, the server commits atomically:
 3. append-only audit event.
 
 Filesystem bytes and `content-manifest.json` MUST become durable before database
-references that depend on them. If audit HMAC credentials or authentication
-dependencies required to append audit events are unavailable, the operation
-fails closed and reports no success.
+references that depend on them. Finalize may replace an on-disk orphan manifest
+only while the database still proves the revision is `uploading` with
+`content_manifest_sha256 IS NULL` and no other caller may use replacement. If
+audit HMAC credentials or authentication dependencies required to append audit
+events are unavailable, the operation fails closed and reports no success.
 
 ### 2.2 FactProposal review
 

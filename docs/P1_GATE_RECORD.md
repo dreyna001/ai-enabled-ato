@@ -122,3 +122,25 @@ python3 -m pytest tests/test_contracts.py -q
 **Post-gate result:** `22 passed in 1.39s` on Python 3.12.
 
 EP-06 `pending_approval -> expired` timers and disposition mutation routes remain later implementation work.
+
+## Post-gate P1.1 System + PackageRevision API implementation
+
+**Recorded:** 2026-07-11 (append-only; does not reopen or replace the P-1 gate above)
+
+This addendum records documentation and traceability synchronization for the bounded P1.1 HTTP/service slice landed after the P-1 gate. It does **not** claim full P1/EP-02 gate completion, analyzer worker loop, malware scanner operation, extraction, proposals/runs routes, OIDC/session runtime, or synthetic end-to-end intake.
+
+**Implemented (bounded):** Alembic head `20260711_0004`; `POST/GET /api/v1/systems`, `GET /api/v1/systems/{system_id}`; `POST/GET /api/v1/systems/{system_id}/package-revisions`; `GET /api/v1/package-revisions/{id}`; `POST /api/v1/package-revisions/{id}/files` (all contract `artifact_kind` values, `application/json` and `text/plain` MIME only); `POST /api/v1/package-revisions/{id}/finalize` (stops at `scanning`); `POST /api/v1/package-revisions/{id}/confirm` with `If-Match`/`ETag`; `PackageRevision.revision_version`; `IdempotencyRecord.response_headers` for `ETag` replay; 24-hour idempotency retention; `pg_advisory_xact_lock` serialization; `uq_source_artifacts_revision_sha256`; durable upload/finalize ordering; orphan-manifest replacement only when DB proves `content_manifest_sha256 IS NULL`; fail-closed HTTP `401` without injected/session auth; `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE` resolved at startup when configured (no env override).
+
+**Still planned/partial:** worker/scanner/extraction, proposals/runs, OIDC, synthetic E2E, and full EP-02 acceptance. Production extraction remains blocked by **HS-005**.
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_contracts.py -q
+```
+
+**Post-gate result:** `23 passed in 1.41s` on Python 3.12.
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -m "not integration" -q
+```
+
+**Post-gate result:** `23 passed in 1.41s` for `tests/test_contracts.py` in this capture; full non-integration gate count is recorded separately in CI and is not re-run here.

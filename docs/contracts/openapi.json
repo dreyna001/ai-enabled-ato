@@ -343,6 +343,7 @@
                   },
                   "artifact_kind": {
                     "type": "string",
+                    "description": "Domain artifact kind. P1.1 accepts every published enum value but only allows declared Content-Type application/json or text/plain; malware_scan_status and extraction_status remain pending until worker slices run (production extraction blocked while HS-005 is open).",
                     "enum": [
                       "manifest",
                       "fedramp_cpo",

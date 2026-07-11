@@ -1259,6 +1259,12 @@ def test_p11_system_package_revision_api_contract() -> None:
     for fragment in boundary_fragments:
         assert fragment in lifecycle, f"missing lifecycle P1.1 boundary: {fragment}"
 
-    assert "HTTP/service routes remain planned/partial" in (
+    assert "worker/scanner/extraction/proposals/runs" in (
         TRACEABILITY_PATH.read_text(encoding="utf-8")
     )
+
+    upload_schema = openapi["paths"]["/package-revisions/{id}/files"]["post"][
+        "requestBody"
+    ]["content"]["multipart/form-data"]["schema"]["properties"]["artifact_kind"]
+    assert "application/json" in upload_schema["description"]
+    assert "text/plain" in upload_schema["description"]

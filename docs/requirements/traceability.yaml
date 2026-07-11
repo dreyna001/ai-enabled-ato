@@ -95,6 +95,9 @@
         "src/ato_service/lifecycle_transitions.py",
         "migrations/versions/20260710_0001_initial_p1_domain.py",
         "migrations/versions/20260711_0002_jobs_and_job_attempts.py",
+        "migrations/versions/20260711_0003_package_revision_version.py",
+        "migrations/versions/20260711_0004_idempotency_headers_artifact_uniq.py",
+        "src/ato_service/package_revisions.py",
         "src/ato_service/jobs.py",
         "alembic.ini"
       ],
@@ -102,13 +105,14 @@
         "tests/ato_service/test_blobs.py",
         "tests/ato_service/test_content_manifests.py::test_orders_artifacts_deterministically_and_replays_idempotently",
         "tests/ato_service/test_session_and_storage_reconciliation.py",
-        "tests/ato_service/test_db.py::test_alembic_head_is_jobs_migration",
+        "tests/ato_service/test_db.py::test_alembic_head_is_idempotency_headers_artifact_uniq_migration",
+        "tests/ato_service/test_package_revisions.py::test_finalize_passes_replace_unreferenced_when_pre_finalize_state",
         "tests/ato_service/test_db.py::test_require_database_dsn_reads_absolute_utf8_file",
         "tests/ato_service/test_job_persistence.py",
         "tests/ato_service/test_jobs.py",
         "tests/ato_service/test_lifecycle_transitions.py"
       ],
-      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, and expired-lease recovery tests plus schema and migration review; full API/worker end-to-end run replay remains planned for P1",
+      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, and expired-lease recovery tests plus Alembic head 20260711_0004 and orphan-manifest replacement only when finalize proves content_manifest_sha256 is null; analysis-run replay, worker loop, and full EP-02 gate remain planned/partial",
       "status": "partial"
     },
     {
@@ -210,13 +214,34 @@
         "docs/contracts/domain.schema.json",
         "docs/contracts/LIFECYCLE_AND_ERRORS.md",
         "docs/contracts/openapi.json",
-        "docs/OPERATIONS_AND_RECOVERY.md"
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "src/ato_service/api_router.py",
+        "src/ato_service/api_dependencies.py",
+        "src/ato_service/auth_context.py",
+        "src/ato_service/systems.py",
+        "src/ato_service/package_revisions.py",
+        "src/ato_service/source_artifacts.py",
+        "src/ato_service/concurrency.py",
+        "src/ato_service/idempotency.py",
+        "migrations/versions/20260711_0003_package_revision_version.py",
+        "migrations/versions/20260711_0004_idempotency_headers_artifact_uniq.py"
       ],
       "test_ids": [
         "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts",
-        "tests/test_contracts.py::test_p11_system_package_revision_api_contract"
+        "tests/test_contracts.py::test_p11_system_package_revision_api_contract",
+        "tests/ato_service/test_package_api_routes.py::test_routes_require_authentication_when_principal_dependency_not_overridden",
+        "tests/ato_service/test_package_api_routes.py::test_confirm_without_if_match_maps_to_service_level_required_error",
+        "tests/ato_service/test_concurrency.py::test_format_and_parse_package_revision_etag",
+        "tests/ato_service/test_idempotency.py::test_retention_constant_is_twenty_four_hours",
+        "tests/ato_service/test_idempotency.py::test_load_idempotency_replay_acquires_advisory_lock_before_select",
+        "tests/ato_service/test_idempotency.py::test_replay_etag_from_outcome_prefers_stored_headers_over_body",
+        "tests/ato_service/test_idempotency_headers_persistence.py::test_postgresql_ddl_includes_response_headers_and_unique_constraint",
+        "tests/ato_service/test_package_revision_version_persistence.py::test_alembic_head_is_idempotency_headers_artifact_uniq_migration",
+        "tests/ato_service/test_source_artifacts.py::test_accepts_all_contract_artifact_kinds",
+        "tests/ato_service/test_source_artifacts.py::test_rejects_unsupported_declared_media_type",
+        "tests/ato_service/test_package_revisions.py::test_finalize_writes_manifest_before_db_mutation"
       ],
-      "verification_type": "P1.1 contract tests for revision_version ETag, 428/412 confirm preconditions, five-operation idempotency set, 24-hour retention invariant, and auth boundary text; HTTP/service route implementation remains planned/partial",
+      "verification_type": "Bounded P1.1 System + PackageRevision HTTP/service slice: POST/GET systems, revision create/list/get, upload, finalize (stops at scanning), and confirm with revision_version ETag, IdempotencyRecord response_headers for ETag replay, 24-hour retention, pg_advisory_xact_lock serialization, uq_source_artifacts_revision_sha256, durable upload/finalize ordering, and fail-closed HTTP 401 without injected/session auth; worker/scanner/extraction/proposals/runs/OIDC/synthetic E2E and full P1/EP-02 gate remain planned/partial",
       "status": "partial"
     },
     {
@@ -226,10 +251,15 @@
       "epic": "EP-04-secure-intake",
       "implementation_files": [
         "src/ato_service/blobs.py",
-        "src/ato_service/runtime_config.py"
+        "src/ato_service/runtime_config.py",
+        "src/ato_service/source_artifacts.py"
       ],
-      "test_ids": [],
-      "verification_type": "Current JSON/text path and size control review plus planned malicious-file fixture suite",
+      "test_ids": [
+        "tests/ato_service/test_source_artifacts.py::test_accepts_all_contract_artifact_kinds",
+        "tests/ato_service/test_source_artifacts.py::test_rejects_unsupported_declared_media_type",
+        "tests/ato_service/test_source_artifacts.py::test_rejects_single_file_size_limit"
+      ],
+      "verification_type": "P1.1 upload accepts all published artifact_kind enum values but only application/json and text/plain declared MIME with configured size/count limits; malware scan, extraction, archive/XML/Office/SVG controls, and HS-005 production scanner remain planned/partial",
       "status": "partial"
     },
     {
@@ -238,10 +268,18 @@
       "requirement_text": "Audit history is tamper-evident and its integrity can be verified.",
       "epic": "EP-08-onprem-release",
       "implementation_files": [
-        "src/ato_service/db/models.py"
+        "src/ato_service/db/models.py",
+        "src/ato_service/audit.py",
+        "src/ato_service/api_dependencies.py",
+        "src/ato_service/main.py",
+        "src/ato_service/runtime_config.py"
       ],
-      "test_ids": [],
-      "verification_type": "Current audit-record review plus planned HMAC chain and tamper-verification tests",
+      "test_ids": [
+        "tests/ato_service/test_audit.py::test_require_audit_hmac_key_rejects_missing_or_short_keys",
+        "tests/ato_service/test_api_dependencies.py::test_get_audit_hmac_key_returns_configured_key",
+        "tests/ato_service/test_main.py::test_resolve_audit_hmac_key_for_startup_reads_credential_reference"
+      ],
+      "verification_type": "Append-only audit events on P1.1 mutations with HMAC-SHA-256 when AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE resolves at startup (no env override); chain verification, tamper drills, and backup-root replication remain planned/partial",
       "status": "partial"
     },
     {
@@ -687,7 +725,7 @@
         "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts",
         "tests/test_contracts.py::test_p11_system_package_revision_api_contract"
       ],
-      "verification_type": "OpenAPI parse, recursive reference, method, security, idempotency, concurrency, and P1.1 package-route contract validation complete; info.version frozen at 1.0.0; HTTP/service routes remain planned/partial",
+      "verification_type": "OpenAPI 3.1 parse, recursive reference, method, security, idempotency, concurrency, ETag response headers, and P1.1 package-route contract validation complete; info.version frozen at 1.0.0; bounded P1.1 HTTP routes are implemented while proposals/runs and later API groups remain planned/partial",
       "status": "implemented"
     },
     {
@@ -710,7 +748,7 @@
         "tests/test_contracts.py::test_disposition_decision_graph_is_contract_only",
         "tests/test_contracts.py::test_p11_system_package_revision_api_contract"
       ],
-      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, reviewed expired-lease recovery, HS-010 pending_approval expiry formula, EP-06-bounded disposition decision graph, and P1.1 System + PackageRevision optimistic concurrency, idempotency, auth boundary, and upload/finalize/confirm semantics; job persistence implements the P1.0 contract while public package HTTP/service routes, approval timers, OIDC/session runtime, and portal disposition routes remain planned/partial",
+      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, reviewed expired-lease recovery, HS-010 pending_approval expiry formula, EP-06-bounded disposition decision graph, and P1.1 System + PackageRevision optimistic concurrency, idempotency, auth boundary, upload/finalize/confirm semantics, advisory-lock serialization, response_headers ETag replay, and source-artifact uniqueness; job persistence and bounded P1.1 HTTP/service routes are implemented while approval timers, OIDC/session runtime, portal disposition routes, worker/scanner/extraction, and synthetic E2E remain planned/partial",
       "status": "implemented"
     },
     {
