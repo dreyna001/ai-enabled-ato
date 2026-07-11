@@ -42,6 +42,7 @@ AUTHORITY_MANIFEST_PATH_ENV_VAR = "ATO_AUTHORITY_MANIFEST_PATH"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 RUNTIME_STATE_ATTR = "runtime"
+API_VERSION_PREFIX = "/api/v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ class AppRuntimeSnapshot:
     config: RuntimeConfig
     storage_root: Path
     authority_manifest_id: str
+    project_root: Path
 
 
 @dataclass(slots=True)
@@ -120,6 +122,14 @@ def _custom_openapi(app: FastAPI) -> dict[str, Any]:
         routes=app.routes,
         servers=app.servers,
     )
+    rewritten_paths: dict[str, Any] = {}
+    for path, path_item in schema["paths"].items():
+        if path.startswith(f"{API_VERSION_PREFIX}/"):
+            rewritten_paths[path.removeprefix(API_VERSION_PREFIX)] = path_item
+        else:
+            rewritten_paths[path] = path_item
+    schema["paths"] = rewritten_paths
+
     for health_path in ("/health/live", "/health/ready"):
         path_item = schema["paths"][health_path]
         path_item["get"]["security"] = []
@@ -139,14 +149,19 @@ def create_app(
         title="ATO Evidence Analysis Portal API",
         version="1.0.0",
         description=(
-            "Published P-1 API contract. An endpoint appearing here does not "
-            "mean it is implemented."
+            "Published P-1 API contract. Implemented in this build: health "
+            "endpoints and the P1.1 Systems + PackageRevision slice "
+            "(systems, package-revisions, file upload, finalize, confirm). "
+            "Other contract paths remain unimplemented."
         ),
         servers=[{"url": "/api/v1"}],
         lifespan=lifespan,
     )
     register_problem_handlers(app)
     app.include_router(create_health_router(readiness_probe))
+    from ato_service.api_router import create_api_router
+
+    app.include_router(create_api_router(), prefix="/api/v1")
     app.openapi = lambda: _custom_openapi(app)
     if runtime_state is not None:
         setattr(app.state, RUNTIME_STATE_ATTR, runtime_state)
@@ -188,6 +203,7 @@ def build_app_from_config(
                     config=config,
                     storage_root=config.storage_data_path,
                     authority_manifest_id=manifest["manifest_id"],
+                    project_root=root,
                 ),
                 session_factory=runtime.session_factory,
                 audit_hmac_key=audit_hmac_key,

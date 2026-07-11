@@ -28,6 +28,8 @@ from ato_service.main import (
 )
 from ato_service.runtime_config import load_runtime_config_from_dict
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 def _request_for_app(app: FastAPI) -> Request:
     scope = {
@@ -62,6 +64,7 @@ def _runtime_state(
             config=config,
             storage_root=config.storage_data_path,
             authority_manifest_id="fixture.draft",
+            project_root=ROOT,
         ),
         session_factory=session_factory,
         audit_hmac_key=audit_hmac_key,

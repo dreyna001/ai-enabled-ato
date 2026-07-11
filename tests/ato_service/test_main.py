@@ -19,6 +19,7 @@ from ato_service.main import (
     RUNTIME_STATE_ATTR,
     AppRuntimeState,
     build_app_from_config,
+    create_app,
     load_app_from_config_path,
     resolve_database_dsn,
 )
@@ -217,6 +218,7 @@ def test_valid_draft_manifest_starts_and_disposes_engine(
             assert runtime_state.config is config
             assert runtime_state.storage_root == config.storage_data_path
             assert runtime_state.authority_manifest_id == "fixture.draft"
+            assert runtime_state.snapshot.project_root == tmp_path
             assert runtime_state.session_factory is session_factory
             assert runtime_state.audit_hmac_key == b"audit-test-key"
 
@@ -389,3 +391,54 @@ def test_main_requires_config_path(
 
     with pytest.raises(SystemExit, match=RUNTIME_CONFIG_PATH_ENV_VAR):
         main([])
+
+
+def test_create_app_mounts_p1_package_routes_without_runtime() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+    paths = set(app.openapi()["paths"])
+
+    assert all(not path.startswith("/api/v1") for path in paths)
+    assert "/systems" in paths
+    assert "/systems/{system_id}/package-revisions" in paths
+    assert "/package-revisions/{id}" in paths
+    assert "/package-revisions/{id}/files" in paths
+    assert "/package-revisions/{id}/finalize" in paths
+    assert "/package-revisions/{id}/confirm" in paths
+    assert "/package-revisions/{id}/proposals" not in paths
+    assert "/health/live" in paths
+    assert "/health/ready" in paths
+
+
+def test_create_app_openapi_avoids_double_api_prefix() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+    schema = app.openapi()
+
+    assert schema["servers"] == [{"url": "/api/v1"}]
+    assert all(not path.startswith("/api/v1") for path in schema["paths"])
+    assert "/systems" in schema["paths"]
+    assert schema["paths"]["/health/live"]["get"]["servers"] == [
+        {
+            "url": "/",
+            "description": "Application root outside the versioned API base path",
+        }
+    ]
+
+
+def test_create_app_description_documents_implemented_p1_subset() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+
+    assert "P1.1 Systems + PackageRevision" in app.description
+    assert "unimplemented" in app.description.lower()
+
+
+def test_create_app_exposes_health_and_api_when_runtime_absent() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+
+    with TestClient(app) as client:
+        live = client.get("/health/live")
+        assert live.status_code == 200
+
+        api = client.get("/api/v1/systems")
+        assert api.status_code == 401
+        assert api.headers["content-type"].startswith("application/problem+json")
+        assert api.json()["error_code"] == "authentication_required"
