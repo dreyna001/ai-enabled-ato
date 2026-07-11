@@ -93,6 +93,7 @@ def write_content_manifest(
     max_artifacts: int = MAX_ARTIFACTS,
     max_artifact_bytes: int = MAX_ARTIFACT_BYTES,
     max_package_bytes: int = MAX_PACKAGE_BYTES,
+    replace_unreferenced_existing: bool = False,
 ) -> StoredContentManifest:
     """Validate source blobs and persist an immutable package content manifest."""
     resolved_root = storage_root.resolve()
@@ -143,9 +144,10 @@ def write_content_manifest(
                 manifest_bytes=existing_bytes,
                 document=document,
             )
-        raise ContentManifestConflictError(
-            "a different content manifest already exists for this package revision"
-        )
+        if not replace_unreferenced_existing:
+            raise ContentManifestConflictError(
+                "a different content manifest already exists for this package revision"
+            )
 
     try:
         temp_dir = ensure_storage_directory(resolved_root, _TEMP_DIR_NAME)

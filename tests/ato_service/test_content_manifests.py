@@ -399,6 +399,105 @@ def test_rejects_existing_different_manifest(tmp_path: Path) -> None:
     assert blob_b.sha256 not in manifest_path.read_text(encoding="utf-8")
 
 
+def test_replace_unreferenced_existing_updates_different_manifest(
+    tmp_path: Path,
+) -> None:
+    store = BlobStore(tmp_path)
+    blob_a = _store_blob(store, b"first-manifest")
+    blob_b = _store_blob(store, b"second-manifest")
+
+    first = write_content_manifest(
+        PACKAGE_REVISION_ID,
+        [_entry(blob_a, ARTIFACT_ID_A)],
+        storage_root=tmp_path,
+        schema_path=SCHEMA_PATH,
+    )
+    manifest_path = tmp_path / first.manifest_storage_key
+    before_mtime_ns = manifest_path.stat().st_mtime_ns
+
+    second = write_content_manifest(
+        PACKAGE_REVISION_ID,
+        [_entry(blob_b, ARTIFACT_ID_B)],
+        storage_root=tmp_path,
+        schema_path=SCHEMA_PATH,
+        replace_unreferenced_existing=True,
+    )
+
+    assert second.sha256 != first.sha256
+    assert manifest_path.read_bytes() == _canonical_bytes(second.document)
+    assert manifest_path.stat().st_mtime_ns >= before_mtime_ns
+    assert blob_b.sha256 in manifest_path.read_text(encoding="utf-8")
+    assert blob_a.sha256 not in manifest_path.read_text(encoding="utf-8")
+    assert not any((tmp_path / "_tmp").glob("*"))
+
+
+def test_replace_unreferenced_existing_identical_bytes_is_no_op(tmp_path: Path) -> None:
+    store = BlobStore(tmp_path)
+    blob = _store_blob(store, b"same-manifest")
+
+    first = write_content_manifest(
+        PACKAGE_REVISION_ID,
+        [_entry(blob, ARTIFACT_ID_A)],
+        storage_root=tmp_path,
+        schema_path=SCHEMA_PATH,
+    )
+    manifest_path = tmp_path / first.manifest_storage_key
+    before_mtime_ns = manifest_path.stat().st_mtime_ns
+
+    second = write_content_manifest(
+        PACKAGE_REVISION_ID,
+        [_entry(blob, ARTIFACT_ID_A)],
+        storage_root=tmp_path,
+        schema_path=SCHEMA_PATH,
+        replace_unreferenced_existing=True,
+    )
+
+    assert second == first
+    assert manifest_path.stat().st_mtime_ns == before_mtime_ns
+
+
+def test_replace_failure_preserves_existing_manifest_and_cleans_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = BlobStore(tmp_path)
+    blob_a = _store_blob(store, b"first-manifest")
+    blob_b = _store_blob(store, b"second-manifest")
+    temp_dir = tmp_path / "_tmp"
+
+    first = write_content_manifest(
+        PACKAGE_REVISION_ID,
+        [_entry(blob_a, ARTIFACT_ID_A)],
+        storage_root=tmp_path,
+        schema_path=SCHEMA_PATH,
+    )
+    manifest_path = tmp_path / first.manifest_storage_key
+    original_bytes = manifest_path.read_bytes()
+
+    def _fail_replace(src, dst):
+        raise OSError("simulated manifest replace failure")
+
+    monkeypatch.setattr("ato_service.content_manifests.os.replace", _fail_replace)
+
+    with pytest.raises(
+        ContentManifestCommitError, match="could not be durably committed"
+    ):
+        write_content_manifest(
+            PACKAGE_REVISION_ID,
+            [_entry(blob_b, ARTIFACT_ID_B)],
+            storage_root=tmp_path,
+            schema_path=SCHEMA_PATH,
+            replace_unreferenced_existing=True,
+        )
+
+    assert manifest_path.read_bytes() == original_bytes
+    assert blob_a.sha256 in manifest_path.read_text(encoding="utf-8")
+    assert blob_b.sha256 not in manifest_path.read_text(encoding="utf-8")
+    assert not any(
+        path for path in temp_dir.glob("*") if is_recognized_staging_filename(path.name)
+    )
+
+
 def test_default_limits_match_runtime_contracts() -> None:
     assert MAX_ARTIFACTS == 500
     assert MAX_ARTIFACT_BYTES == 104_857_600

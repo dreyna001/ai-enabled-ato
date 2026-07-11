@@ -557,6 +557,105 @@ def test_finalize_writes_manifest_before_db_mutation(
     assert result.etag == '"v2"'
 
 
+@patch("ato_service.package_revisions.record_idempotency_outcome", new_callable=AsyncMock)
+@patch("ato_service.package_revisions.append_audit_event", new_callable=AsyncMock)
+@patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
+@patch("ato_service.package_revisions.asyncio.to_thread", new_callable=AsyncMock)
+def test_finalize_passes_replace_unreferenced_when_pre_finalize_state(
+    mock_to_thread: AsyncMock,
+    mock_load: AsyncMock,
+    mock_audit: AsyncMock,
+    mock_record: AsyncMock,
+) -> None:
+    mock_load.return_value = None
+    mock_audit.return_value = MagicMock()
+    mock_record.return_value = MagicMock()
+    manifest = StoredContentManifest(
+        manifest_storage_key="manifests/packages/x/content-manifest.json",
+        sha256="b" * 64,
+        size_bytes=128,
+        document={"schema_version": "1.0.0"},
+    )
+    mock_to_thread.return_value = manifest
+
+    revision = _revision(content_manifest_sha256=None, status="uploading")
+    session = _RecordingSession(
+        [
+            _scalar_result(revision),
+            _scalar_one_result(_system()),
+            _scalars_all_result([_artifact()]),
+        ]
+    )
+
+    _run(
+        finalize_package_revision(
+            session,
+            principal=OWNER_PRINCIPAL,
+            package_revision_id=REVISION_ID,
+            idempotency_key=IDEM_KEY,
+            hmac_key=HMAC_KEY,
+            storage_root=ROOT / "tmp-storage",
+            project_root=ROOT,
+            limits=LIMITS,
+            now=NOW,
+        )
+    )
+
+    kwargs = mock_to_thread.call_args.kwargs
+    assert kwargs["replace_unreferenced_existing"] is True
+
+
+@patch("ato_service.package_revisions.record_idempotency_outcome", new_callable=AsyncMock)
+@patch("ato_service.package_revisions.append_audit_event", new_callable=AsyncMock)
+@patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
+@patch("ato_service.package_revisions.asyncio.to_thread", new_callable=AsyncMock)
+def test_finalize_omits_replace_unreferenced_when_digest_present(
+    mock_to_thread: AsyncMock,
+    mock_load: AsyncMock,
+    mock_audit: AsyncMock,
+    mock_record: AsyncMock,
+) -> None:
+    mock_load.return_value = None
+    mock_audit.return_value = MagicMock()
+    mock_record.return_value = MagicMock()
+    manifest = StoredContentManifest(
+        manifest_storage_key="manifests/packages/x/content-manifest.json",
+        sha256="b" * 64,
+        size_bytes=128,
+        document={"schema_version": "1.0.0"},
+    )
+    mock_to_thread.return_value = manifest
+
+    revision = _revision(
+        content_manifest_sha256="c" * 64,
+        status="uploading",
+    )
+    session = _RecordingSession(
+        [
+            _scalar_result(revision),
+            _scalar_one_result(_system()),
+            _scalars_all_result([_artifact()]),
+        ]
+    )
+
+    _run(
+        finalize_package_revision(
+            session,
+            principal=OWNER_PRINCIPAL,
+            package_revision_id=REVISION_ID,
+            idempotency_key=IDEM_KEY,
+            hmac_key=HMAC_KEY,
+            storage_root=ROOT / "tmp-storage",
+            project_root=ROOT,
+            limits=LIMITS,
+            now=NOW,
+        )
+    )
+
+    kwargs = mock_to_thread.call_args.kwargs
+    assert kwargs["replace_unreferenced_existing"] is False
+
+
 @patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
 @patch("ato_service.package_revisions.asyncio.to_thread", new_callable=AsyncMock)
 def test_finalize_manifest_error_does_not_mutate_revision(
