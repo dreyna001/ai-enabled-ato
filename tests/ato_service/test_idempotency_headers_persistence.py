@@ -81,6 +81,8 @@ def test_migration_is_explicit_and_additive() -> None:
     assert "response_headers" in migration_source
     assert "'{}'::jsonb" in migration_source
     assert "uq_source_artifacts_revision_sha256" in migration_source
+    assert "HAVING count(*) > 1" in migration_source
+    assert "reconcile before migration" in migration_source
     assert re.search(
         r'op\.create_unique_constraint\(\s*\n?\s*["\']uq_source_artifacts_revision_sha256["\']',
         migration_source,
@@ -100,6 +102,7 @@ def test_migration_upgrade_and_downgrade_operation_order() -> None:
 
     assert [op_name for op_name, _args, _kwargs in upgrade_ops] == [
         "add_column",
+        "execute",
         "create_unique_constraint",
     ]
 
@@ -110,7 +113,10 @@ def test_migration_upgrade_and_downgrade_operation_order() -> None:
     assert column.nullable is False
     assert column.server_default is not None
 
-    unique_args, unique_kwargs = upgrade_ops[1][1], upgrade_ops[1][2]
+    preflight_statement = upgrade_ops[1][1][0]
+    assert "GROUP BY package_revision_id, sha256" in str(preflight_statement)
+
+    unique_args, unique_kwargs = upgrade_ops[2][1], upgrade_ops[2][2]
     assert unique_args[0] == "uq_source_artifacts_revision_sha256"
     assert unique_args[1] == "source_artifacts"
     assert unique_args[2] == ["package_revision_id", "sha256"]

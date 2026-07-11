@@ -22,6 +22,25 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
     )
+    op.execute(
+        sa.text(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM source_artifacts
+                    GROUP BY package_revision_id, sha256
+                    HAVING count(*) > 1
+                ) THEN
+                    RAISE EXCEPTION
+                        'source_artifacts contains duplicate revision SHA-256 rows; reconcile before migration';
+                END IF;
+            END
+            $$;
+            """
+        )
+    )
     op.create_unique_constraint(
         "uq_source_artifacts_revision_sha256",
         "source_artifacts",

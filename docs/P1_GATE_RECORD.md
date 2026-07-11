@@ -143,4 +143,4 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_contracts.py -q
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -m "not integration" -q
 ```
 
-**Post-gate result:** `23 passed in 1.41s` for `tests/test_contracts.py` in this capture; full non-integration gate count is recorded separately in CI and is not re-run here.
+**Post-gate result:** `973 passed, 1 skipped, 1 deselected, 1 warning in 4.97s` on Python 3.12. The warning is the existing third-party Starlette/httpx deprecation warning.

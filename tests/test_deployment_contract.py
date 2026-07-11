@@ -32,6 +32,8 @@ RUNTIME_CONFIG_PATH = f"{CONFIG_DIR}/runtime-config.json"
 RUNTIME_CONFIG_EXAMPLE_PATH = f"{CONFIG_DIR}/runtime-config.onprem.example.json"
 DATABASE_DSN_CREDENTIAL_PATH = f"{CONFIG_DIR}/credentials/database-dsn"
 DATABASE_DSN_IDENTIFIER = "database-dsn"
+AUDIT_HMAC_CREDENTIAL_PATH = f"{CONFIG_DIR}/credentials/audit-hmac-key"
+AUDIT_HMAC_IDENTIFIER = "audit-hmac-key"
 NGINX_EXAMPLE_DEST = "/etc/nginx/conf.d/ato-api.conf.example"
 
 FORBIDDEN_SECRET_PATTERNS = (
@@ -155,17 +157,20 @@ def test_systemd_unit_points_to_canonical_runtime_config(systemd_text: str) -> N
     )
 
 
-def test_systemd_unit_wires_protected_database_dsn_reference(systemd_text: str) -> None:
+def test_systemd_unit_wires_api_consumed_credential_references(
+    systemd_text: str,
+) -> None:
     assert (
         f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}"
         in systemd_text
     )
-    assert "database-dsn" in systemd_text
+    assert (
+        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
+        in systemd_text
+    )
     assert "CREDENTIALS_DIRECTORY" not in systemd_text
     assert "LoadCredential=oidc" not in systemd_text.lower()
-    assert "LoadCredential=audit" not in systemd_text.lower()
     assert "LoadCredential=backup" not in systemd_text.lower()
-    assert "intentionally wires only database-dsn" in systemd_text
 
 
 def test_systemd_unit_orders_after_network_online_without_postgresql_unit(
@@ -498,7 +503,7 @@ def test_deployment_readme_matches_current_installer_contract(
     assert "requires `--start`" in deployment_readme_text
     assert "alembic.ini" in deployment_readme_text
     assert "migrations/" in deployment_readme_text
-    assert "only `LoadCredential=database-dsn`" in deployment_readme_text
+    assert "`database-dsn` and `audit-hmac-key`" in deployment_readme_text
     assert '"checks":{"process":"ok"}' in deployment_readme_text
     assert "reconciliation_required" in deployment_readme_text
     assert "instance: /health/ready" in deployment_readme_text

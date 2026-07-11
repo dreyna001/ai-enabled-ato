@@ -13,7 +13,7 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`config/runtime-config.dev_local.json`](config/runtime-config.dev_local.json) | Minimal dev profile referenced by local docs |
 | [`config/runtime-config.dev_local.openai.example.json`](config/runtime-config.dev_local.openai.example.json) | Dev example for OpenAI-compatible text LLM calls |
 | [`config/runtime-config.dev_local.bedrock.example.json`](config/runtime-config.dev_local.bedrock.example.json) | Dev/work example for AWS Bedrock text LLM calls |
-| [`systemd/ato-api.service`](systemd/ato-api.service) | Unprivileged API unit; pins config path, loopback bind, and `database-dsn` credential |
+| [`systemd/ato-api.service`](systemd/ato-api.service) | Unprivileged API unit; pins config path, loopback bind, and API-consumed database/audit credentials |
 | [`nginx/ato-api.conf`](nginx/ato-api.conf) | Inactive TLS edge template; customer must replace host/cert placeholders before enablement |
 | [`../scripts/install.sh`](../scripts/install.sh) | Root installer: layout, package copy, systemd/nginx assets |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
@@ -25,6 +25,7 @@ There is no worker unit, portal static root, model sidecar, or timer in this sli
 ```text
 /etc/ato-analyzer/runtime-config.json          # customer production JSON (never overwritten by installer)
 /etc/ato-analyzer/credentials/database-dsn     # root-owned DSN file (never overwritten)
+/etc/ato-analyzer/credentials/audit-hmac-key   # root-owned audit key (never overwritten)
 /opt/ato-analyzer/                             # application venv, package, alembic.ini, migrations/, contracts
 /var/ato-packages/                             # mutable package storage
 /var/ato-packages/_tmp/                        # package staging scratch (service-writable)
@@ -44,6 +45,7 @@ sudo bash scripts/install.sh
 # 2. Provision production config and secrets out of band (installer does not create these)
 sudo install -o root -g ato -m 640 /path/to/customer/runtime-config.json /etc/ato-analyzer/runtime-config.json
 sudo install -o root -g root -m 600 /path/to/dsn.txt /etc/ato-analyzer/credentials/database-dsn
+sudo install -o root -g root -m 600 /path/to/audit-hmac-key /etc/ato-analyzer/credentials/audit-hmac-key
 
 # 3. Production-readiness: migrate, start, and smoke in one invocation
 sudo bash scripts/install.sh --migrate --start --smoke
@@ -74,7 +76,7 @@ Repeated installs copy fresh package bytes and reinstall `ato_service` from `/op
 
 ## systemd credentials
 
-The shipped `ato-api.service` wires only `LoadCredential=database-dsn`. Text-model, OIDC, audit, and backup credential references in runtime JSON are schema declarations for unimplemented consumers. Future feature units must add matching `LoadCredential` mappings before those references are consumed.
+The shipped `ato-api.service` wires `database-dsn` and `audit-hmac-key`, the two credentials consumed by the current API process. The audit key must contain at least 32 bytes. Text-model, OIDC, and backup credential references remain declarations for later consumers; add matching `LoadCredential` mappings only when those processes or capabilities exist.
 
 ## nginx and TLS
 
