@@ -1,0 +1,2359 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ATO Evidence Analysis Portal API",
+    "version": "1.0.0",
+    "description": "Published P-1 API contract. An endpoint appearing here does not mean it is implemented."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Systems"
+    },
+    {
+      "name": "Packages"
+    },
+    {
+      "name": "Runs"
+    },
+    {
+      "name": "Reviews"
+    },
+    {
+      "name": "Exports"
+    },
+    {
+      "name": "Assistant"
+    },
+    {
+      "name": "Health"
+    }
+  ],
+  "paths": {
+    "/systems": {
+      "post": {
+        "tags": [
+          "Systems"
+        ],
+        "operationId": "createSystem",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSystemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/SystemResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Systems"
+        ],
+        "operationId": "listSystems",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized systems",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "./domain.schema.json#/$defs/System"
+                      },
+                      "maxItems": 100
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/systems/{system_id}": {
+      "get": {
+        "tags": [
+          "Systems"
+        ],
+        "operationId": "getSystem",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SystemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SystemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/systems/{system_id}/package-revisions": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "createPackageRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SystemId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePackageRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/PackageRevisionResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "listPackageRevisions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SystemId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package revisions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "./domain.schema.json#/$defs/PackageRevision"
+                      },
+                      "maxItems": 100
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "getPackageRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/files": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "uploadPackageFile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "file",
+                  "artifact_kind"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "maxLength": 104857600,
+                    "x-max-bytes": 104857600,
+                    "description": "Single file, limited to 104,857,600 bytes (100 MiB)."
+                  },
+                  "artifact_kind": {
+                    "type": "string",
+                    "description": "Domain artifact kind. P1.1 accepts every published enum value but only allows declared Content-Type application/json or text/plain; malware_scan_status and extraction_status remain pending until worker slices run (production extraction blocked while HS-005 is open).",
+                    "enum": [
+                      "manifest",
+                      "fedramp_cpo",
+                      "fedramp_sdr",
+                      "fedramp_ocr",
+                      "fedramp_scg",
+                      "oscal",
+                      "evidence_document",
+                      "scanner_export",
+                      "architecture",
+                      "attestation",
+                      "reference_catalog"
+                    ]
+                  },
+                  "source_date": {
+                    "anyOf": [
+                      {
+                        "$ref": "./domain.schema.json#/$defs/IsoDate"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored source artifact",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./domain.schema.json#/$defs/SourceArtifact"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/finalize": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "finalizePackageUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/PackageRevisionResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "confirmPackageRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "428": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/proposals": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "listFactProposals",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fact proposals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "./domain.schema.json#/$defs/FactProposal"
+                      },
+                      "maxItems": 100
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/proposals/{id}/accept": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "acceptFactProposal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProposalId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reviewed proposal",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./domain.schema.json#/$defs/FactProposal"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/proposals/{id}/reject": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "rejectFactProposal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProposalId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rejected proposal",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./domain.schema.json#/$defs/FactProposal"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/runs": {
+      "post": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "startRun",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/RunResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "listRuns",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "./domain.schema.json#/$defs/AnalysisRun"
+                      },
+                      "maxItems": 100
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "getRun",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RunResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/cancel": {
+      "post": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "cancelRun",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/RunResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/matrix": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "getRunMatrix",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "supported",
+                "partial",
+                "unsupported",
+                "insufficient_evidence"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete or paged matrix view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor",
+                    "total"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "./domain.schema.json#/$defs/MatrixRow"
+                      },
+                      "maxItems": 100
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/artifacts": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "operationId": "listRunArtifacts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run artifact metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "$ref": "#/components/schemas/ArtifactDescriptor"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/review-revisions": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "operationId": "createReviewRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/ReviewRevisionResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/review-revisions/{id}/submit": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "operationId": "submitReviewRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ReviewRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ReviewRevisionResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/review-revisions/{id}/dispositions/{row_id}": {
+      "patch": {
+        "tags": [
+          "Reviews"
+        ],
+        "operationId": "updateDisposition",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ReviewRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/MatrixRowId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispositionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated disposition",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./domain.schema.json#/$defs/Disposition"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/review-revisions/{id}/comments": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "operationId": "createReviewComment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ReviewRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created comment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewComment"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "operationId": "listReviewComments",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ReviewRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Review comments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReviewComment"
+                      },
+                      "maxItems": 100
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048,
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/review-revisions/{id}/export-drafts": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "operationId": "createExportDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ReviewRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/ExportDraftResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/export-drafts/{id}/submit": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "operationId": "submitExportDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExportDraftId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/ApprovalResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/approvals/{id}/approve": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "operationId": "approveExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApprovalId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ApprovalResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/approvals/{id}/reject": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "operationId": "rejectExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApprovalId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ApprovalResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/exports/{id}/download": {
+      "get": {
+        "tags": [
+          "Exports"
+        ],
+        "operationId": "downloadExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExportId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Approved ZIP bundle",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment with a server-generated ASCII ZIP filename.",
+                "schema": {
+                  "type": "string",
+                  "maxLength": 160,
+                  "pattern": "^attachment; filename=\\\"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\\.zip\\\"$"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "Prevents MIME sniffing.",
+                "schema": {
+                  "type": "string",
+                  "const": "nosniff"
+                }
+              },
+              "Cache-Control": {
+                "description": "Prevents shared or local caching of sensitive export content.",
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "410": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/search": {
+      "get": {
+        "tags": [
+          "Assistant"
+        ],
+        "operationId": "searchPackage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package-scoped search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/chat": {
+      "post": {
+        "tags": [
+          "Assistant"
+        ],
+        "operationId": "chatWithPackage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded package answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "getLiveness",
+        "security": [],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HealthResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "servers": [
+        {
+          "url": "/",
+          "description": "Application root outside the versioned API base path"
+        }
+      ]
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "getReadiness",
+        "security": [],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HealthResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "servers": [
+        {
+          "url": "/",
+          "description": "Application root outside the versioned API base path"
+        }
+      ]
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-ato_session",
+        "description": "Server-side OIDC session cookie. Production sets Secure, HttpOnly, and SameSite=Lax."
+      }
+    },
+    "parameters": {
+      "SystemId": {
+        "name": "system_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "PackageRevisionId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "ProposalId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "RunId": {
+        "name": "run_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "ReviewRevisionId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "MatrixRowId": {
+        "name": "row_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "ExportDraftId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "ApprovalId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "ExportId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./domain.schema.json#/$defs/Uuid"
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{16,128}$"
+        },
+        "description": "Required for contract-designated replay-safe operations. The server stores a normalized request digest with the original outcome for 24 hours from first successful completion. Reusing a key with the same normalized request returns the original outcome without repeating side effects. Reusing a key with a different digest returns HTTP 409 idempotency_key_conflict. After expiry the record may be deleted; key reuse is allowed only after row removal and does not affect immutable artifacts."
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^\\\"[A-Za-z0-9._:-]{1,128}\\\"$"
+        },
+        "description": "Strong ETag for the current target representation. PackageRevision resources use the quoted form \"v{revision_version}\". Disposition mutations use the quoted decimal disposition version. A stale value returns HTTP 412 etag_mismatch; a missing required header returns HTTP 428 if_match_required. Weak tags and '*' are rejected."
+      },
+      "CsrfToken": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 512
+        },
+        "description": "Required on mutations together with server-side Origin validation."
+      }
+    },
+    "headers": {
+      "ETag": {
+        "description": "Strong current resource version. PackageRevision ETags are the quoted form \"v{revision_version}\". Disposition ETags are the quoted decimal disposition version.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\\\"[A-Za-z0-9._:-]{1,128}\\\"$"
+        }
+      }
+    },
+    "responses": {
+      "SystemResponse": {
+        "description": "System",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/System"
+            }
+          }
+        }
+      },
+      "PackageRevisionResponse": {
+        "description": "Package revision",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/ETag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/PackageRevision"
+            }
+          }
+        }
+      },
+      "RunResponse": {
+        "description": "Analysis run",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/AnalysisRun"
+            }
+          }
+        }
+      },
+      "ReviewRevisionResponse": {
+        "description": "Review revision",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/ETag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/ReviewRevision"
+            }
+          }
+        }
+      },
+      "ExportDraftResponse": {
+        "description": "Export draft",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/ETag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/ExportDraft"
+            }
+          }
+        }
+      },
+      "ApprovalResponse": {
+        "description": "Approval",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/Approval"
+            }
+          }
+        }
+      },
+      "ProblemResponse": {
+        "description": "Request failed",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/Problem"
+            }
+          }
+        }
+      },
+      "HealthResponse": {
+        "description": "Health state",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "checks"
+              ],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "ok",
+                    "degraded",
+                    "unavailable"
+                  ]
+                },
+                "checks": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "enum": [
+                      "ok",
+                      "degraded",
+                      "unavailable"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "CreateSystemRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "display_name",
+          "external_system_id",
+          "owner_group",
+          "viewer_groups"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "external_system_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "owner_group": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "viewer_groups": {
+            "type": "array",
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        }
+      },
+      "CreatePackageRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parent_revision_id",
+          "profile_id",
+          "certification_class",
+          "impact_level",
+          "data_origin",
+          "sensitivity"
+        ],
+        "properties": {
+          "parent_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "./domain.schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile_id": {
+            "$ref": "./domain.schema.json#/$defs/ProfileId"
+          },
+          "certification_class": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "B",
+              "C",
+              null
+            ]
+          },
+          "impact_level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              null
+            ]
+          },
+          "data_origin": {
+            "$ref": "./domain.schema.json#/$defs/DataOrigin"
+          },
+          "sensitivity": {
+            "$ref": "./domain.schema.json#/$defs/Sensitivity"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "profile_id": {
+                  "const": "fedramp_20x_program"
+                }
+              },
+              "required": [
+                "profile_id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "certification_class": {
+                  "enum": [
+                    "B",
+                    "C"
+                  ]
+                },
+                "impact_level": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "profile_id": {
+                  "enum": [
+                    "fedramp_rev5_transition",
+                    "fisma_agency_security"
+                  ]
+                }
+              },
+              "required": [
+                "profile_id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "certification_class": {
+                  "type": "null"
+                },
+                "impact_level": {
+                  "enum": [
+                    "low",
+                    "moderate",
+                    "high"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AcceptProposalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "edited_value"
+        ],
+        "properties": {
+          "edited_value": {
+            "description": "Any JSON value. The server validates it against the canonical field schema selected by the proposal JSON Pointer, including that field's string and collection limits."
+          }
+        },
+        "description": "Set edited_value to null to accept exactly; otherwise the proposal becomes edited."
+      },
+      "RejectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "StartRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_type",
+          "parent_run_id",
+          "assessment_item_ids"
+        ],
+        "properties": {
+          "run_type": {
+            "type": "string",
+            "enum": [
+              "full",
+              "targeted",
+              "deterministic_only"
+            ]
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "$ref": "./domain.schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assessment_item_ids": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9()._-]{1,127}$"
+            }
+          }
+        }
+      },
+      "DispositionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision",
+          "edited_summary",
+          "notes"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "edited",
+              "rejected",
+              "evidence_requested",
+              "weakness_confirmed"
+            ]
+          },
+          "edited_summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          }
+        }
+      },
+      "CreateCommentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "matrix_row_id",
+          "body"
+        ],
+        "properties": {
+          "matrix_row_id": {
+            "anyOf": [
+              {
+                "$ref": "./domain.schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        }
+      },
+      "ReviewComment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "comment_id",
+          "review_revision_id",
+          "matrix_row_id",
+          "body",
+          "created_by",
+          "created_at"
+        ],
+        "properties": {
+          "comment_id": {
+            "$ref": "./domain.schema.json#/$defs/Uuid"
+          },
+          "review_revision_id": {
+            "$ref": "./domain.schema.json#/$defs/Uuid"
+          },
+          "matrix_row_id": {
+            "anyOf": [
+              {
+                "$ref": "./domain.schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "created_by": {
+            "$ref": "./domain.schema.json#/$defs/UserId"
+          },
+          "created_at": {
+            "$ref": "./domain.schema.json#/$defs/UtcDateTime"
+          }
+        }
+      },
+      "ApprovalDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          }
+        }
+      },
+      "ArtifactDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id",
+          "path",
+          "media_type",
+          "sha256",
+          "size_bytes",
+          "official_schema_id"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "pattern": "^(human|machine|provenance|validation)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,127}){0,7}$",
+            "description": "Generated bundle path with no absolute or parent-directory segments."
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "sha256": {
+            "$ref": "./domain.schema.json#/$defs/Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "official_schema_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          }
+        }
+      },
+      "SearchResults": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "chunk_id",
+                "artifact_id",
+                "score",
+                "citation"
+              ],
+              "properties": {
+                "chunk_id": {
+                  "$ref": "./domain.schema.json#/$defs/Sha256"
+                },
+                "artifact_id": {
+                  "$ref": "./domain.schema.json#/$defs/Uuid"
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "citation": {
+                  "$ref": "./domain.schema.json#/$defs/Citation"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048,
+            "minLength": 1
+          }
+        }
+      },
+      "ChatRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question",
+          "run_id",
+          "review_revision_id"
+        ],
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "run_id": {
+            "$ref": "./domain.schema.json#/$defs/Uuid"
+          },
+          "review_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "./domain.schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "answer",
+          "citations",
+          "refused",
+          "refusal_code"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string",
+            "maxLength": 12000
+          },
+          "citations": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "./domain.schema.json#/$defs/Citation"
+            }
+          },
+          "refused": {
+            "type": "boolean"
+          },
+          "refusal_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "authorization_decision",
+              "risk_acceptance",
+              "official_compliance",
+              "out_of_package",
+              "unsafe_instruction",
+              null
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -10,6 +11,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    exclude: ["**/node_modules/**", "**/e2e/**"],
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,
@@ -19,6 +25,10 @@ export default defineConfig({
         changeOrigin: true,
       },
       "/dev-oidc": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/health": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
       },
