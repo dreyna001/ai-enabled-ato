@@ -418,7 +418,7 @@ async def start_run(
             "run_type": request.run_type,
             "llm_call_count": 0,
         },
-        now=validated_now,
+        occurred_at=validated_now,
     )
 
     await record_idempotency_outcome(
@@ -558,7 +558,7 @@ async def cancel_run(
         outcome="succeeded",
         reason_code=None,
         metadata={"status": AnalysisRunStatus.CANCELLED.value},
-        now=validated_now,
+        occurred_at=validated_now,
     )
     return AnalysisRunMutationResult(
         payload=payload,

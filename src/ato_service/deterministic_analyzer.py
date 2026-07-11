@@ -307,7 +307,7 @@ async def process_next_deterministic_analysis(
             "artifact_manifest_sha256": stored_manifest.sha256,
             "llm_call_count": 0,
         },
-        now=now,
+        occurred_at=now,
     )
 
     return DeterministicAnalysisResult(
