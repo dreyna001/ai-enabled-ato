@@ -228,6 +228,11 @@ class SourceArtifact(Base):
             "size_bytes >= 1 AND size_bytes <= 104857600",
             name="ck_source_artifacts_size_bytes_range",
         ),
+        UniqueConstraint(
+            "package_revision_id",
+            "sha256",
+            name="uq_source_artifacts_revision_sha256",
+        ),
         Index("ix_source_artifacts_package_revision_id", "package_revision_id"),
         Index("ix_source_artifacts_sha256", "sha256"),
     )
@@ -512,6 +517,11 @@ class IdempotencyRecord(Base):
     request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     response_status: Mapped[int] = mapped_column(Integer, nullable=False)
     response_body: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    response_headers: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

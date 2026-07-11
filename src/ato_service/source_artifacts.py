@@ -27,14 +27,22 @@ from ato_service.auth_context import (
     AuthenticatedPrincipal,
     require_system_mutation_access,
 )
-from ato_service.blobs import BlobStore, BlobTooLargeError, EmptyBlobError, StoredBlob
+from ato_service.blobs import (
+    BlobStore,
+    BlobStoreError,
+    BlobTooLargeError,
+    EmptyBlobError,
+    StoredBlob,
+)
 from ato_service.concurrency import format_package_revision_etag
 from ato_service.db import constraints as ck
+from ato_service.db import enums as ev
 from ato_service.db.models import PackageRevision, SourceArtifact, System
 from ato_service.domain_mapping import map_source_artifact_to_domain
 from ato_service.idempotency import (
     load_idempotency_replay,
     record_idempotency_outcome,
+    replay_etag_from_outcome,
     request_digest_from_payload,
 )
 from ato_service.lifecycle_transitions import (
@@ -49,14 +57,7 @@ from ato_service.storage_reconciliation import (
 
 OPERATION = "package_revisions.upload_file"
 
-P1_1_ARTIFACT_KINDS: frozenset[str] = frozenset(
-    {
-        "manifest",
-        "oscal",
-        "evidence_document",
-        "reference_catalog",
-    }
-)
+_HASH_BLOCK_SIZE = 1024 * 1024
 
 _ALLOWED_DECLARED_MEDIA_TYPES: frozenset[str] = frozenset(
     {
@@ -165,12 +166,52 @@ async def upload_source_artifact(
     validated_kind = _validate_artifact_kind(artifact_kind)
     normalized_declared_media_type = _validate_declared_media_type(declared_media_type)
     validated_source_date = _validate_source_date(source_date)
+    initial_position = _require_seekable_stream(source)
 
     revision, system = await _lock_package_revision_and_system(
         session, package_revision_id
     )
     require_system_mutation_access(principal, system)
     _require_uploading_status(revision)
+
+    prehashed_sha256, prehashed_size_bytes = _prehash_seekable_stream(
+        source,
+        initial_position=initial_position,
+        max_bytes=limits.max_single_file_bytes,
+    )
+
+    request_digest = request_digest_from_payload(
+        _upload_request_digest_payload(
+            package_revision_id=package_revision_id,
+            display_filename=validated_filename,
+            declared_media_type=normalized_declared_media_type,
+            artifact_kind=validated_kind,
+            source_date=validated_source_date,
+            sha256=prehashed_sha256,
+        )
+    )
+
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        OPERATION,
+        idempotency_key,
+        request_digest,
+        validated_now,
+    )
+    if replay is not None:
+        etag = replay_etag_from_outcome(
+            response_body=replay.response_body,
+            response_headers=replay.response_headers,
+        )
+        if etag is None:
+            etag = format_package_revision_etag(revision.revision_version)
+        return UploadSourceArtifactResult(
+            status=replay.response_status,
+            payload=dict(replay.response_body),
+            etag=etag,
+            replayed=True,
+        )
 
     artifact_count, artifact_bytes = await _load_revision_artifact_totals(
         session, package_revision_id
@@ -188,38 +229,21 @@ async def upload_source_artifact(
         raise SourceSizeLimitExceededError(str(exc)) from exc
     except EmptyBlobError as exc:
         raise SourceSizeLimitExceededError(str(exc)) from exc
+    except BlobStoreError as exc:
+        raise SourceArtifactStorageError(str(exc)) from exc
+
+    if (
+        stored_blob.sha256 != prehashed_sha256
+        or stored_blob.size_bytes != prehashed_size_bytes
+    ):
+        raise SourceTypeMismatchError(
+            "stored blob digest or size does not match prehashed upload bytes"
+        )
 
     detected_media_type = _detect_media_type(blob_store, stored_blob)
     if detected_media_type != normalized_declared_media_type:
         raise SourceTypeMismatchError(
             "declared media type does not match detected content"
-        )
-
-    request_digest = request_digest_from_payload(
-        _upload_request_digest_payload(
-            package_revision_id=package_revision_id,
-            display_filename=validated_filename,
-            declared_media_type=normalized_declared_media_type,
-            artifact_kind=validated_kind,
-            source_date=validated_source_date,
-            sha256=stored_blob.sha256,
-        )
-    )
-
-    replay = await load_idempotency_replay(
-        session,
-        principal.actor_id,
-        OPERATION,
-        idempotency_key,
-        request_digest,
-        validated_now,
-    )
-    if replay is not None:
-        return UploadSourceArtifactResult(
-            status=replay.response_status,
-            payload=dict(replay.response_body),
-            etag=format_package_revision_etag(revision.revision_version),
-            replayed=True,
         )
 
     _enforce_package_limits_before_insert(
@@ -279,6 +303,7 @@ async def upload_source_artifact(
         request_digest=request_digest,
         response_status=201,
         response_body=payload,
+        response_headers={"ETag": etag},
         now=validated_now,
     )
 
@@ -288,6 +313,53 @@ async def upload_source_artifact(
         etag=etag,
         replayed=False,
     )
+
+
+def _require_seekable_stream(source: BinaryIO) -> int:
+    if not hasattr(source, "seek") or not hasattr(source, "tell"):
+        raise RequestSchemaInvalidError(
+            "upload source must be a seekable byte stream"
+        )
+    try:
+        initial_position = source.tell()
+        source.seek(initial_position)
+    except (OSError, ValueError) as exc:
+        raise RequestSchemaInvalidError(
+            "upload source must be a seekable byte stream"
+        ) from exc
+    return initial_position
+
+
+def _prehash_seekable_stream(
+    source: BinaryIO,
+    *,
+    initial_position: int,
+    max_bytes: int,
+) -> tuple[str, int]:
+    hasher = hashlib.sha256()
+    total_bytes = 0
+    source.seek(initial_position)
+
+    while True:
+        chunk = source.read(_HASH_BLOCK_SIZE)
+        if not isinstance(chunk, bytes):
+            raise RequestSchemaInvalidError(
+                "upload source must return bytes from read()"
+            )
+        if chunk == b"":
+            break
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise SourceSizeLimitExceededError(
+                f"blob exceeds configured maximum of {max_bytes} bytes"
+            )
+        hasher.update(chunk)
+
+    if total_bytes == 0:
+        raise SourceSizeLimitExceededError("blob input must not be empty")
+
+    source.seek(initial_position)
+    return hasher.hexdigest(), total_bytes
 
 
 def _require_aware_utc(value: datetime, *, field_name: str) -> datetime:
@@ -316,8 +388,8 @@ def _validate_display_filename(display_filename: str) -> str:
 
 
 def _validate_artifact_kind(artifact_kind: str) -> str:
-    if artifact_kind not in P1_1_ARTIFACT_KINDS:
-        raise RequestSchemaInvalidError("artifact_kind is not accepted for P1.1 uploads")
+    if artifact_kind not in ev.ARTIFACT_KIND_VALUES:
+        raise RequestSchemaInvalidError("artifact_kind is not accepted for uploads")
     return artifact_kind
 
 
@@ -580,7 +652,6 @@ __all__ = [
     "DuplicateSourceArtifactError",
     "OPERATION",
     "PackageLimitExceededError",
-    "P1_1_ARTIFACT_KINDS",
     "RequestSchemaInvalidError",
     "ResourceNotFoundError",
     "SourceArtifactStorageError",

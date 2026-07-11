@@ -294,10 +294,11 @@ def test_create_system_replay_returns_stored_outcome_without_audit_or_insert() -
         request_digest=request_digest_from_payload(_digest_payload()),
         response_status=201,
         response_body=stored_payload,
+        response_headers={},
         created_at=NOW,
         expires_at=NOW.replace(hour=13),
     )
-    session = _RecordingSession([_scalar_result(stored_record)])
+    session = _RecordingSession([MagicMock(), _scalar_result(stored_record)])
 
     result = _run(
         create_system(
@@ -317,13 +318,15 @@ def test_create_system_replay_returns_stored_outcome_without_audit_or_insert() -
     assert result.status == 201
     assert result.payload == stored_payload
     assert session.added == []
-    assert len(session.execute_calls) == 1
+    assert len(session.execute_calls) == 2
 
 
 def test_create_system_uses_matching_request_digest_for_replay_lookup() -> None:
     payload = _digest_payload()
     expected_digest = request_digest_from_payload(payload)
-    session = _RecordingSession([_scalar_result(None), MagicMock(), _scalar_result(None)])
+    session = _RecordingSession(
+        [MagicMock(), _scalar_result(None), MagicMock(), _scalar_result(None)]
+    )
 
     _run(
         create_system(
@@ -339,7 +342,7 @@ def test_create_system_uses_matching_request_digest_for_replay_lookup() -> None:
         )
     )
 
-    replay_sql = _compile_sql(session.execute_calls[0])
+    replay_sql = _compile_sql(session.execute_calls[1])
     assert f"operation = '{SYSTEMS_CREATE_OPERATION}'" in replay_sql
     assert f"idempotency_key = '{IDEMPOTENCY_KEY}'" in replay_sql
 
@@ -347,6 +350,7 @@ def test_create_system_uses_matching_request_digest_for_replay_lookup() -> None:
     assert len(idempotency_rows) == 1
     assert idempotency_rows[0].request_digest == expected_digest
     assert idempotency_rows[0].response_status == 201
+    assert idempotency_rows[0].response_headers == {}
 
 
 def test_get_system_returns_row_for_authorized_principal() -> None:

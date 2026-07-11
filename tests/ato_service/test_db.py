@@ -243,6 +243,22 @@ def test_idempotency_records_has_principal_operation_key_unique_constraint() -> 
     assert "uq_idempotency_records_principal_operation_key" in unique
 
 
+def test_idempotency_records_has_response_headers_jsonb_column() -> None:
+    column = _table("idempotency_records").c.response_headers
+    assert not column.nullable
+    assert column.server_default is not None
+
+
+def test_source_artifacts_has_revision_sha256_unique_constraint() -> None:
+    table = _table("source_artifacts")
+    unique = {
+        constraint.name
+        for constraint in table.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert "uq_source_artifacts_revision_sha256" in unique
+
+
 def test_foreign_keys_cover_expected_relationships() -> None:
     foreign_keys = {
         (
@@ -476,10 +492,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_package_revision_version_migration() -> None:
+def test_alembic_head_is_idempotency_headers_artifact_uniq_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0003"
+    assert script.get_current_head() == "20260711_0004"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import uuid
@@ -17,10 +18,10 @@ import pytest
 
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
-from ato_service.blobs import BlobStore
-from ato_service.concurrency import format_package_revision_etag
+from ato_service.blobs import BlobStore, BlobStoreError
+from ato_service.db import enums as ev
 from ato_service.db.models import IdempotencyRecord, PackageRevision, SourceArtifact, System
-from ato_service.idempotency import IdempotencyReplay, request_digest_from_payload
+from ato_service.idempotency import IdempotencyConflictError, request_digest_from_payload
 from ato_service.lifecycle_transitions import IllegalStateTransitionError
 from ato_service.runtime_config import RuntimeLimits
 from ato_service.source_artifacts import (
@@ -29,6 +30,7 @@ from ato_service.source_artifacts import (
     PackageLimitExceededError,
     RequestSchemaInvalidError,
     ResourceNotFoundError,
+    SourceArtifactStorageError,
     SourceSizeLimitExceededError,
     SourceTypeMismatchError,
     UnsupportedMediaTypeError,
@@ -127,8 +129,7 @@ class _UploadSession:
     artifact_count: int = 0
     artifact_bytes: int = 0
     existing_sha256: str | None = None
-    replay: IdempotencyReplay | None = None
-    replay_digest: str | None = None
+    stored_idempotency: IdempotencyRecord | None = None
     added: list[object] = field(default_factory=list)
     execute_calls: list[object] = field(default_factory=list)
 
@@ -143,21 +144,7 @@ class _UploadSession:
             return _row_result((self.artifact_count, self.artifact_bytes))
 
         if "FROM idempotency_records" in sql:
-            if self.replay is None:
-                return _row_result(None)
-            return _row_result(
-                IdempotencyRecord(
-                    idempotency_record_id=uuid.uuid4(),
-                    principal=_principal().actor_id,
-                    operation=OPERATION,
-                    idempotency_key=IDEM_KEY,
-                    request_digest=self.replay_digest or ("0" * 64),
-                    response_status=self.replay.response_status,
-                    response_body=self.replay.response_body,
-                    created_at=NOW,
-                    expires_at=NOW + timedelta(hours=24),
-                )
-            )
+            return _row_result(self.stored_idempotency)
 
         if "FROM source_artifacts" in sql and "sha256" in sql:
             return _row_result(ARTIFACT_ID if self.existing_sha256 else None)
@@ -237,6 +224,7 @@ def test_upload_json_artifact_persists_durable_bytes_and_increments_version(
     idempotency_rows = [obj for obj in session.added if isinstance(obj, IdempotencyRecord)]
     assert len(idempotency_rows) == 1
     assert idempotency_rows[0].response_body["sha256"] == artifact.sha256
+    assert idempotency_rows[0].response_headers == {"ETag": '"v2"'}
 
 
 def test_upload_text_plain_artifact(tmp_path: Path) -> None:
@@ -388,8 +376,9 @@ def test_rejects_duplicate_sha256_with_different_idempotency_key(tmp_path: Path)
     assert session.revision.revision_version == 1
 
 
-def test_replay_returns_prior_body_without_mutation(tmp_path: Path) -> None:
+def test_replay_returns_stored_etag_without_blob_store_or_mutation(tmp_path: Path) -> None:
     store = BlobStore(tmp_path)
+    source = io.BytesIO(b"{}")
     stored = store.store_stream(io.BytesIO(b"{}"), max_bytes=1024)
     replay_digest = request_digest_from_payload(
         _upload_request_digest_payload(
@@ -422,21 +411,85 @@ def test_replay_returns_prior_body_without_mutation(tmp_path: Path) -> None:
     session = _UploadSession(
         revision=revision,
         system=_system(),
-        replay=IdempotencyReplay(response_status=201, response_body=prior_payload),
-        replay_digest=replay_digest,
+        stored_idempotency=IdempotencyRecord(
+            idempotency_record_id=uuid.uuid4(),
+            principal=_principal().actor_id,
+            operation=OPERATION,
+            idempotency_key=IDEM_KEY,
+            request_digest=replay_digest,
+            response_status=201,
+            response_body=prior_payload,
+            response_headers={"ETag": '"v5"'},
+            created_at=NOW,
+            expires_at=NOW + timedelta(hours=24),
+        ),
     )
+    store_calls: list[object] = []
+    original_store_stream = store.store_stream
 
-    result = _upload(session, store, source=io.BytesIO(b"{}"))
+    def _counting_store_stream(*args: object, **kwargs: object) -> object:
+        store_calls.append((args, kwargs))
+        return original_store_stream(*args, **kwargs)  # type: ignore[arg-type]
+
+    store.store_stream = _counting_store_stream  # type: ignore[method-assign]
+
+    result = _upload(session, store, source=source)
     added_artifacts = [obj for obj in session.added if isinstance(obj, SourceArtifact)]
     added_idempotency = [obj for obj in session.added if isinstance(obj, IdempotencyRecord)]
 
     assert result.replayed is True
     assert result.status == 201
     assert result.payload == prior_payload
-    assert result.etag == format_package_revision_etag(2)
+    assert result.etag == '"v5"'
     assert revision.revision_version == 2
     assert added_artifacts == []
     assert added_idempotency == []
+    assert store_calls == []
+
+
+def test_conflict_raises_without_blob_store_write(tmp_path: Path) -> None:
+    store = BlobStore(tmp_path)
+    source = io.BytesIO(b"{}")
+    request_digest = request_digest_from_payload(
+        _upload_request_digest_payload(
+            package_revision_id=REVISION_ID,
+            display_filename="evidence.json",
+            declared_media_type="application/json",
+            artifact_kind="manifest",
+            source_date=None,
+            sha256=hashlib.sha256(b"{}").hexdigest(),
+        )
+    )
+    session = _UploadSession(
+        revision=_revision(),
+        system=_system(),
+        stored_idempotency=IdempotencyRecord(
+            idempotency_record_id=uuid.uuid4(),
+            principal=_principal().actor_id,
+            operation=OPERATION,
+            idempotency_key=IDEM_KEY,
+            request_digest="f" * 64,
+            response_status=201,
+            response_body={"status": "ready"},
+            response_headers={"ETag": '"v1"'},
+            created_at=NOW,
+            expires_at=NOW + timedelta(hours=24),
+        ),
+    )
+    store_calls: list[object] = []
+    original_store_stream = store.store_stream
+
+    def _counting_store_stream(*args: object, **kwargs: object) -> object:
+        store_calls.append((args, kwargs))
+        return original_store_stream(*args, **kwargs)  # type: ignore[arg-type]
+
+    store.store_stream = _counting_store_stream  # type: ignore[method-assign]
+
+    with pytest.raises(IdempotencyConflictError):
+        _upload(session, store, source=source)
+
+    assert store_calls == []
+    assert request_digest != "f" * 64
 
 
 def test_request_digest_includes_revision_metadata_and_sha256(tmp_path: Path) -> None:
@@ -586,11 +639,77 @@ def test_rejects_unsupported_artifact_kind(tmp_path: Path) -> None:
             session,
             store,
             source=io.BytesIO(b"{}"),
-            artifact_kind="fedramp_cpo",
+            artifact_kind="not_a_real_kind",
         )
 
     assert exc_info.value.error_code == "request_schema_invalid"
     assert session.execute_calls == []
+
+
+@pytest.mark.parametrize("artifact_kind", ev.ARTIFACT_KIND_VALUES)
+def test_accepts_all_contract_artifact_kinds(tmp_path: Path, artifact_kind: str) -> None:
+    store = BlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+
+    result = _upload(
+        session,
+        store,
+        source=io.BytesIO(b"{}"),
+        artifact_kind=artifact_kind,
+    )
+
+    assert result.status == 201
+    assert result.payload["artifact_kind"] == artifact_kind
+
+
+class _NonSeekableStream:
+    def read(self, size: int = -1) -> bytes:
+        return b"{}"
+
+
+def test_rejects_non_seekable_source_before_storage_mutation(tmp_path: Path) -> None:
+    store = BlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+
+    with pytest.raises(RequestSchemaInvalidError) as exc_info:
+        _run(
+            upload_source_artifact(
+                session,
+                principal=_principal(),
+                audit_hmac_key=HMAC_KEY,
+                blob_store=store,
+                limits=_limits(),
+                package_revision_id=REVISION_ID,
+                idempotency_key=IDEM_KEY,
+                source=_NonSeekableStream(),  # type: ignore[arg-type]
+                display_filename="evidence.json",
+                declared_media_type="application/json",
+                artifact_kind="manifest",
+                source_date=None,
+                now=NOW,
+            )
+        )
+
+    assert exc_info.value.error_code == "request_schema_invalid"
+    assert session.execute_calls == []
+    assert session.added == []
+    assert not any(tmp_path.rglob("blobs/**"))
+
+
+class _FailingBlobStore(BlobStore):
+    def store_stream(self, source: object, *, max_bytes: int) -> object:
+        raise BlobStoreError("blob storage backend failed")
+
+
+def test_maps_generic_blob_store_error_to_storage_unavailable(tmp_path: Path) -> None:
+    store = _FailingBlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+
+    with pytest.raises(SourceArtifactStorageError) as exc_info:
+        _upload(session, store, source=io.BytesIO(b"{}"))
+
+    assert exc_info.value.error_code == "storage_unavailable"
+    assert "blob storage backend failed" in str(exc_info.value)
 
 
 def test_rejects_invalid_source_date_type(tmp_path: Path) -> None:

@@ -401,6 +401,7 @@ async def create_system(
         request_digest=request_digest,
         response_status=201,
         response_body=payload,
+        response_headers={},
         now=validated_now,
     )
 

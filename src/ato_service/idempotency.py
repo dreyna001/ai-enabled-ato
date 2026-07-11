@@ -7,11 +7,11 @@ import json
 import re
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.db import constraints as ck
@@ -32,6 +32,16 @@ _SECRET_VALUE_PATTERNS = (
     re.compile(r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$"),
     re.compile(r"^Bearer\s+\S+", re.IGNORECASE),
 )
+_FORBIDDEN_RESPONSE_HEADER_NAMES = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "x-csrf-token",
+    }
+)
+_RESPONSE_HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+_RESPONSE_HEADER_VALUE_PATTERN = re.compile(r"^[\t\x20-\x7e]*$")
 
 
 class IdempotencyValidationError(ValueError):
@@ -62,6 +72,7 @@ class IdempotencyReplay:
 
     response_status: int
     response_body: dict[str, Any]
+    response_headers: Mapping[str, str] = field(default_factory=dict)
 
 
 def canonical_json_bytes(document: Mapping[str, Any]) -> bytes:
@@ -84,6 +95,24 @@ def request_digest_from_payload(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
 
 
+def idempotency_advisory_lock_keys(
+    principal: str,
+    operation: str,
+    idempotency_key: str,
+) -> tuple[int, int]:
+    """Return two signed int32 PostgreSQL advisory-lock keys for one idempotency row."""
+    digest = hashlib.sha256(
+        f"{principal}\0{operation}\0{idempotency_key}".encode("utf-8")
+    ).digest()
+    key1 = int.from_bytes(digest[0:4], byteorder="big", signed=True)
+    key2 = int.from_bytes(digest[4:8], byteorder="big", signed=True)
+    return key1, key2
+
+
+def _idempotency_advisory_lock_statement(key1: int, key2: int) -> Any:
+    return select(func.pg_advisory_xact_lock(key1, key2))
+
+
 def _load_idempotency_select_statement(
     *,
     principal: str,
@@ -101,6 +130,25 @@ def _load_idempotency_select_statement(
     )
 
 
+def replay_etag_from_outcome(
+    *,
+    response_body: Mapping[str, Any],
+    response_headers: Mapping[str, str],
+) -> str | None:
+    """Return a stored replay ETag, with a safe legacy fallback from the response body."""
+    stored_etag = response_headers.get("ETag")
+    if stored_etag is not None:
+        return stored_etag
+
+    revision_version = response_body.get("revision_version")
+    if isinstance(revision_version, int) and revision_version >= 1:
+        from ato_service.concurrency import format_package_revision_etag
+
+        return format_package_revision_etag(revision_version)
+
+    return None
+
+
 async def load_idempotency_replay(
     session: AsyncSession,
     principal: str,
@@ -111,18 +159,25 @@ async def load_idempotency_replay(
 ) -> IdempotencyReplay | None:
     """Load and lock an idempotency row for replay or conflict detection.
 
-  The caller must invoke this inside an open database transaction. This helper
-  does not commit. Concurrent first-time inserts for the same
-  ``(principal, operation, idempotency_key)`` are resolved by the unique
-  constraint on ``idempotency_records``; the caller should treat
-  ``IntegrityError`` as a race and retry or reconcile within the same
-  transaction boundary.
+    The caller must invoke this inside an open database transaction. This helper
+    does not commit. A transaction-scoped PostgreSQL advisory lock serializes
+    concurrent first-time requests for the same
+    ``(principal, operation, idempotency_key)`` before the absence check. The
+    unique constraint on ``idempotency_records`` remains defense in depth for
+    insert races after the lock is released at commit.
     """
     validated_principal = _require_principal(principal)
     validated_operation = _require_operation(operation)
     validated_key = _require_idempotency_key(idempotency_key)
     validated_digest = _require_request_digest(request_digest)
     validated_now = _require_aware_utc(now, field_name="now")
+
+    lock_key1, lock_key2 = idempotency_advisory_lock_keys(
+        validated_principal,
+        validated_operation,
+        validated_key,
+    )
+    await session.execute(_idempotency_advisory_lock_statement(lock_key1, lock_key2))
 
     result = await session.execute(
         _load_idempotency_select_statement(
@@ -143,6 +198,7 @@ async def load_idempotency_replay(
         return IdempotencyReplay(
             response_status=record.response_status,
             response_body=dict(record.response_body),
+            response_headers=dict(record.response_headers),
         )
 
     raise IdempotencyConflictError(
@@ -161,13 +217,14 @@ async def record_idempotency_outcome(
     request_digest: str,
     response_status: int,
     response_body: Mapping[str, Any],
+    response_headers: Mapping[str, str] | None = None,
     now: datetime,
 ) -> IdempotencyRecord:
     """Insert a replay-safe idempotency outcome row without committing.
 
-  The caller must commit atomically with domain mutations and audit writes.
-  Concurrent inserts for the same key may raise ``IntegrityError`` from the
-  unique constraint; callers should handle that race explicitly.
+    The caller must commit atomically with domain mutations and audit writes.
+    Concurrent inserts for the same key may raise ``IntegrityError`` from the
+    unique constraint; callers should handle that race explicitly.
     """
     validated_principal = _require_principal(principal)
     validated_operation = _require_operation(operation)
@@ -175,6 +232,7 @@ async def record_idempotency_outcome(
     validated_digest = _require_request_digest(request_digest)
     validated_status = _require_response_status(response_status)
     validated_body = _require_response_body(response_body)
+    validated_headers = _require_response_headers(response_headers or {})
     validated_now = _require_aware_utc(now, field_name="now")
 
     record = IdempotencyRecord(
@@ -185,6 +243,7 @@ async def record_idempotency_outcome(
         request_digest=validated_digest,
         response_status=validated_status,
         response_body=validated_body,
+        response_headers=validated_headers,
         created_at=validated_now,
         expires_at=validated_now + IDEMPOTENCY_RETENTION,
     )
@@ -237,6 +296,37 @@ def _require_response_body(response_body: Mapping[str, Any]) -> dict[str, Any]:
         raise IdempotencyValidationError("response_body must be a JSON object")
     normalized = dict(response_body)
     _reject_obvious_secrets(normalized)
+    return normalized
+
+
+def _require_response_headers(
+    response_headers: Mapping[str, str],
+) -> dict[str, str]:
+    if not isinstance(response_headers, Mapping):
+        raise IdempotencyValidationError("response_headers must be a JSON object")
+    normalized: dict[str, str] = {}
+    for name, value in response_headers.items():
+        if not isinstance(name, str) or not name:
+            raise IdempotencyValidationError(
+                "response header names must be nonempty strings"
+            )
+        if not isinstance(value, str):
+            raise IdempotencyValidationError(
+                "response header values must be strings"
+            )
+        if name.lower() in _FORBIDDEN_RESPONSE_HEADER_NAMES:
+            raise IdempotencyValidationError(
+                f"response header {name!r} must not be stored"
+            )
+        if _RESPONSE_HEADER_NAME_PATTERN.fullmatch(name) is None:
+            raise IdempotencyValidationError(
+                f"response header name {name!r} is not valid"
+            )
+        if _RESPONSE_HEADER_VALUE_PATTERN.fullmatch(value) is None:
+            raise IdempotencyValidationError(
+                f"response header value for {name!r} is not valid"
+            )
+        normalized[name] = value
     return normalized
 
 

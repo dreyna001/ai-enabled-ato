@@ -18,10 +18,13 @@ from ato_service.idempotency import (
     IdempotencyConflictError,
     IdempotencyReplay,
     IdempotencyValidationError,
+    _idempotency_advisory_lock_statement,
     _load_idempotency_select_statement,
     canonical_json_bytes,
+    idempotency_advisory_lock_keys,
     load_idempotency_replay,
     record_idempotency_outcome,
+    replay_etag_from_outcome,
     request_digest_from_payload,
 )
 
@@ -73,12 +76,19 @@ def _scalar_result(value: object) -> MagicMock:
     return result
 
 
+def _replay_session(*select_results: object) -> _RecordingSession:
+    return _RecordingSession(
+        [MagicMock(), *[_scalar_result(value) for value in select_results]]
+    )
+
+
 def _make_record(
     *,
     request_digest: str = DIGEST_A,
     expires_at: datetime = NOW + IDEMPOTENCY_RETENTION,
     response_status: int = 201,
     response_body: dict[str, Any] | None = None,
+    response_headers: dict[str, str] | None = None,
 ) -> IdempotencyRecord:
     return IdempotencyRecord(
         idempotency_record_id=uuid.uuid4(),
@@ -88,6 +98,7 @@ def _make_record(
         request_digest=request_digest,
         response_status=response_status,
         response_body=response_body or {"status": "ready"},
+        response_headers=response_headers or {},
         created_at=NOW,
         expires_at=expires_at,
     )
@@ -119,6 +130,25 @@ def test_canonical_json_bytes_rejects_secret_like_values() -> None:
         canonical_json_bytes({"note": "Bearer abc.def.ghi"})
 
 
+def test_advisory_lock_keys_are_deterministic_signed_int32_pairs() -> None:
+    keys_a = idempotency_advisory_lock_keys(PRINCIPAL, OPERATION, KEY)
+    keys_b = idempotency_advisory_lock_keys(PRINCIPAL, OPERATION, KEY)
+    keys_other = idempotency_advisory_lock_keys(PRINCIPAL, OPERATION, "other-idem-key-0001")
+
+    assert keys_a == keys_b
+    assert keys_a != keys_other
+    for key in keys_a:
+        assert -(2**31) <= key < 2**31
+
+
+def test_advisory_lock_sql_uses_transaction_scoped_two_key_lock() -> None:
+    key1, key2 = idempotency_advisory_lock_keys(PRINCIPAL, OPERATION, KEY)
+    sql = _compile_sql(_idempotency_advisory_lock_statement(key1, key2))
+    assert "pg_advisory_xact_lock" in sql
+    assert str(key1) in sql
+    assert str(key2) in sql
+
+
 def test_load_sql_uses_for_update_on_principal_operation_key() -> None:
     sql = _compile_sql(
         _load_idempotency_select_statement(
@@ -134,8 +164,30 @@ def test_load_sql_uses_for_update_on_principal_operation_key() -> None:
     assert "FOR UPDATE" in sql
 
 
+def test_load_idempotency_replay_acquires_advisory_lock_before_select() -> None:
+    session = _replay_session(None)
+
+    replay = _run(
+        load_idempotency_replay(
+            session,
+            PRINCIPAL,
+            OPERATION,
+            KEY,
+            DIGEST_A,
+            NOW,
+        )
+    )
+
+    assert replay is None
+    assert len(session.execute_calls) == 2
+    lock_sql = _compile_sql(session.execute_calls[0])
+    select_sql = _compile_sql(session.execute_calls[1])
+    assert "pg_advisory_xact_lock" in lock_sql
+    assert "FROM idempotency_records" in select_sql
+
+
 def test_load_idempotency_replay_returns_none_when_missing() -> None:
-    session = _RecordingSession([_scalar_result(None)])
+    session = _replay_session(None)
 
     replay = _run(
         load_idempotency_replay(
@@ -154,7 +206,7 @@ def test_load_idempotency_replay_returns_none_when_missing() -> None:
 
 def test_load_idempotency_replay_deletes_expired_row_and_returns_none() -> None:
     expired = _make_record(expires_at=NOW - timedelta(seconds=1))
-    session = _RecordingSession([_scalar_result(expired)])
+    session = _replay_session(expired)
 
     replay = _run(
         load_idempotency_replay(
@@ -172,8 +224,12 @@ def test_load_idempotency_replay_deletes_expired_row_and_returns_none() -> None:
 
 
 def test_load_idempotency_replay_returns_immutable_outcome_for_matching_digest() -> None:
-    stored = _make_record(response_status=202, response_body={"etag": '"v2"'})
-    session = _RecordingSession([_scalar_result(stored)])
+    stored = _make_record(
+        response_status=202,
+        response_body={"etag": '"v2"'},
+        response_headers={"ETag": '"v2"'},
+    )
+    session = _replay_session(stored)
 
     replay = _run(
         load_idempotency_replay(
@@ -189,13 +245,14 @@ def test_load_idempotency_replay_returns_immutable_outcome_for_matching_digest()
     assert isinstance(replay, IdempotencyReplay)
     assert replay.response_status == 202
     assert replay.response_body == {"etag": '"v2"'}
+    assert replay.response_headers == {"ETag": '"v2"'}
     replay.response_body["etag"] = '"v3"'
     assert stored.response_body == {"etag": '"v2"'}
 
 
 def test_load_idempotency_replay_raises_conflict_for_different_digest() -> None:
     stored = _make_record(request_digest=DIGEST_A)
-    session = _RecordingSession([_scalar_result(stored)])
+    session = _replay_session(stored)
 
     with pytest.raises(IdempotencyConflictError) as exc_info:
         _run(
@@ -214,6 +271,22 @@ def test_load_idempotency_replay_raises_conflict_for_different_digest() -> None:
     assert exc_info.value.idempotency_key == KEY
 
 
+def test_replay_etag_from_outcome_prefers_stored_headers_over_body() -> None:
+    etag = replay_etag_from_outcome(
+        response_body={"revision_version": 1},
+        response_headers={"ETag": '"v9"'},
+    )
+    assert etag == '"v9"'
+
+
+def test_replay_etag_from_outcome_falls_back_to_body_revision_version() -> None:
+    etag = replay_etag_from_outcome(
+        response_body={"revision_version": 4},
+        response_headers={},
+    )
+    assert etag == '"v4"'
+
+
 def test_record_idempotency_outcome_inserts_row_without_commit() -> None:
     session = _RecordingSession([])
 
@@ -226,6 +299,7 @@ def test_record_idempotency_outcome_inserts_row_without_commit() -> None:
             request_digest=DIGEST_A,
             response_status=201,
             response_body={"status": "ready"},
+            response_headers={"ETag": '"v1"'},
             now=NOW,
         )
     )
@@ -239,8 +313,36 @@ def test_record_idempotency_outcome_inserts_row_without_commit() -> None:
     assert record.request_digest == DIGEST_A
     assert record.response_status == 201
     assert record.response_body == {"status": "ready"}
+    assert record.response_headers == {"ETag": '"v1"'}
     assert record.created_at == NOW
     assert record.expires_at == NOW + IDEMPOTENCY_RETENTION
+
+
+@pytest.mark.parametrize(
+    "forbidden_header",
+    ["Authorization", "Cookie", "Set-Cookie", "X-CSRF-Token"],
+)
+def test_record_idempotency_outcome_rejects_secret_bearing_headers(
+    forbidden_header: str,
+) -> None:
+    session = _RecordingSession([])
+
+    with pytest.raises(IdempotencyValidationError, match="must not be stored"):
+        _run(
+            record_idempotency_outcome(
+                session,
+                principal=PRINCIPAL,
+                operation=OPERATION,
+                idempotency_key=KEY,
+                request_digest=DIGEST_A,
+                response_status=201,
+                response_body={"status": "ready"},
+                response_headers={forbidden_header: "secret"},
+                now=NOW,
+            )
+        )
+
+    assert session.added == []
 
 
 @pytest.mark.parametrize(

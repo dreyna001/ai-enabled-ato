@@ -37,8 +37,10 @@ from ato_service.content_manifests import (
 from ato_service.db import enums as ev
 from ato_service.domain_mapping import format_uuid, map_package_revision_to_domain
 from ato_service.idempotency import (
+    IdempotencyReplay,
     load_idempotency_replay,
     record_idempotency_outcome,
+    replay_etag_from_outcome,
     request_digest_from_payload,
 )
 from ato_service.lifecycle_transitions import (
@@ -423,13 +425,19 @@ def _mutation_result_from_domain(
 
 
 def _mutation_result_from_replay(
-    *,
-    response_status: int,
-    response_body: dict[str, Any],
+    replay: IdempotencyReplay,
 ) -> PackageRevisionMutationResult:
-    return _mutation_result_from_domain(
-        dict(response_body),
-        status=response_status,
+    payload = dict(replay.response_body)
+    etag = replay_etag_from_outcome(
+        response_body=replay.response_body,
+        response_headers=replay.response_headers,
+    )
+    if etag is None:
+        etag = format_package_revision_etag(payload["revision_version"])
+    return PackageRevisionMutationResult(
+        payload=payload,
+        status=replay.response_status,
+        etag=etag,
         replayed=True,
     )
 
@@ -577,10 +585,7 @@ async def create_package_revision(
         validated_now,
     )
     if replay is not None:
-        return _mutation_result_from_replay(
-            response_status=replay.response_status,
-            response_body=replay.response_body,
-        )
+        return _mutation_result_from_replay(replay)
 
     parent_revision_id = validated_request.parent_revision_id
     if parent_revision_id is not None:
@@ -636,6 +641,7 @@ async def create_package_revision(
         request_digest=request_digest,
         response_status=HTTP_CREATED,
         response_body=payload,
+        response_headers={"ETag": format_package_revision_etag(package_revision.revision_version)},
         now=validated_now,
     )
     return _mutation_result_from_domain(payload, status=HTTP_CREATED, replayed=False)
@@ -680,10 +686,7 @@ async def finalize_package_revision(
         validated_now,
     )
     if replay is not None:
-        return _mutation_result_from_replay(
-            response_status=replay.response_status,
-            response_body=replay.response_body,
-        )
+        return _mutation_result_from_replay(replay)
 
     current_status = PackageRevisionStatus(package_revision.status)
     if current_status is not PackageRevisionStatus.UPLOADING:
@@ -702,6 +705,9 @@ async def finalize_package_revision(
         raise EmptyPackageRevisionError()
 
     source_entries = _manifest_source_entries(artifacts)
+    replace_unreferenced_existing = (
+        package_revision.content_manifest_sha256 is None
+    )
     try:
         stored_manifest = await asyncio.to_thread(
             write_content_manifest,
@@ -713,6 +719,7 @@ async def finalize_package_revision(
             max_artifacts=limits.max_files_per_revision,
             max_artifact_bytes=limits.max_single_file_bytes,
             max_package_bytes=limits.max_package_bytes,
+            replace_unreferenced_existing=replace_unreferenced_existing,
         )
     except ContentManifestError as exc:
         raise _map_storage_error(exc) from exc
@@ -751,6 +758,7 @@ async def finalize_package_revision(
         request_digest=request_digest,
         response_status=HTTP_ACCEPTED,
         response_body=payload,
+        response_headers={"ETag": format_package_revision_etag(package_revision.revision_version)},
         now=validated_now,
     )
     return _mutation_result_from_domain(
@@ -802,10 +810,7 @@ async def confirm_package_revision(
         validated_now,
     )
     if replay is not None:
-        return _mutation_result_from_replay(
-            response_status=replay.response_status,
-            response_body=replay.response_body,
-        )
+        return _mutation_result_from_replay(replay)
 
     assert_if_match(if_match, package_revision.revision_version)
 
@@ -854,6 +859,7 @@ async def confirm_package_revision(
         request_digest=request_digest,
         response_status=HTTP_OK,
         response_body=payload,
+        response_headers={"ETag": format_package_revision_etag(package_revision.revision_version)},
         now=validated_now,
     )
     return _mutation_result_from_domain(payload, status=HTTP_OK, replayed=False)
