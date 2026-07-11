@@ -235,15 +235,15 @@ Implemented:
 - Deterministic model-routing policy, configured limits, matrix completeness, and failure taxonomy
 - Content-addressed storage, immutable manifests, replay/crash reconciliation, and PostgreSQL models/migrations
 - Health/Problem API boundary
-- API-only systemd/nginx/install/smoke scaffold with deployment-contract tests
+- OIDC session auth, fact proposal review API, React/Vite portal, and long-running synthetic intake worker
+- Portal/API deployment scaffold with `ato-portal.conf`, `ato-intake-worker.service`, and contract tests
 
 Not yet implemented:
 
 - FedRAMP 20x official package contract
-- Full `/api/v1` package workflow and Postgres jobs/workers
-- Secure multi-file extraction
-- OIDC portal and object authorization
-- Review and approval workflow
+- Analyzer worker loop and runs/matrix review APIs
+- Secure multi-file extraction and production malware scanning
+- Review dispositions, approval workflow, and ZIP export
 - Live-validated production on-prem deployment, upgrade, rollback, backup, and restore
 - SME-labeled AI qualification
 

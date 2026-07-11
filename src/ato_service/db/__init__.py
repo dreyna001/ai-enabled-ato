@@ -8,10 +8,12 @@ from ato_service.db.base import Base
 from ato_service.db.models import (
     AnalysisRun,
     AuditEvent,
+    AuthSession,
     FactProposal,
     IdempotencyRecord,
     Job,
     JobAttempt,
+    OidcLoginState,
     PackageRevision,
     RunStep,
     SourceArtifact,
@@ -35,6 +37,7 @@ from ato_service.db.session import (
 __all__ = [
     "AnalysisRun",
     "AuditEvent",
+    "AuthSession",
     "Base",
     "DATABASE_DSN_FILE_ENV_VAR",
     "DatabaseConfigurationError",
@@ -43,6 +46,7 @@ __all__ = [
     "IdempotencyRecord",
     "Job",
     "JobAttempt",
+    "OidcLoginState",
     "PackageRevision",
     "RunStep",
     "SourceArtifact",

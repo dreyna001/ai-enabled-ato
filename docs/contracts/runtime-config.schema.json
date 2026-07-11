@@ -247,6 +247,10 @@
     "OIDC_AUDIENCE": {
       "$ref": "#/$defs/boundedText"
     },
+    "PORTAL_PUBLIC_ORIGIN": {
+      "$ref": "#/$defs/secureEndpointUrl",
+      "$comment": "Browser origin serving the React portal. Used for CSRF Origin validation and OIDC redirect URIs."
+    },
     "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
       "$ref": "#/$defs/credentialReference"
     },
@@ -678,7 +682,8 @@
         "required": [
           "OIDC_ISSUER_URL",
           "OIDC_AUDIENCE",
-          "OIDC_CLIENT_CREDENTIAL_REFERENCE"
+          "OIDC_CLIENT_CREDENTIAL_REFERENCE",
+          "PORTAL_PUBLIC_ORIGIN"
         ]
       }
     },

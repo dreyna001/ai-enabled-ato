@@ -489,7 +489,8 @@ def test_create_app_mounts_p1_package_routes_without_runtime() -> None:
     assert "/package-revisions/{id}/files" in paths
     assert "/package-revisions/{id}/finalize" in paths
     assert "/package-revisions/{id}/confirm" in paths
-    assert "/package-revisions/{id}/proposals" not in paths
+    assert "/package-revisions/{id}/proposals" in paths
+    assert "/proposals/{id}/accept" in paths
     assert "/health/live" in paths
     assert "/health/ready" in paths
 

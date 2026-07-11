@@ -215,7 +215,7 @@ def _mock_system_row() -> MagicMock:
 
 
 def test_unimplemented_package_routes_are_not_mounted(client: TestClient) -> None:
-    response = client.get(f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}/proposals")
+    response = client.get(f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}/runs")
     assert response.status_code == 404
 
 

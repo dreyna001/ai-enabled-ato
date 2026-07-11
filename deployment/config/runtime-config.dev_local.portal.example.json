@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "runtime_profile": "dev_local",
+  "STORAGE_DATA_PATH": "/data/ato-storage",
+  "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": true,
+  "IDENTITY_PROVIDER_MODE": "oidc",
+  "OIDC_ISSUER_URL": "http://127.0.0.1:8000/dev-oidc",
+  "OIDC_AUDIENCE": "ato-portal-dev",
+  "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
+    "source": "root_owned_file",
+    "path": "/workspace/deployment/config/dev-oidc-client-secret"
+  },
+  "PORTAL_PUBLIC_ORIGIN": "http://localhost:5173",
+  "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+    "source": "root_owned_file",
+    "path": "/workspace/deployment/config/dev-audit-hmac-key"
+  }
+}

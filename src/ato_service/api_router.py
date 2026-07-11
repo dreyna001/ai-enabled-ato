@@ -25,6 +25,11 @@ from ato_service.auth_context import (
 from ato_service.blobs import BlobStore
 from ato_service.concurrency import format_package_revision_etag
 from ato_service.domain_mapping import map_system_to_domain
+from ato_service.fact_proposals import (
+    accept_fact_proposal,
+    list_fact_proposals,
+    reject_fact_proposal,
+)
 from ato_service.package_revisions import (
     CreatePackageRevisionInput,
     PackageRevisionMutationResult,
@@ -96,6 +101,31 @@ class PaginatedSystemsResponse(BaseModel):
 
     items: list[dict[str, Any]] = Field(max_length=100)
     next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class PaginatedFactProposalsResponse(BaseModel):
+    """OpenAPI-aligned fact proposal list envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(max_length=100)
+    next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class AcceptProposalRequest(BaseModel):
+    """OpenAPI-aligned accept/edit proposal payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    edited_value: Any | None
+
+
+class RejectProposalRequest(BaseModel):
+    """OpenAPI-aligned reject proposal payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class PaginatedPackageRevisionsResponse(BaseModel):
@@ -366,5 +396,73 @@ def create_api_router() -> APIRouter:
             now=_utc_now(),
         )
         return _package_revision_json_response(result)
+
+    @router.get("/package-revisions/{id}/proposals", tags=["Packages"])
+    async def get_package_revision_proposals(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> PaginatedFactProposalsResponse:
+        page = await list_fact_proposals(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            cursor=cursor,
+            limit=limit,
+        )
+        return PaginatedFactProposalsResponse(
+            items=page.items,
+            next_cursor=page.next_cursor,
+        )
+
+    @router.post("/proposals/{id}/accept", tags=["Packages"])
+    async def post_proposal_accept(
+        id: uuid.UUID,
+        body: AcceptProposalRequest,
+        request: Request,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> JSONResponse:
+        if_match = request.headers.get("if-match")
+        result = await accept_fact_proposal(
+            session,
+            principal=principal,
+            fact_proposal_id=id,
+            if_match=if_match,
+            edited_value=body.edited_value,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(
+            content=result.payload,
+            headers={"ETag": result.etag},
+        )
+
+    @router.post("/proposals/{id}/reject", tags=["Packages"])
+    async def post_proposal_reject(
+        id: uuid.UUID,
+        body: RejectProposalRequest,
+        request: Request,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> JSONResponse:
+        if_match = request.headers.get("if-match")
+        result = await reject_fact_proposal(
+            session,
+            principal=principal,
+            fact_proposal_id=id,
+            if_match=if_match,
+            reason=body.reason,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(
+            content=result.payload,
+            headers={"ETag": result.etag},
+        )
 
     return router

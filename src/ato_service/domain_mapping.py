@@ -99,3 +99,31 @@ def map_source_artifact_to_domain(source_artifact: Any) -> dict[str, Any]:
         "source_date": format_iso_date(source_artifact.source_date),
         "uploaded_at": format_utc_datetime(source_artifact.uploaded_at),
     }
+
+
+def map_fact_proposal_to_domain(fact_proposal: Any) -> dict[str, Any]:
+    """Map a duck-typed FactProposal row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "fact_proposal",
+        "fact_proposal_id": format_uuid(fact_proposal.fact_proposal_id),
+        "package_revision_id": format_uuid(fact_proposal.package_revision_id),
+        "json_pointer": fact_proposal.json_pointer,
+        "proposed_value": fact_proposal.proposed_value,
+        "source_artifact_id": format_uuid(fact_proposal.source_artifact_id),
+        "source_sha256": fact_proposal.source_sha256,
+        "source_locator": fact_proposal.source_locator,
+        "extraction_method": fact_proposal.extraction_method,
+        "model_step_id": (
+            None
+            if fact_proposal.model_step_id is None
+            else format_uuid(fact_proposal.model_step_id)
+        ),
+        "review_status": fact_proposal.review_status,
+        "reviewed_by": fact_proposal.reviewed_by,
+        "reviewed_at": (
+            None
+            if fact_proposal.reviewed_at is None
+            else format_utc_datetime(fact_proposal.reviewed_at)
+        ),
+    }

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ato_service.audit import AuditUnavailableError, require_audit_hmac_key
 from ato_service.blobs import BlobStore
 from ato_service.db.session import session_scope
-from ato_service.main import AppRuntimeState, RUNTIME_STATE_ATTR
+from ato_service.app_runtime import AppRuntimeState, RUNTIME_STATE_ATTR
 
 
 class RuntimeDependencyError(RuntimeError):

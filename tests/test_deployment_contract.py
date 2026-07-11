@@ -122,9 +122,10 @@ def test_shell_scripts_pass_bash_syntax_check(script: Path) -> None:
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
 
 
-def test_pyproject_declares_ato_service_entrypoint() -> None:
+def test_pyproject_declares_service_and_worker_entrypoints() -> None:
     text = _read(PYPROJECT)
     assert 'ato-service = "ato_service.main:main"' in text
+    assert 'ato-intake-worker = "ato_service.intake_worker:main"' in text
 
 
 def test_main_module_defaults_to_loopback(systemd_text: str) -> None:
@@ -198,10 +199,10 @@ def test_systemd_unit_hardens_service_and_declares_writable_storage(
         assert directive in systemd_text
 
 
-def test_systemd_unit_does_not_ship_worker_portal_or_model_units() -> None:
+def test_systemd_unit_does_not_ship_portal_or_model_units() -> None:
     systemd_dir = ROOT / "deployment" / "systemd"
     names = {path.name for path in systemd_dir.glob("*.service")}
-    assert names == {"ato-api.service"}
+    assert names == {"ato-api.service", "ato-intake-worker.service"}
 
 
 def test_nginx_template_is_tls_edge_with_loopback_proxy(nginx_text: str) -> None:
@@ -496,7 +497,8 @@ def test_smoke_script_defaults_to_loopback_api(smoke_text: str) -> None:
 def test_deployment_readme_matches_current_installer_contract(
     deployment_readme_text: str,
 ) -> None:
-    assert "`ato-synthetic-intake-worker`" in deployment_readme_text
+    assert "`ato-intake-worker`" in deployment_readme_text
+    assert "`ato-synthetic-intake-worker`" not in deployment_readme_text
     assert (
         "the installer does not deploy, configure, start, or credential"
         in deployment_readme_text

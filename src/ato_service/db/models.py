@@ -773,3 +773,58 @@ class JobAttempt(Base):
             postgresql_where=text("status = 'active'"),
         ),
     )
+
+
+class AuthSession(Base):
+    """Server-side OIDC session bound to the portal session cookie."""
+
+    __tablename__ = "auth_sessions"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    groups: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    csrf_token: Mapped[str] = mapped_column(String(512), nullable=False)
+    portal_origin: Mapped[str] = mapped_column(String(2048), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    absolute_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(actor_id) >= 1",
+            name="ck_auth_sessions_actor_id_min_length",
+        ),
+        CheckConstraint(
+            "char_length(csrf_token) >= 32",
+            name="ck_auth_sessions_csrf_token_min_length",
+        ),
+        CheckConstraint(
+            "char_length(portal_origin) >= 1",
+            name="ck_auth_sessions_portal_origin_min_length",
+        ),
+        Index("ix_auth_sessions_absolute_expires_at", "absolute_expires_at"),
+        Index("ix_auth_sessions_last_seen_at", "last_seen_at"),
+    )
+
+
+class OidcLoginState(Base):
+    """Short-lived PKCE login state persisted until the OIDC callback completes."""
+
+    __tablename__ = "oidc_login_states"
+
+    state_token: Mapped[str] = mapped_column(String(128), primary_key=True)
+    code_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
+    nonce: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(state_token) >= 16",
+            name="ck_oidc_login_states_state_token_min_length",
+        ),
+        Index("ix_oidc_login_states_expires_at", "expires_at"),
+    )

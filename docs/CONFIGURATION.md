@@ -57,7 +57,7 @@ Text-model endpoints are required for `onprem_production` schema validity but fu
 - Production DSN: JSON holds `DATABASE_DSN_CREDENTIAL_REFERENCE` with identifier `database-dsn`; systemd loads `/etc/ato-analyzer/credentials/database-dsn`.
 - **Currently wired in production:** only `database-dsn` is mapped in [`deployment/systemd/ato-api.service`](../deployment/systemd/ato-api.service). Other credential references in `onprem_production` JSON (model, OIDC, audit HMAC, backup keys) are contract placeholders until matching `LoadCredential` lines and consumers exist.
 - **Audit HMAC (P1.1/P1.2):** when `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE` is present, the API and bounded synthetic worker resolve the key bytes through the credential reference only. There is no `ATO_AUDIT_HMAC_*` environment override. `dev_local` may omit the reference for read-only/API startup, but the synthetic worker and audit-dependent API mutations fail closed until it is configured. `onprem_production` requires the reference; missing, unreadable, or short keys fail startup or fail closed on mutating routes that depend on `get_audit_hmac_key`.
-- **Package API authentication:** `/api/v1` package routes return HTTP `401` `authentication_required` without an injected authenticated principal (tests may override the dependency). OIDC/session runtime remains future work (**HS-003** / **EP-06**).
+- **Package API authentication:** when `IDENTITY_PROVIDER_MODE=oidc` is configured with `PORTAL_PUBLIC_ORIGIN`, the API loads Postgres-backed sessions from the portal cookie and injects `authenticated_principal` on `/api/v1` routes. Mutations still require CSRF + Origin. Without identity configuration, routes remain fail-closed HTTP `401` (**HS-003** / **EP-06** partial).
 - Each future process receives only the credential mappings and config projection it consumes; declaring a reference in the shared schema does not authorize loading it into every service.
 - Dev DSN: set `ATO_DATABASE_DSN_FILE` to a protected UTF-8 file containing only the SQLAlchemy PostgreSQL URL. Never commit or log DSN contents.
 - Dev OpenAI API key: set `ATO_TEXT_MODEL_API_KEY_FILE` to a protected UTF-8 file containing only the API key when `TEXT_MODEL_PROVIDER` is `openai_compatible`.
@@ -65,11 +65,9 @@ Text-model endpoints are required for `onprem_production` schema validity but fu
 
 ## Bounded synthetic intake worker (P1.2)
 
-`ato-synthetic-intake-worker` is a drain-and-exit development process. It reads
-the same schema-validated JSON selected by `--config` or
-`ATO_RUNTIME_CONFIG_PATH`, resolves the development PostgreSQL DSN through the
-existing `ATO_DATABASE_DSN_FILE` exception, and resolves audit key bytes only
-through `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE`.
+The production operator path is the long-running `ato-intake-worker` process (`deployment/systemd/ato-intake-worker.service`). It continuously drains eligible `dev_local` + `data_origin=synthetic` + all-JSON revisions through `scanning`, `extracting`, and `awaiting_confirmation` using one transaction per transition.
+
+`ato-intake-worker` is the long-running development/production-adjacent process. It reads the same schema-validated JSON selected by `--config` or `ATO_RUNTIME_CONFIG_PATH`, resolves the development PostgreSQL DSN through the existing `ATO_DATABASE_DSN_FILE` exception, and resolves audit key bytes only through `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE`.
 
 For a private development config, add a credential reference such as:
 
@@ -82,15 +80,13 @@ For a private development config, add a credential reference such as:
 }
 ```
 
-Do not commit the private config or key. Run migrations and finalize a revision,
-then invoke:
+Do not commit the private config or key. Run migrations, start the worker, finalize a revision from the portal, and let the worker advance intake asynchronously:
 
 ```text
-ato-synthetic-intake-worker --config /absolute/private/path/runtime-config.json
+ato-intake-worker --config /absolute/private/path/runtime-config.json
 ```
 
-The process claims only `data_origin=synthetic` revisions whose artifacts are
-all detected and declared `application/json`, commits one lifecycle transition
+The process claims only `data_origin=synthetic` revisions whose artifacts are all detected and declared `application/json`, commits one lifecycle transition
 per transaction, drains until idle, and exits. It refuses
 `onprem_production`; it has no production systemd unit, OIDC dependency, model
 call, external scanner call, or customer extraction path. **HS-005** remains

@@ -507,6 +507,12 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         CsrfValidationError,
     )
     from ato_service.concurrency import EtagMismatchError, IfMatchRequiredError
+    from ato_service.fact_proposals import (
+        FactProposalNotFoundError,
+        FactProposalReviewConflictError,
+    )
+    from ato_service.oidc_auth import OidcAuthenticationError
+    from ato_service.session_auth import SessionConfigurationError, SessionExpiredError
     from ato_service.idempotency import (
         IdempotencyConflictError,
         IdempotencyValidationError,
@@ -542,6 +548,8 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         AuthenticationRequiredError,
         AuthorizationDeniedError,
         CsrfValidationError,
+        OidcAuthenticationError,
+        SessionExpiredError,
     ):
         _register_domain_problem_handler(app, auth_error_type)
 
@@ -551,8 +559,15 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         PackageRevisionNotFoundError,
         SystemNotFoundError,
         ParentRevisionNotFoundError,
+        FactProposalNotFoundError,
     ):
         _register_domain_problem_handler(app, not_found_type)
+
+    _register_domain_problem_handler(
+        app,
+        SessionConfigurationError,
+        error_code="reconciliation_required",
+    )
 
     _register_domain_problem_handler(
         app,
@@ -645,6 +660,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
 
 def register_problem_handlers(app: FastAPI) -> None:
     """Attach middleware and the ServiceProblem exception handler."""
+    from ato_service.fact_proposals import FactProposalReviewConflictError
     from ato_service.lifecycle_transitions import IllegalStateTransitionError
     from ato_service.matrix_coverage import MatrixCoverageError
     from ato_service.model_gateway import (
@@ -684,6 +700,11 @@ def register_problem_handlers(app: FastAPI) -> None:
     _register_typed_error_handler(
         app,
         IllegalStateTransitionError,
+        status=409,
+    )
+    _register_typed_error_handler(
+        app,
+        FactProposalReviewConflictError,
         status=409,
     )
     for policy_error_type in (
