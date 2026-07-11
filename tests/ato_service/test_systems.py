@@ -230,6 +230,7 @@ def test_create_system_denies_non_owner_before_idempotency_lookup() -> None:
 def test_create_system_inserts_audit_and_idempotency_on_success() -> None:
     session = _RecordingSession(
         [
+            MagicMock(),
             _scalar_result(None),
             MagicMock(),
             _scalar_result(None),
