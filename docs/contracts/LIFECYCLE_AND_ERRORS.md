@@ -22,8 +22,8 @@ This contract covers:
 - `ExportDraft`
 - `Approval`
 - `FactProposal` review
-- analyzer job leases and run/step attempts, to the extent defined by the
-  technical specification
+- analyzer jobs, `JobAttempt` child records, leases, and run/step completion
+  idempotency, as defined by the technical specification and this contract
 - API and asynchronous-operation errors
 
 It does not add lifecycle states that are absent from the technical
@@ -168,11 +168,36 @@ validation, exactly one disposition for every matrix row, no `pending`
 disposition, and valid row references. Export-draft creation MUST NOT silently
 perform submission and is legal only for a submitted review.
 
-The specification defines the closed Disposition decision enum but does not
-define a decision-to-decision state graph. This contract therefore does not
-invent one. Implementations may validate a requested disposition value and
-version while the review is `draft`, but MUST NOT treat a disposition value as
-an independently terminal lifecycle without a later normative contract.
+#### 2.4.1 Disposition decision graph (contract only; implementation in EP-06)
+
+Disposition `decision` values are not `ReviewRevision` lifecycle states. They
+describe human review intent for one matrix row while the owning review is
+`draft`.
+
+Initial state for each row: `pending`.
+
+While `ReviewRevision.status=draft`, the following decision transitions are
+legal:
+
+| From | To | Required condition |
+| --- | --- | --- |
+| `pending` | `accepted`, `edited`, `rejected`, `evidence_requested`, `weakness_confirmed` | Authorized human sets the row decision through the disposition mutation API. |
+| `accepted`, `edited`, `rejected`, `evidence_requested`, `weakness_confirmed` | `accepted`, `edited`, `rejected`, `evidence_requested`, `weakness_confirmed` | Authorized human changes the row decision while the review remains `draft`. |
+
+Each legal disposition mutation requires a current `If-Match` against the
+review revision version, increments the disposition `version`, and is not a
+`ReviewRevision` lifecycle transition. `edited` requires a non-null
+`edited_summary`.
+
+The following are illegal and perform no disposition change:
+
+- any mutation when the review is `submitted` or `superseded`
+- submission while any row remains `pending`
+- a disposition value change without a matching review ETag
+
+Route handlers, portal UX, audit writes, and timer behavior for disposition
+mutation belong to **EP-06**. This contract defines only the closed decision
+graph and submission precondition.
 
 ### 2.5 ExportDraft
 
@@ -181,9 +206,9 @@ an independently terminal lifecycle without a later normative contract.
 | `draft` | `pending_approval` | Exact payload and review hashes are sealed and an Approval is created with `decision=pending`. |
 | `pending_approval` | `approved` | A different authorized human approves the exact submitted payload before expiry. |
 | `pending_approval` | `rejected` | An authorized human rejects the request. |
-| `pending_approval` | `expired` | The applicable approval deadline expires. |
+| `pending_approval` | `expired` | `now >= submitted_at + APPROVAL_EXPIRY_DAYS` without a decision. |
 | `approved` | `exported` | The hash-bound ZIP is durably created or delivered once under the idempotency contract. |
-| `approved` | `expired` | Seven days elapse after approval without a legal export. |
+| `approved` | `expired` | `now >= decided_at + APPROVAL_EXPIRY_DAYS` without a legal export. |
 | `draft` | `superseded` | Its bound payload or review changes and a replacement draft is created. |
 | `pending_approval` | `superseded` | Its bound payload or review changes. |
 | `approved` | `superseded` | Its bound payload or review changes before export. |
@@ -193,11 +218,15 @@ records. `exported` is never overwritten or superseded. A new payload,
 approval cycle, or delivery after a terminal outcome requires a new
 `ExportDraft`.
 
-The technical specification permits `pending_approval -> expired` but does not
-define the pending-approval deadline. An implementation MUST NOT invent that
-deadline. The transition may be enabled only after an applicable customer
-policy or later normative contract supplies it. The defined seven-day default
-starts after approval and governs `approved -> expired`.
+Both expiry transitions use the runtime `APPROVAL_EXPIRY_DAYS` setting. The
+normative default is seven days per **HS-010** until an approved customer
+override changes that contract. `submitted_at` is the `Approval.submitted_at`
+timestamp set when the draft enters `pending_approval`; `decided_at` is the
+approval decision timestamp for `approved -> expired`.
+
+Timer evaluation, background jobs, and approval routes that perform these
+transitions belong to **EP-06**. This contract defines only the deadline
+formula; implementations MUST NOT invent a different pending-approval window.
 
 ### 2.6 Approval
 
@@ -214,8 +243,8 @@ owning `ExportDraft` from `draft` to `pending_approval`.
 
 An Approval has no `expired` or `superseded` decision value. Expiry or payload
 replacement transitions the `ExportDraft`; the Approval remains an immutable
-historical record and can no longer be acted upon. On approval,
-`expires_at` MUST be set to seven days after `decided_at`.
+historical record and can no longer be acted upon. On approval, `expires_at` MUST be set to `decided_at + APPROVAL_EXPIRY_DAYS`
+using the same runtime setting as the export-draft expiry transitions above.
 
 The following attempts are denied without changing either object:
 
@@ -229,48 +258,96 @@ Self-approval returns `self_approval_denied` with HTTP 403. A stale
 hash/ETag precondition returns HTTP 412. An otherwise current request that is
 in an illegal lifecycle state returns HTTP 409.
 
-### 2.7 Job leases and attempts
+### 2.7 Analyzer jobs, leases, and attempts
 
-Section 20 requires a job `status` field but does not define its enum or a
-persistent job-status transition graph. Neither `domain.schema.json` nor
-`openapi.json` defines a Job or Attempt object. Therefore this contract does
-not invent values such as `pending`, `leased`, or `dead`. No implementation may
-persist or expose such values as P-1 contract states until the schema and
-specification are amended.
+Analyzer jobs are durable Postgres queue rows for one `(run_id, step_key)`
+execution unit. They are worker-internal and are not exposed in the public
+OpenAPI surface. `JobAttempt` rows are child records of a job.
 
-The following field-level lease operations are the complete operations
-inferable from the normative specification:
+Closed job `status` enum (also in `domain.schema.json`):
+
+| Status | Meaning |
+| --- | --- |
+| `available` | Claimable or waiting for `available_at`; no active lease. |
+| `leased` | A worker holds an unexpired lease. |
+| `completed` | The step completed once under the `(run_id, step_key)` unique constraint. |
+| `failed` | Terminal job failure: non-retryable error or transport retry budget exhausted. |
+| `reconciliation_required` | Expired lease on a non-idempotent step; automatic requeue is forbidden. |
+
+`completed`, `failed`, and `reconciliation_required` are terminal job states.
+
+#### 2.7.1 Job-status transition graph
+
+| From | To | Required condition |
+| --- | --- | --- |
+| `available` | `leased` | Claim: `available_at <= now`, no active unexpired lease, owning `AnalysisRun` is `queued` or `running`, `(run_id, step_key)` has no completed `RunStep`, `attempt_count < TEXT_MODEL_MAX_RETRIES + 1`, and a new `JobAttempt` is inserted. |
+| `leased` | `available` | Retryable transient failure with remaining transport budget: terminalize the active `JobAttempt` as `failed`, clear the lease, set `available_at` to bounded backoff, and leave the run `running`. |
+| `leased` | `available` | Expired lease on an idempotent step: terminalize the active `JobAttempt` as `failed` with `job_lease_lost`, clear the lease, and make the job claimable without duplicating a completed step. |
+| `leased` | `completed` | Caller owns an unexpired lease, step completion commits once under the `(run_id, step_key)` unique constraint, the active `JobAttempt` ends `succeeded`, and the lease is cleared. |
+| `leased` | `failed` | Non-retryable error, exhausted transport budget after the active attempt ends, or run deadline exceeded while handling this job. |
+| `leased` | `reconciliation_required` | Expired lease on a non-idempotent step before completion: terminalize the active `JobAttempt` as `failed` with `job_lease_lost`. |
+
+No other job-status transition is legal. In particular:
+
+- there is no `available -> failed` transition; exhausted transport budget makes **claim** illegal and the preceding failure path performs `leased -> failed`
+- a terminal job state MUST NOT return to `available` or `leased`
+- `completed` MUST NOT be set while `(run_id, step_key)` already has a completed `RunStep`
+- reclaiming an idempotent expired lease MUST NOT insert a new `JobAttempt` until a new claim occurs
+
+The first durable claim for a run's initial step MAY perform the coupled
+`AnalysisRun` transition `queued -> running` in the same atomic operation.
+
+#### 2.7.2 Lease operations
+
+Defaults come from runtime configuration (Section 20): `JOB_HEARTBEAT_SECONDS`
+default 30 and `JOB_LEASE_SECONDS` default 300 (five minutes).
 
 | Operation | Legal precondition | Required effect |
 | --- | --- | --- |
-| Claim | `available_at <= now` and the job is not actively leased | Claim atomically with `SELECT ... FOR UPDATE SKIP LOCKED`; set `lease_owner`, `lease_expires_at`, and `heartbeat_at` for the claiming worker. |
-| Heartbeat | Caller owns an unexpired lease | Advance `heartbeat_at` and the lease expiry under the configured five-minute lease. |
-| Complete step | Caller owns an unexpired lease and `(run_id, step_key)` has no completed record | Commit completion once under the unique constraint; release the lease as part of the durable completion operation. |
-| Record transient failure | Caller owns the lease and the error is retryable | Append the failed attempt; compute bounded backoff with jitter, honor `Retry-After`, and make a later attempt available without changing `run_id`. |
-| Recover expired lease | Lease is expired and the step is idempotent | Requeue the work for a new lease without duplicating a completed step. |
-| Observe expired non-idempotent lease | Lease is expired and the step is not idempotent | Do not requeue or repeat the step automatically; mark reconciliation as required and prevent a success commit until resolved. |
+| Claim | Job is `available`, `available_at <= now`, no active unexpired lease, no completed `RunStep` for `(run_id, step_key)`, run not terminal, and `attempt_count < TEXT_MODEL_MAX_RETRIES + 1` | `SELECT ... FOR UPDATE SKIP LOCKED`; transition to `leased`; set `lease_owner`, `lease_expires_at = now + JOB_LEASE_SECONDS`, `heartbeat_at = now`; insert a new `JobAttempt` and increment `attempt_count` by 1. If `attempt_count >= TEXT_MODEL_MAX_RETRIES + 1`, claim is illegal and performs no state change. |
+| Heartbeat | Caller owns an unexpired `leased` job | Advance `heartbeat_at` and extend `lease_expires_at` to `now + JOB_LEASE_SECONDS`. |
+| Complete step | Caller owns an unexpired lease and `(run_id, step_key)` has no completed `RunStep` | Commit completion once under the unique constraint; mark the active `JobAttempt` `succeeded`; transition job to `completed`; clear lease fields. |
+| Record transient failure | Caller owns the lease and the error is transport-retryable | Mark the active `JobAttempt` `failed` with the stable error code; set `last_error_code`; if another claim is legal (`attempt_count < TEXT_MODEL_MAX_RETRIES + 1` after this attempt ends) and the run deadline allows, transition to `available` with backoff on `available_at`; otherwise transition to `failed`. |
+| Recover expired lease | Job is `leased` with expired lease and `step_idempotent=true` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; clear lease fields; transition to `available` with `available_at <= now`; do not duplicate a completed step. |
+| Observe expired non-idempotent lease | Job is `leased` with expired lease and `step_idempotent=false` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; clear lease fields; transition to `reconciliation_required`; block success commit until operator reconciliation. |
 
-Ownership mismatch, heartbeat after expiry, completion after lease loss, and
-requeue of a non-idempotent expired step are illegal. The technical
-specification does not define the terminal job-status value or the exact
-`attempt_count` increment point, so this contract intentionally defines
-neither.
+Ownership mismatch, heartbeat after lease loss, completion after lease loss, and
+automatic requeue of a non-idempotent expired step are illegal. A worker that
+loses its lease MUST NOT commit completion and receives `job_lease_lost`.
 
-Attempt records obey these legal creation rules:
+#### 2.7.3 `attempt_count` and `JobAttempt` semantics
 
-1. The initial execution creates an attempt child record.
-2. A retryable network error, upstream HTTP 429, or upstream HTTP 5xx may
-   create a new transport attempt under the same step and `run_id`, subject to
-   the configured attempt limit and run deadline.
-3. Authentication, authorization, malformed request, policy, and other
-   upstream HTTP 4xx failures MUST NOT create a retry attempt.
-4. A schema-repair action is not a transport retry and is allowed once.
-5. A second schema-validation failure ends repair and transitions the running
-   run to `failed`.
-6. A completed `(run_id, step_key)` MUST NOT receive another attempt.
-7. A retry MUST NOT duplicate a completed export or any completed step.
+- `attempt_count` is the durable count of `JobAttempt` child rows for the job.
+- It starts at `0` when the job row is created.
+- It increments by exactly `1` atomically with each new `JobAttempt` insert.
+- The increment occurs on **claim** (`available -> leased`), not on backoff scheduling alone.
+- Maximum transport attempts per step is `TEXT_MODEL_MAX_RETRIES + 1` (default: two retries after the first attempt). When `attempt_count >= TEXT_MODEL_MAX_RETRIES + 1`, claim is illegal; the job reaches `failed` only through `leased -> failed` after the final active attempt ends without a legal reclaim.
+- Schema repair is not a transport retry. It neither creates a `JobAttempt` nor increments `attempt_count`; it reuses the active attempt and is governed by the single repair rule on the run step.
 
-No attempt may turn a terminal `AnalysisRun` back into an active state.
+`JobAttempt` creation rules:
+
+1. The first claim creates `JobAttempt` number `1`.
+2. Each later claim after a retryable transient failure creates the next numbered `JobAttempt`.
+3. Retryable network errors, upstream HTTP 429, and upstream HTTP 5xx may justify a later claim subject to the transport budget and run deadline.
+4. Authentication, authorization, malformed request, policy, and other upstream HTTP 4xx failures MUST NOT schedule another transport claim.
+5. A schema-repair action is not a transport retry. It neither creates a `JobAttempt` nor increments `attempt_count`; it is allowed once on the active attempt.
+6. A second schema-validation failure ends repair and transitions the running run to `failed`.
+7. A completed `(run_id, step_key)` MUST NOT receive another `JobAttempt` or claim.
+8. A retry MUST NOT duplicate a completed export or any completed step.
+
+No `JobAttempt` or job reclaim may turn a terminal `AnalysisRun` back into an
+active state.
+
+#### 2.7.4 Uniqueness and claim preconditions
+
+The following uniqueness rules are mandatory:
+
+1. At most one `Job` row exists per `(run_id, step_key)`.
+2. At most one `JobAttempt` row exists per `(job_id, attempt_number)`.
+3. At most one completed `RunStep` exists per `(run_id, step_key)`.
+4. Claim is illegal when a completed `RunStep` already exists for the job's `(run_id, step_key)`.
+
+Violations are integrity failures and MUST NOT be repaired by inserting duplicate jobs, attempts, or completed steps.
 
 ## 3. Error response contract
 
@@ -530,14 +607,17 @@ The following invariants are mandatory:
     session tokens, authorization headers, stack traces, or sensitive source
     text.
 
-## 6. Explicitly unresolved contract points
+## 6. Phase boundaries after P1.0 contract closure
 
-P-1 implementation MUST NOT guess the following:
+The following items are now defined in this contract and `domain.schema.json`
+but are not yet implemented in persistence, workers, or portal routes:
 
-- the persistent job `status` enum and job-status transitions
-- the exact event that increments `attempt_count`
-- the automatic deadline for `pending_approval -> expired`
-- a Disposition decision-to-decision transition graph
+| Topic | Contract location | Implementation owner |
+| --- | --- | --- |
+| Job and `JobAttempt` persistence | Section 2.7; `Job`, `JobAttempt` schemas | P1 Postgres jobs/worker foundation |
+| Claim, heartbeat, completion, lease recovery | Section 2.7.2 | P1 worker and reconciler |
+| `pending_approval -> expired` timer | Section 2.5 | EP-06 review portal |
+| Disposition mutation routes and UX | Section 2.4.1 | EP-06 review portal |
 
-Until the technical specification and machine contracts define these points,
-only the narrower behavior stated in this document is legal.
+Implementations MUST NOT infer values, deadlines, or transitions outside this
+contract.

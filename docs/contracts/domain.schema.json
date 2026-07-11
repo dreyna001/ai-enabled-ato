@@ -47,6 +47,12 @@
       "$ref": "#/$defs/AuditEvent"
     },
     {
+      "$ref": "#/$defs/Job"
+    },
+    {
+      "$ref": "#/$defs/JobAttempt"
+    },
+    {
       "$ref": "#/$defs/Problem"
     }
   ],
@@ -1944,6 +1950,285 @@
           "$ref": "#/$defs/Sha256"
         }
       }
+    },
+    "Job": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "Semantic validation MUST enforce at most one Job per (run_id, step_key) and legal job-status transitions.",
+      "required": [
+        "schema_version",
+        "object_type",
+        "job_id",
+        "run_id",
+        "step_key",
+        "step_idempotent",
+        "status",
+        "attempt_count",
+        "available_at",
+        "lease_owner",
+        "lease_expires_at",
+        "heartbeat_at",
+        "last_error_code"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "job"
+        },
+        "job_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "step_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "step_idempotent": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "leased",
+            "completed",
+            "failed",
+            "reconciliation_required"
+          ]
+        },
+        "attempt_count": {
+          "type": "integer",
+          "minimum": 0,
+          "$comment": "Durable count of JobAttempt rows. Upper bound is enforced by runtime TEXT_MODEL_MAX_RETRIES + 1 semantic validation, not this schema."
+        },
+        "available_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        },
+        "lease_owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "lease_expires_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "heartbeat_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_error_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "leased"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lease_owner": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "lease_expires_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              },
+              "heartbeat_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "available",
+                  "completed",
+                  "failed",
+                  "reconciliation_required"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lease_owner": {
+                "type": "null"
+              },
+              "lease_expires_at": {
+                "type": "null"
+              },
+              "heartbeat_at": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "JobAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "Semantic validation MUST enforce at most one JobAttempt per (job_id, attempt_number).",
+      "required": [
+        "schema_version",
+        "object_type",
+        "attempt_id",
+        "job_id",
+        "run_id",
+        "step_key",
+        "attempt_number",
+        "status",
+        "lease_owner",
+        "started_at",
+        "completed_at",
+        "error_code",
+        "error_retryable"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "job_attempt"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "job_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "step_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "attempt_number": {
+          "type": "integer",
+          "minimum": 1,
+          "$comment": "Sequence number within the owning job. Uniqueness on (job_id, attempt_number) is enforced outside this schema."
+        },
+        "status": {
+          "enum": [
+            "active",
+            "succeeded",
+            "failed"
+          ]
+        },
+        "lease_owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "started_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "error_retryable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "active"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "completed_at": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "succeeded",
+                  "failed"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "completed_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              }
+            }
+          }
+        }
+      ]
     },
     "Problem": {
       "type": "object",

@@ -391,7 +391,9 @@
         "src/ato_service/blobs.py",
         "src/ato_service/content_manifests.py",
         "src/ato_service/storage_reconciliation.py",
-        "src/ato_service/db/session.py"
+        "src/ato_service/db/session.py",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "docs/contracts/domain.schema.json"
       ],
       "test_ids": [
         "tests/ato_service/test_blobs.py::test_replay_rehashes_existing_blob_and_preserves_bytes",
@@ -399,9 +401,11 @@
         "tests/ato_service/test_blobs.py::test_cleans_temp_file_after_stream_failure",
         "tests/ato_service/test_content_manifests.py::test_cleans_temp_after_manifest_write_failure",
         "tests/ato_service/test_session_and_storage_reconciliation.py::test_session_scope_rolls_back_reraises_and_closes_on_error",
-        "tests/ato_service/test_session_and_storage_reconciliation.py::test_cleanup_deletes_only_stale_recognized_staging_files"
+        "tests/ato_service/test_session_and_storage_reconciliation.py::test_cleanup_deletes_only_stale_recognized_staging_files",
+        "tests/test_contracts.py::test_job_status_enum_matches_lifecycle_contract",
+        "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields"
       ],
-      "verification_type": "Filesystem replay and corruption, partial-write cleanup, stale-staging reconciliation, and session rollback helpers; job lease, retry, and worker crash recovery remain planned for P1",
+      "verification_type": "Filesystem replay and corruption helpers plus published P1.0 job/attempt lease contract in LIFECYCLE_AND_ERRORS Section 2.7 and domain.schema.json; Postgres jobs table, worker claim/heartbeat/completion, and crash recovery remain planned/partial for P1 persistence",
       "status": "partial"
     },
     {
@@ -672,8 +676,13 @@
         "docs/contracts/LIFECYCLE_AND_ERRORS.md",
         "docs/contracts/openapi.json"
       ],
-      "test_ids": [],
-      "verification_type": "Published lifecycle and error contract; unresolved job, deadline, and disposition details explicitly deferred and do not block P0",
+      "test_ids": [
+        "tests/test_contracts.py::test_job_status_enum_matches_lifecycle_contract",
+        "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields",
+        "tests/test_contracts.py::test_pending_approval_expiry_uses_approval_expiry_days_default",
+        "tests/test_contracts.py::test_disposition_decision_graph_is_contract_only"
+      ],
+      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, HS-010 pending_approval expiry formula, and EP-06-bounded disposition decision graph; persistence and portal routes remain unimplemented",
       "status": "implemented"
     },
     {

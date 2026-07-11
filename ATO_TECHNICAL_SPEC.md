@@ -484,7 +484,7 @@ error_code: string | null
 error_retryable: boolean | null
 ```
 
-Run attempts and steps are child records. Retrying a transient operation creates a new attempt record without changing `run_id`.
+Run attempts and steps are child records. Retrying a transient operation creates a new attempt record without changing `run_id`. Analyzer jobs and `JobAttempt` rows queue and bound execution of one `(run_id, step_key)` unit; see Section 20.
 
 ### 13.8 MatrixRow
 
@@ -576,7 +576,7 @@ Approval:
   reason: string | null
 ```
 
-The submitter MUST NOT approve the same export. Approval expires seven days after approval. Any payload or review change supersedes approval. Every download is authorized and audited. V1 exports only a downloadable ZIP; it does not write to an external system.
+The submitter MUST NOT approve the same export. Approval and export-draft expiry both use `APPROVAL_EXPIRY_DAYS` (normative default seven days per HS-010): `pending_approval -> expired` at `submitted_at + APPROVAL_EXPIRY_DAYS`, and `approved -> expired` at `decided_at + APPROVAL_EXPIRY_DAYS`. Any payload or review change supersedes approval. Every download is authorized and audited. V1 exports only a downloadable ZIP; it does not write to an external system.
 
 ### 13.12 AuditEvent
 
@@ -903,6 +903,8 @@ Required job fields:
 ```text
 job_id
 run_id
+step_key
+step_idempotent
 status
 attempt_count
 available_at
@@ -912,14 +914,48 @@ heartbeat_at
 last_error_code
 ```
 
+Closed job `status` values:
+
+```text
+available | leased | completed | failed | reconciliation_required
+```
+
+`JobAttempt` child records:
+
+```text
+attempt_id
+job_id
+run_id
+step_key
+attempt_number
+status: active | succeeded | failed
+lease_owner
+started_at
+completed_at
+error_code
+error_retryable
+```
+
+`attempt_count` is the durable count of `JobAttempt` rows. It starts at `0`, increments by `1` atomically with each new `JobAttempt` insert on claim, and is bounded at runtime by `TEXT_MODEL_MAX_RETRIES + 1` transport attempts per step. When the budget is exhausted, claim is illegal and the job reaches `failed` only through `leased -> failed` after the final attempt ends.
+
+Uniqueness:
+
+```text
+one Job per (run_id, step_key)
+one JobAttempt per (job_id, attempt_number)
+one completed RunStep per (run_id, step_key)
+```
+
+Expired-lease recovery terminalizes the active `JobAttempt` as `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at` set. Idempotent jobs then return to `available`; non-idempotent jobs transition to `reconciliation_required`. Schema repair neither creates a `JobAttempt` nor increments `attempt_count`.
+
 Defaults:
 
 - Heartbeat: 30 seconds
 - Lease: 5 minutes
 - Maximum active analyzer workers: 2
-- Maximum transport attempts per model step: configured, default 2 retries after first attempt
+- Maximum transport attempts per model step: `TEXT_MODEL_MAX_RETRIES + 1`; default `TEXT_MODEL_MAX_RETRIES` is 2 (two retries after the first attempt)
 
-Expired leases are requeued only when the step is idempotent. Step completion has a unique constraint on `(run_id, step_key)`.
+Expired leases are requeued only when `step_idempotent=true`. Step completion has a unique constraint on `(run_id, step_key)`. Legal job-status transitions, lease operations, and attempt semantics are defined in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 2.7.
 
 ### 20.1 Filesystem transaction rule
 
@@ -1451,7 +1487,7 @@ The plan is implementation-ready only when P-1 has:
 
 When these criteria are met, record the outcome in `docs/P1_GATE_RECORD.md`. P0 core safety work may then proceed. Authority-dependent implementation and release remain blocked while HS-001 is open. Customer-specific hard stops remain scoped to the phases that need them.
 
-Unresolved lifecycle details named in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 6 (job `status` enum, `attempt_count` increment timing, `pending_approval -> expired` deadline, and Disposition decision graphs) are deferred to later contract work and do not block P0.
+Job, attempt, pending-approval expiry, and disposition decision contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. Persistence, worker lease handling, approval timers, and disposition routes remain implementation work in P1 and EP-06 respectively.
 
 Feature implementation MUST NOT infer missing contracts or bypass open hard stops for authority-dependent, customer-specific, production, or qualification work.
 

@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "job",
+  "job_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "step_key": "sufficiency_matrix",
+  "step_idempotent": true,
+  "status": "available",
+  "attempt_count": 0,
+  "available_at": "2026-07-10T20:00:00Z",
+  "lease_owner": null,
+  "lease_expires_at": null,
+  "heartbeat_at": null,
+  "last_error_code": null
+}

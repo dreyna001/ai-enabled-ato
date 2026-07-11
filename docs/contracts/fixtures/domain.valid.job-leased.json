@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "job",
+  "job_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "run_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "step_key": "normalize_proposal",
+  "step_idempotent": true,
+  "status": "leased",
+  "attempt_count": 1,
+  "available_at": "2026-07-10T20:00:00Z",
+  "lease_owner": "worker-1",
+  "lease_expires_at": "2026-07-10T20:05:00Z",
+  "heartbeat_at": "2026-07-10T20:00:30Z",
+  "last_error_code": null
+}

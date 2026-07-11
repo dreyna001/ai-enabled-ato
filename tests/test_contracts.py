@@ -971,3 +971,132 @@ def test_implemented_problem_codes_are_documented_in_error_taxonomy() -> None:
         "implemented Problem error_code values must appear in "
         f"LIFECYCLE_AND_ERRORS.md Section 4: {sorted(undocumented)}"
     )
+
+
+def _lifecycle_markdown() -> str:
+    return (CONTRACTS_DIR / "LIFECYCLE_AND_ERRORS.md").read_text(encoding="utf-8")
+
+
+def _job_status_enum_from_lifecycle() -> set[str]:
+    lifecycle = _lifecycle_markdown()
+    section_start = lifecycle.index("Closed job `status` enum")
+    section_end = lifecycle.index("#### 2.7.1", section_start)
+    section = lifecycle[section_start:section_end]
+    allowed = {
+        "available",
+        "leased",
+        "completed",
+        "failed",
+        "reconciliation_required",
+    }
+    found = {match for match in re.findall(r"`([a-z_]+)`", section) if match in allowed}
+    assert found == allowed, (
+        f"lifecycle job status table drifted: found={sorted(found)} expected={sorted(allowed)}"
+    )
+    return found
+
+
+def test_job_status_enum_matches_lifecycle_contract() -> None:
+    domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
+    schema_statuses = _closed_values(domain["$defs"]["Job"]["properties"]["status"])
+    lifecycle_statuses = _job_status_enum_from_lifecycle()
+    assert schema_statuses == lifecycle_statuses
+    assert schema_statuses == {
+        "available",
+        "leased",
+        "completed",
+        "failed",
+        "reconciliation_required",
+    }
+
+    validator = _validator_for(CONTRACTS_DIR / "domain.schema.json")
+    for fixture_name in (
+        "domain.valid.job-available.json",
+        "domain.valid.job-leased.json",
+        "domain.valid.job-attempt-active.json",
+    ):
+        validator.validate(_load_json(CONTRACT_FIXTURES_DIR / fixture_name))
+
+    invalid_job = _load_json(
+        CONTRACT_FIXTURES_DIR / "domain.invalid.job-leased-missing-lease.json"
+    )
+    assert list(validator.iter_errors(invalid_job)), (
+        "leased jobs without lease_owner and timestamps must be rejected"
+    )
+
+
+def test_job_and_job_attempt_schema_required_fields() -> None:
+    domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
+    job = domain["$defs"]["Job"]
+    attempt = domain["$defs"]["JobAttempt"]
+
+    assert job["properties"]["object_type"]["const"] == "job"
+    assert attempt["properties"]["object_type"]["const"] == "job_attempt"
+    assert "step_key" in job["required"]
+    assert "step_idempotent" in job["required"]
+    assert "attempt_number" in attempt["required"]
+    assert _closed_values(attempt["properties"]["status"]) == {
+        "active",
+        "succeeded",
+        "failed",
+    }
+    assert "maximum" not in json.dumps(job["properties"]["attempt_count"])
+    assert "maximum" not in json.dumps(attempt["properties"]["attempt_number"])
+
+    technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
+    lifecycle = _lifecycle_markdown()
+    for fragment in (
+        "step_key",
+        "step_idempotent",
+        "available | leased | completed | failed | reconciliation_required",
+        "attempt_count` is the durable count of `JobAttempt` rows",
+        "TEXT_MODEL_MAX_RETRIES + 1",
+        "one Job per (run_id, step_key)",
+        "one JobAttempt per (job_id, attempt_number)",
+        "error_code=job_lease_lost",
+    ):
+        assert fragment in technical_spec, f"missing technical-spec job contract: {fragment}"
+
+    assert "no `available -> failed` transition" in lifecycle
+    assert "error_code=job_lease_lost" in lifecycle
+    assert "one `Job` row exists per `(run_id, step_key)`" in lifecycle
+    assert "neither creates a `JobAttempt` nor increments `attempt_count`" in lifecycle
+
+
+def test_pending_approval_expiry_uses_approval_expiry_days_default() -> None:
+    lifecycle = _lifecycle_markdown()
+    assert "submitted_at + APPROVAL_EXPIRY_DAYS" in lifecycle
+    assert "decided_at + APPROVAL_EXPIRY_DAYS" in lifecycle
+    assert "HS-010" in lifecycle
+    assert "EP-06" in lifecycle
+
+    technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
+    assert "pending_approval -> expired` at `submitted_at + APPROVAL_EXPIRY_DAYS" in technical_spec
+
+    runtime_schema = _load_json(CONTRACTS_DIR / "runtime-config.schema.json")
+    assert "APPROVAL_EXPIRY_DAYS" in runtime_schema["properties"]
+
+
+def test_disposition_decision_graph_is_contract_only() -> None:
+    lifecycle = _lifecycle_markdown()
+    section_start = lifecycle.index("#### 2.4.1 Disposition decision graph")
+    section_end = lifecycle.index("### 2.5 ExportDraft", section_start)
+    section = lifecycle[section_start:section_end]
+
+    assert "implementation in EP-06" in section
+    assert "`pending`" in section
+    assert "`weakness_confirmed`" in section
+    assert "Route handlers" in section
+
+    domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
+    disposition_values = _closed_values(
+        domain["$defs"]["Disposition"]["properties"]["decision"]
+    )
+    assert disposition_values == {
+        "pending",
+        "accepted",
+        "edited",
+        "rejected",
+        "evidence_requested",
+        "weakness_confirmed",
+    }
