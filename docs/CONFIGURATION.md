@@ -1,10 +1,10 @@
 # Runtime Configuration
 
-**Status:** API-only scaffold documentation  
-**Applies to:** Current `ato_service` API process; not a production release claim  
+**Status:** API scaffold plus bounded development synthetic-intake documentation  
+**Applies to:** Current `ato_service` API and `dev_local` synthetic-intake processes; not a production release claim  
 **Normative contract:** [`docs/contracts/runtime-config.schema.json`](contracts/runtime-config.schema.json)
 
-This document explains how non-secret settings and secret references are loaded today. It does not claim RHEL validation, portal/worker deployment, auth implementation, extraction, model hosting, backup automation, or full P7 completion.
+This document explains how non-secret settings and secret references are loaded today. It does not claim RHEL validation, portal/worker deployment, auth implementation, production/customer extraction, model hosting, backup automation, or full P7 completion.
 
 ## Canonical paths
 
@@ -29,7 +29,7 @@ Schema validation uses Draft 2020-12 with closed production profiles. See [`docs
 
 ## Runtime profiles
 
-**`dev_local`** — minimal JSON for local API verification. Only `schema_version`, `runtime_profile`, and `STORAGE_DATA_PATH` are required. Optional model, identity, and backup fields are absent unless you add them. `VISION_MODEL_ENABLED` defaults to effective `false` when absent.
+**`dev_local`** — minimal JSON for local API verification and the only profile accepted by the bounded synthetic JSON intake worker. Only `schema_version`, `runtime_profile`, and `STORAGE_DATA_PATH` are required for schema validity. The worker additionally fails closed unless `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE` resolves because every lifecycle transition requires an atomic audit append. Optional model, identity, and backup fields are absent unless you add them. `VISION_MODEL_ENABLED` defaults to effective `false` when absent.
 
 **`onprem_production`** — full non-secret contract. Schema requires text-model settings, explicit `VISION_MODEL_ENABLED`, identity, storage limits, audit references, malware-scanner declarations, and backup declarations. Secret values stay in credential files, not in JSON.
 
@@ -47,7 +47,7 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | `TEXT_MODEL_PROVIDER` | **Text LLM backend** | `openai_compatible` (default) uses `TEXT_MODEL_ENDPOINT_URL` plus `TEXT_MODEL_CREDENTIAL_REFERENCE` or dev-only `ATO_TEXT_MODEL_API_KEY_FILE`. `aws_bedrock` uses `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, and the standard AWS credential chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or instance role). Install Bedrock support with `pip install -e ".[bedrock]"`. |
 | `ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS` | **Safety exception** | Not a capability. Permits HTTP (not HTTPS) only for literal loopback IP endpoints (`127.0.0.1`, `::1`) on approved internal model profiles. Does not relax host allowlists for non-loopback hosts. |
 | `LOCAL_PASSWORD_AUTH_ENABLED` | **Hard stop** | Must remain `false`. Declares that local password auth is forbidden; it is not a feature switch. |
-| `MALWARE_SCANNER_*` | **Future production contract** | Declarations in JSON do not implement scanning, extraction, or scanner integration in the current API-only slice. |
+| `MALWARE_SCANNER_*` | **Future production contract** | Declarations in JSON do not implement scanner integration or authorize customer extraction. The P1.2 worker assigns a deterministic clean result only after enforcing `dev_local` + `data_origin=synthetic` + all-JSON gates; it neither reads nor satisfies these production declarations. |
 | `BACKUP_*`, `AUDIT_*` backup fields | **Future production contract** | Declarations document intended recovery posture; they do not enable backup jobs, WAL archiving, or restore automation today. |
 
 Text-model endpoints are required for `onprem_production` schema validity but full model-call pipelines remain out of scope for this API-only slice.
@@ -56,12 +56,45 @@ Text-model endpoints are required for `onprem_production` schema validity but fu
 
 - Production DSN: JSON holds `DATABASE_DSN_CREDENTIAL_REFERENCE` with identifier `database-dsn`; systemd loads `/etc/ato-analyzer/credentials/database-dsn`.
 - **Currently wired in production:** only `database-dsn` is mapped in [`deployment/systemd/ato-api.service`](../deployment/systemd/ato-api.service). Other credential references in `onprem_production` JSON (model, OIDC, audit HMAC, backup keys) are contract placeholders until matching `LoadCredential` lines and consumers exist.
-- **Audit HMAC (P1.1):** when `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE` is present, the API process resolves the key bytes at startup through the credential reference only. There is no `ATO_AUDIT_HMAC_*` environment override. `dev_local` may omit the reference (audit appends are unavailable until configured). `onprem_production` requires the reference; missing, unreadable, or short keys fail startup or fail closed on mutating routes that depend on `get_audit_hmac_key`.
+- **Audit HMAC (P1.1/P1.2):** when `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE` is present, the API and bounded synthetic worker resolve the key bytes through the credential reference only. There is no `ATO_AUDIT_HMAC_*` environment override. `dev_local` may omit the reference for read-only/API startup, but the synthetic worker and audit-dependent API mutations fail closed until it is configured. `onprem_production` requires the reference; missing, unreadable, or short keys fail startup or fail closed on mutating routes that depend on `get_audit_hmac_key`.
 - **Package API authentication:** `/api/v1` package routes return HTTP `401` `authentication_required` without an injected authenticated principal (tests may override the dependency). OIDC/session runtime remains future work (**HS-003** / **EP-06**).
 - Each future process receives only the credential mappings and config projection it consumes; declaring a reference in the shared schema does not authorize loading it into every service.
 - Dev DSN: set `ATO_DATABASE_DSN_FILE` to a protected UTF-8 file containing only the SQLAlchemy PostgreSQL URL. Never commit or log DSN contents.
 - Dev OpenAI API key: set `ATO_TEXT_MODEL_API_KEY_FILE` to a protected UTF-8 file containing only the API key when `TEXT_MODEL_PROVIDER` is `openai_compatible`.
 - Bedrock: do not put AWS keys in runtime JSON. Use the normal AWS credential chain and set `AWS_REGION` in runtime JSON.
+
+## Bounded synthetic intake worker (P1.2)
+
+`ato-synthetic-intake-worker` is a drain-and-exit development process. It reads
+the same schema-validated JSON selected by `--config` or
+`ATO_RUNTIME_CONFIG_PATH`, resolves the development PostgreSQL DSN through the
+existing `ATO_DATABASE_DSN_FILE` exception, and resolves audit key bytes only
+through `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE`.
+
+For a private development config, add a credential reference such as:
+
+```json
+{
+  "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+    "source": "root_owned_file",
+    "path": "/absolute/private/path/audit-hmac-key"
+  }
+}
+```
+
+Do not commit the private config or key. Run migrations and finalize a revision,
+then invoke:
+
+```text
+ato-synthetic-intake-worker --config /absolute/private/path/runtime-config.json
+```
+
+The process claims only `data_origin=synthetic` revisions whose artifacts are
+all detected and declared `application/json`, commits one lifecycle transition
+per transaction, drains until idle, and exits. It refuses
+`onprem_production`; it has no production systemd unit, OIDC dependency, model
+call, external scanner call, or customer extraction path. **HS-005** remains
+open.
 
 ## Text LLM (OpenAI or Bedrock)
 

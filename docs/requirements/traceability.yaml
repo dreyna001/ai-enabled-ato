@@ -98,6 +98,9 @@
         "migrations/versions/20260711_0003_package_revision_version.py",
         "migrations/versions/20260711_0004_idempotency_headers_artifact_uniq.py",
         "src/ato_service/package_revisions.py",
+        "src/ato_service/source_artifacts.py",
+        "src/ato_service/synthetic_intake.py",
+        "src/ato_service/synthetic_intake_worker.py",
         "src/ato_service/jobs.py",
         "alembic.ini"
       ],
@@ -110,9 +113,11 @@
         "tests/ato_service/test_db.py::test_require_database_dsn_reads_absolute_utf8_file",
         "tests/ato_service/test_job_persistence.py",
         "tests/ato_service/test_jobs.py",
-        "tests/ato_service/test_lifecycle_transitions.py"
+        "tests/ato_service/test_lifecycle_transitions.py",
+        "tests/ato_service/test_synthetic_intake.py",
+        "tests/ato_service/test_synthetic_intake_worker.py"
       ],
-      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, and expired-lease recovery tests plus Alembic head 20260711_0004 and orphan-manifest replacement only when finalize proves content_manifest_sha256 is null; analysis-run replay, worker loop, and full EP-02 gate remain planned/partial",
+      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, expired-lease recovery, and transaction-per-transition synthetic intake tests plus Alembic head 20260711_0004; P1.2 advances only dev_local synthetic JSON revisions through awaiting_confirmation, while analysis-run replay, analyzer worker loop, proposal review, and full EP-02 gate remain planned/partial",
       "status": "partial"
     },
     {
@@ -120,10 +125,17 @@
       "spec_section": "32",
       "requirement_text": "Canonical facts retain field-level source provenance through proposal and human confirmation.",
       "epic": "EP-02-package-foundation",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned provenance proposal and confirmation tests",
-      "status": "planned"
+      "implementation_files": [
+        "src/ato_service/db/models.py",
+        "src/ato_service/source_artifacts.py",
+        "src/ato_service/synthetic_intake.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_deterministic_pending_proposals_with_provenance",
+        "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_proposals"
+      ],
+      "verification_type": "P1.2 deterministic synthetic JSON extraction creates pending FactProposal rows with source SHA-256 and matching RFC 6901 target/source pointers; proposal review, confirmation, and sealed canonical-fact persistence remain planned",
+      "status": "partial"
     },
     {
       "requirement_id": "R-009",
@@ -252,14 +264,19 @@
       "implementation_files": [
         "src/ato_service/blobs.py",
         "src/ato_service/runtime_config.py",
-        "src/ato_service/source_artifacts.py"
+        "src/ato_service/source_artifacts.py",
+        "src/ato_service/synthetic_intake.py",
+        "src/ato_service/synthetic_intake_worker.py"
       ],
       "test_ids": [
         "tests/ato_service/test_source_artifacts.py::test_accepts_all_contract_artifact_kinds",
         "tests/ato_service/test_source_artifacts.py::test_rejects_unsupported_declared_media_type",
-        "tests/ato_service/test_source_artifacts.py::test_rejects_single_file_size_limit"
+        "tests/ato_service/test_source_artifacts.py::test_rejects_single_file_size_limit",
+        "tests/ato_service/test_synthetic_intake.py::test_claim_query_is_skip_locked_synthetic_and_json_only",
+        "tests/ato_service/test_synthetic_intake.py::test_invalid_json_transitions_to_invalid_without_partial_proposals",
+        "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local"
       ],
-      "verification_type": "P1.1 upload accepts all published artifact_kind enum values but only application/json and text/plain declared MIME with configured size/count limits; malware scan, extraction, archive/XML/Office/SVG controls, and HS-005 production scanner remain planned/partial",
+      "verification_type": "P1.1 upload enforces MIME and configured limits; P1.2 adds only a dev_local, data_origin=synthetic, all-JSON deterministic path with durable blob re-verification and no external scanner/model call. Production malware scanning, customer extraction, archive/XML/Office/SVG controls, and HS-005 closure remain planned/partial",
       "status": "partial"
     },
     {
@@ -344,9 +361,12 @@
       "implementation_files": [
         "ATO_TECHNICAL_SPEC.md",
         "docs/contracts/runtime-config.schema.json",
+        "pyproject.toml",
         "src/ato_service/runtime_config.py",
+        "src/ato_service/synthetic_intake_worker.py",
         "deployment/config/runtime-config.onprem.example.json",
         "docs/CONFIGURATION.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
         "deployment/README.md",
         "deployment/systemd/ato-api.service",
         "deployment/nginx/ato-api.conf",
@@ -356,11 +376,13 @@
       "test_ids": [
         "tests/ato_service/test_runtime_config.py::test_load_onprem_config_from_external_path_without_base_dir",
         "tests/ato_service/test_runtime_config.py::test_rejects_remote_http_model_endpoint_despite_loopback_opt_in",
+        "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local",
+        "tests/ato_service/test_synthetic_intake_worker.py",
         "tests/test_deployment_contract.py::test_systemd_unit_points_to_canonical_runtime_config",
         "tests/test_deployment_contract.py::test_install_script_is_idempotent_and_explicit_about_side_effects",
         "tests/test_deployment_contract.py::test_deployment_readme_matches_current_installer_contract"
       ],
-      "verification_type": "Current API-only surface is contract-tested; requirement remains cross-cutting as later phases add capabilities and processes",
+      "verification_type": "Current API deployment and bounded dev_local synthetic-intake process are contract-tested; the worker consumes the same validated JSON plus process-required DSN/audit credentials, refuses production, and intentionally ships no systemd asset. Requirement remains cross-cutting as production capabilities and processes are added",
       "status": "partial"
     },
     {
@@ -424,13 +446,17 @@
       "epic": "EP-01-core-safety",
       "implementation_files": [
         "src/ato_service/lifecycle_transitions.py",
-        "src/ato_service/problems.py"
+        "src/ato_service/problems.py",
+        "src/ato_service/synthetic_intake.py"
       ],
       "test_ids": [
         "tests/ato_service/test_lifecycle_transitions.py",
-        "tests/ato_service/test_problem_taxonomy.py::test_illegal_state_transition_returns_409_and_preserves_state"
+        "tests/ato_service/test_problem_taxonomy.py::test_illegal_state_transition_returns_409_and_preserves_state",
+        "tests/ato_service/test_synthetic_intake.py::test_scan_marks_artifacts_clean_and_advances_one_transition",
+        "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_deterministic_pending_proposals_with_provenance",
+        "tests/ato_service/test_synthetic_intake.py::test_invalid_json_transitions_to_invalid_without_partial_proposals"
       ],
-      "verification_type": "Deterministic lifecycle transition unit tests and HTTP Problem mapping for illegal transitions; no production mutation route or audit write exists yet",
+      "verification_type": "Deterministic lifecycle transition unit tests, HTTP Problem mapping for illegal transitions, and P1.2 worker-driven scanning/extracting/awaiting_confirmation plus invalid-extraction transitions with atomic audit appends; production scanning remains blocked by HS-005",
       "status": "partial"
     },
     {

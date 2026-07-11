@@ -27,9 +27,9 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 - **Normative target:** FedRAMP 20x Program Class C package preparation plus security-only agency FISMA, one on-prem installation per customer enterprise
 - **P-1 status:** Internal schemas, OpenAPI, lifecycle/error taxonomy, threat model, AI evaluation guide, operations/config contracts, API-only deployment contracts, traceability, and hard-stop register are published and recorded in [`docs/P1_GATE_RECORD.md`](docs/P1_GATE_RECORD.md)
 - **P0 status:** Deterministic foundation helpers, regression coverage, and CI gate are recorded in [`docs/P0_GATE_RECORD.md`](docs/P0_GATE_RECORD.md); analyzer worker loop and full intake-to-analysis pipeline remain partial
-- **Implemented today:** durable `ato_service` foundation plus the bounded **P1.1** `/api/v1` System + PackageRevision slice (create/list/get systems, create/list/get package revisions, JSON/text upload with all contract `artifact_kind` values, finalize to `scanning`, confirm with `If-Match`/`ETag`, idempotency with 24-hour retention and `response_headers` replay, fail-closed HTTP `401` without injected auth, audit HMAC credential resolution at startup when configured)
-- **Not implemented yet:** analyzer worker, malware scanner integration, extraction, proposals/runs API, portal UI, OIDC/session runtime, approvals, production operations, and AI qualification
-- **Next step:** worker and synthetic intake progression (scanning → extracting → awaiting_confirmation) without claiming full package flow or EP-02 gate completion
+- **Implemented today:** durable `ato_service` foundation; the bounded **P1.1** `/api/v1` System + PackageRevision slice (create/list/get systems, create/list/get package revisions, JSON/text upload with all contract `artifact_kind` values, finalize to `scanning`, confirm with `If-Match`/`ETag`, idempotency with 24-hour retention and `response_headers` replay, fail-closed HTTP `401` without injected auth, audit HMAC credential resolution at startup when configured); and the bounded **P1.2** `dev_local` + synthetic + JSON intake worker (`scanning` → `extracting` → `awaiting_confirmation`) with deterministic pending proposals and field-level JSON-pointer provenance
+- **Not implemented yet:** analyzer worker, production malware scanner/customer extraction, proposals/runs API, portal UI, OIDC/session runtime, approvals, production operations, and AI qualification
+- **Next step:** proposal review/confirmation and the remaining synthetic package flow without claiming production scanner operation or full EP-02 gate completion
 - **Deployment scaffold (API only):** redacted runtime template, `ato-api.service`, inactive nginx template, and explicit install/smoke scripts under [`deployment/`](deployment/); not proof of RHEL validation or production release
 - **Model boundary:** OpenAI-compatible endpoints; external routing is restricted to synthetic or explicitly approved redacted non-production data by default
 
@@ -80,6 +80,17 @@ ato-service
 # equivalent: python -m ato_service
 ```
 
+To drain currently eligible synthetic JSON intake work, use a private
+`dev_local` runtime JSON that includes an
+`AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE`, then run:
+
+```powershell
+ato-synthetic-intake-worker
+```
+
+The worker exits when no eligible transition remains. It refuses production
+profiles and does not process customer origins or non-JSON artifacts.
+
 Health endpoints (unversioned, at the application root):
 
 ```text
@@ -95,7 +106,7 @@ GET http://127.0.0.1:8000/health/ready
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/ato_service -m "not integration" -q
 ```
 
-No live PostgreSQL instance, worker process, or other integration service is required. The selection exercises validated runtime config, content-addressed blob and manifest writes, lifecycle and model-routing policy, matrix-coverage validation, limit enforcement, staging reconciliation, session rollback helpers, and the health/Problem API boundary.
+No live PostgreSQL instance, worker process, or other integration service is required. The selection exercises validated runtime config, content-addressed blob and manifest writes, lifecycle and model-routing policy, synthetic intake orchestration, matrix-coverage validation, limit enforcement, staging reconciliation, session rollback helpers, and the health/Problem API boundary.
 
 Equivalent without the plugin guard:
 

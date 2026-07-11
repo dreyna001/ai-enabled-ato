@@ -496,6 +496,11 @@ def test_smoke_script_defaults_to_loopback_api(smoke_text: str) -> None:
 def test_deployment_readme_matches_current_installer_contract(
     deployment_readme_text: str,
 ) -> None:
+    assert "`ato-synthetic-intake-worker`" in deployment_readme_text
+    assert (
+        "the installer does not deploy, configure, start, or credential"
+        in deployment_readme_text
+    )
     assert NGINX_EXAMPLE_DEST in deployment_readme_text
     assert "/etc/nginx/conf.d/ato-api.conf\n" not in deployment_readme_text
     assert "location /api/" not in deployment_readme_text

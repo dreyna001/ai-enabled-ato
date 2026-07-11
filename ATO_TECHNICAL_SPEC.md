@@ -665,7 +665,39 @@ The System + PackageRevision HTTP slice defines intake boundaries only; it does 
 - **Finalize** is legal only while the revision is `uploading`. The server writes a durable validated content manifest, atomically sets `content_manifest_sha256`, performs `uploading -> scanning`, and increments `revision_version` once. It does not claim scan or extraction completion.
 - **Confirm** is legal only while the revision is `awaiting_confirmation`, requires current `If-Match` (`"v{revision_version}"`), and succeeds only when every `FactProposal` is non-`pending`. It performs `awaiting_confirmation -> ready` and increments `revision_version` once.
 
-Scanning, extraction, and synthetic processing are later worker slices, not this amendment.
+Scanning, extraction, and synthetic processing are separate from the P1.1 HTTP amendment.
+
+#### 15.1.2 P1.2 development synthetic JSON intake boundary
+
+The P1.2 intake worker is a deliberately bounded development path. It runs only
+with `runtime_profile=dev_local`, claims only revisions whose
+`data_origin=synthetic`, and requires every source artifact to have both
+declared and detected media type `application/json`. Non-synthetic,
+non-JSON, and production-profile revisions are not eligible for this path.
+
+Each claimed revision advances one transaction at a time under
+`SELECT ... FOR UPDATE SKIP LOCKED`:
+
+1. `scanning -> extracting` marks pending artifacts `malware_scan_status=clean`
+   using a deterministic synthetic result. This is not a malware scanner,
+   does not call a scanner dependency, and does not close **HS-005**.
+2. `extracting -> awaiting_confirmation` parses durable UTF-8 JSON
+   deterministically and creates pending `FactProposal` rows with RFC 6901
+   pointers, matching JSON-pointer source locators,
+   `extraction_method=deterministic`, and `model_step_id=null`.
+
+The worker creates one proposal per addressable JSON leaf (including nested
+empty objects or arrays), treats the source pointer as the canonical target
+pointer for this known synthetic shape, and rejects duplicate target pointers.
+Every transition increments `revision_version` exactly once and commits its
+artifact/proposal side effects with an `outcome=succeeded` audit event. Invalid
+JSON or duplicate canonical pointers performs the legal
+`extracting -> invalid` transition without partial proposals. The worker makes
+zero model calls.
+
+The current CLI drains all eligible transitions and exits. It has no production
+systemd unit, production scanner, customer extraction path, OIDC/session
+dependency, or capability flag.
 
 ### 15.2 Allowed inputs
 
@@ -1520,7 +1552,7 @@ The plan is implementation-ready only when P-1 has:
 
 When these criteria are met, record the outcome in `docs/P1_GATE_RECORD.md`. P0 core safety work may then proceed. Authority-dependent implementation and release remain blocked while HS-001 is open. Customer-specific hard stops remain scoped to the phases that need them.
 
-Job, attempt, pending-approval expiry, disposition decision, and P1.1 System + PackageRevision API contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. The bounded P1.1 HTTP/service slice (systems create/list/get, package-revision create/list/get, upload, finalize stopping at `scanning`, confirm) is implemented with Alembic head `20260711_0004`, `revision_version`/`ETag`, idempotency `response_headers`, advisory-lock serialization, and source-artifact uniqueness. Analyzer worker loop, proposal/run routes, approval timers, OIDC/session runtime, disposition routes, malware scanning, extraction, and synthetic E2E remain implementation work in P1 and EP-06 respectively.
+Job, attempt, pending-approval expiry, disposition decision, and P1.1 System + PackageRevision API contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. The bounded P1.1 HTTP/service slice (systems create/list/get, package-revision create/list/get, upload, finalize stopping at `scanning`, confirm) is implemented with Alembic head `20260711_0004`, `revision_version`/`ETag`, idempotency `response_headers`, advisory-lock serialization, and source-artifact uniqueness. P1.2 adds only the `dev_local` + synthetic + JSON intake progression through `awaiting_confirmation`; it is not production malware scanning or customer extraction and does not close **HS-005**. Analyzer worker loop, proposal/run review routes, approval timers, OIDC/session runtime, disposition routes, production scanning/extraction, and full synthetic end-to-end acceptance remain implementation work in P1 and EP-06 respectively.
 
 Feature implementation MUST NOT infer missing contracts or bypass open hard stops for authority-dependent, customer-specific, production, or qualification work.
 

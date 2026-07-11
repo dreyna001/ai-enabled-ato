@@ -1,7 +1,7 @@
 # API-Only Deployment Scaffold
 
 **Status:** Initial operator packaging for the `ato_service` API process only  
-**Not claimed:** Production release, live RHEL 9 validation, portal UI, analyzer workers, OIDC auth, file extraction, model hosting, backup automation, or P7 completion
+**Not claimed:** Production release, live RHEL 9 validation, portal UI, analyzer workers, OIDC auth, production/customer file extraction, model hosting, backup automation, or P7 completion
 
 This directory holds install assets and redacted configuration examples. Behavior is contract-tested in [`tests/test_deployment_contract.py`](../tests/test_deployment_contract.py); passing those tests does not prove a customer host install.
 
@@ -18,7 +18,12 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`../scripts/install.sh`](../scripts/install.sh) | Root installer: layout, package copy, systemd/nginx assets |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
 
-There is no worker unit, portal static root, model sidecar, or timer in this slice.
+There is no worker unit, portal static root, model sidecar, or timer in this
+slice. The application package includes the bounded
+`ato-synthetic-intake-worker` drain command for `dev_local` synthetic JSON
+fixtures, but the installer does not deploy, configure, start, or credential
+that development-only process. It refuses production profiles and does not
+close **HS-005**.
 
 ## Host layout
 

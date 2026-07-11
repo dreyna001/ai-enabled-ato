@@ -232,6 +232,35 @@ only while the database still proves the revision is `uploading` with
 audit HMAC credentials or authentication dependencies required to append audit
 events are unavailable, the operation fails closed and reports no success.
 
+#### 2.1.6 Development synthetic JSON worker boundaries (P1.2)
+
+The P1.2 worker is not a production scanner or customer extraction path. It
+MUST fail startup unless `runtime_profile=dev_local`, and it claims only
+`data_origin=synthetic` revisions whose declared and detected artifact media
+types are all `application/json`. It MUST NOT claim customer, redacted
+non-production, non-JSON, or production-profile revisions. **HS-005** remains
+open.
+
+One claimed transition commits per transaction:
+
+- `scanning -> extracting` marks every pending artifact's synthetic scan result
+  `clean`, increments `revision_version`, and writes an
+  `outcome=succeeded` service audit event;
+- `extracting -> awaiting_confirmation` reads each durable blob through its
+  stored size and SHA-256 checks, deterministically emits pending
+  `FactProposal` rows with RFC 6901 target/source pointers,
+  `extraction_method=deterministic`, and `model_step_id=null`, marks extraction
+  `succeeded`, increments `revision_version`, and writes an
+  `outcome=succeeded` service audit event.
+
+Claim uses `SELECT ... FOR UPDATE SKIP LOCKED`. Extraction side effects and the
+state transition are atomic, so rollback leaves no partial proposals and a
+committed transition is not eligible for replay. Existing proposals on an
+`extracting` revision are an invariant failure and MUST NOT be duplicated.
+Invalid UTF-8/JSON or duplicate canonical pointers produces the legal
+`extracting -> invalid` transition with no partial proposals. No model or
+external scanner call is permitted in this path.
+
 ### 2.2 FactProposal review
 
 A proposal decision is legal only while its owning `PackageRevision` is

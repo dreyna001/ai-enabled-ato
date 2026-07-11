@@ -148,6 +148,15 @@ The application must never report success from a database row alone or from file
 
 Package revision finalization writes the durable `content-manifest.json` before the database transition to `scanning`. If that database transaction rolls back after the manifest is committed, the revision remains `uploading` with `content_manifest_sha256` still `null` while an on-disk manifest from the failed attempt remains. Retrying finalize with a changed artifact set would otherwise conflict forever because the writer treats any different existing manifest as immutable. Recovery is explicit and narrow: while holding the `PackageRevision` row `FOR UPDATE`, with status `uploading` and `content_manifest_sha256 IS NULL`, finalize may pass `replace_unreferenced_existing=true` to the manifest writer so it atomically replaces only that unreferenced orphan via the same temp → `fsync` → `os.replace` → directory-`fsync` sequence. The writer never unlinks the final path first; identical canonical bytes remain a no-op. All other callers keep the default `false` and receive `state_artifact_inconsistent` on conflict. A revision that already has a database digest, or any non-finalize caller, must not use replacement.
 
+The P1.2 synthetic intake command is development-only and drain-and-exit. It
+fails unless `runtime_profile=dev_local`, claims only
+`data_origin=synthetic` all-JSON revisions with `FOR UPDATE SKIP LOCKED`, and
+commits at most one lifecycle transition per transaction. A rollback therefore
+leaves the prior state and no partial proposals; a committed transition is no
+longer eligible for the same step. Missing audit credentials fail closed. The
+command has no production unit, external scanner, customer extraction path, or
+model call and does not close **HS-005**.
+
 Every immutable object contains or is referenced by a SHA-256 digest. Stored JSON contains `schema_version`. User display names and external IDs are never filesystem paths.
 
 ## 6. Worker leases, replay, and idempotency
