@@ -373,10 +373,13 @@ sensitivity: enum
 effective_data_labels: string[]
 authority_manifest_id: string
 content_manifest_sha256: sha256 | null
+revision_version: positive integer (initial 1; incremented once per successful artifact addition and once per successful lifecycle transition)
 status: uploading | scanning | extracting | awaiting_confirmation | ready | invalid | quarantined | archived
 created_by: user_id
 created_at: datetime
 ```
+
+`revision_version` is the optimistic-concurrency token. The strong ETag is the quoted form `"v{revision_version}"`. `POST /api/v1/package-revisions/{id}/confirm` requires `If-Match`; a missing header returns HTTP 428 `if_match_required` and a stale header returns HTTP 412 `etag_mismatch`.
 
 `content_manifest_sha256` is always present. It is `null` only while a revision is `uploading` or when an `archived` or `invalid` historical row never reached `scanning`. The `uploading -> scanning` transition requires a durable validated content manifest and atomically sets this SHA-256. A `ready` revision always has a non-null digest.
 
@@ -653,6 +656,16 @@ V1 supports:
 The API MUST NOT buffer a complete file or package in memory.
 
 The server generates storage keys. User filenames are display metadata only.
+
+#### 15.1.1 P1.1 upload, finalize, and confirm boundaries
+
+The System + PackageRevision HTTP slice defines intake boundaries only; it does not implement malware scanning, extraction, or synthetic worker processing. Customer extraction remains blocked while **HS-005** is open.
+
+- **Upload** is legal only while the revision is `uploading`. Bytes become durable on disk before any database reference. Each successful upload increments `revision_version` once and initializes `malware_scan_status=pending` and `extraction_status=pending` on the new `SourceArtifact`.
+- **Finalize** is legal only while the revision is `uploading`. The server writes a durable validated content manifest, atomically sets `content_manifest_sha256`, performs `uploading -> scanning`, and increments `revision_version` once. It does not claim scan or extraction completion.
+- **Confirm** is legal only while the revision is `awaiting_confirmation`, requires current `If-Match` (`"v{revision_version}"`), and succeeds only when every `FactProposal` is non-`pending`. It performs `awaiting_confirmation -> ready` and increments `revision_version` once.
+
+Scanning, extraction, and synthetic processing are later worker slices, not this amendment.
 
 ### 15.2 Allowed inputs
 
@@ -970,6 +983,8 @@ Expired leases on idempotent steps are requeued only while `attempt_count < TEXT
 6. The run is marked `succeeded` only after manifest durability and database commit.
 7. A reconciler removes unreferenced temporary objects and repairs detectable orphan references.
 
+For package mutations covered by the P1.1 API slice, domain state (including `revision_version` when incremented), the idempotency outcome record, and the append-only audit event commit atomically. Audit HMAC credentials are referenced only through deployment credentials; if authentication or audit dependencies required to append audit events are unavailable, the operation fails closed.
+
 Reports are never overwritten. Re-analysis creates a new run.
 
 ### 20.2 Targeted re-analysis
@@ -1015,6 +1030,21 @@ Package access is group-based and default-deny. Every object lookup enforces pac
 
 Emergency package access by a platform admin requires a break-glass grant with reason, second-person approval where configured, expiry, and audit.
 
+### 21.3 Pre-EP-06 package-route authentication boundary
+
+Package routes require an injected authenticated principal with `actor_id` and `groups`. No request header may self-assert identity; external identity headers are ignored for authorization.
+
+Until OIDC/session runtime exists, the production application returns HTTP 401 `authentication_required` on package routes. Contract and service tests may override or inject the authentication dependency.
+
+Package mutations also require validated CSRF context. No insecure development bypass and no `LOCAL_PASSWORD_AUTH_ENABLED` path exist for these mutations.
+
+Object authorization for the P1.1 slice is default-deny:
+
+- reads require membership in `System.owner_group` or `System.viewer_groups`;
+- mutations require `System.owner_group` membership.
+
+Unauthorized access returns HTTP 403 `authorization_denied` without leaking sensitive object details.
+
 ## 22. API contract
 
 The implementation MUST publish OpenAPI 3.1 before API code.
@@ -1035,9 +1065,9 @@ retryable
 
 List APIs use opaque cursor pagination with default limit 50 and maximum 100.
 
-`Idempotency-Key` is required on revision creation/finalization, run start, review submission, export-draft creation, approval decision, and export delivery.
+`Idempotency-Key` is required on system creation, revision creation, file upload, revision finalization, revision confirmation, run start, review submission, export-draft creation, approval decision, and export delivery. Replay with the same key and normalized request digest returns the original outcome. Reuse with a different digest returns HTTP 409 `idempotency_key_conflict`. Idempotency records for these replay-safe operations are retained for 24 hours from first successful completion; this interval is a protocol invariant, not an operator setting. Expired records may be deleted; key reuse after expiry is allowed only after row removal and does not affect immutable artifacts.
 
-Mutable review APIs use ETag and `If-Match`; stale writes return 412. Illegal state transitions return 409.
+`PackageRevision` resources expose strong ETag `"v{revision_version}"`. `POST /api/v1/package-revisions/{id}/confirm` requires `If-Match`; a missing header returns HTTP 428 `if_match_required` and a stale header returns HTTP 412 `etag_mismatch`. Other mutable review APIs use ETag and `If-Match`; stale writes return 412. Illegal state transitions return 409.
 
 Minimum endpoint groups:
 
@@ -1490,7 +1520,7 @@ The plan is implementation-ready only when P-1 has:
 
 When these criteria are met, record the outcome in `docs/P1_GATE_RECORD.md`. P0 core safety work may then proceed. Authority-dependent implementation and release remain blocked while HS-001 is open. Customer-specific hard stops remain scoped to the phases that need them.
 
-Job, attempt, pending-approval expiry, and disposition decision contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. Persistence, worker lease handling, approval timers, and disposition routes remain implementation work in P1 and EP-06 respectively.
+Job, attempt, pending-approval expiry, disposition decision, and P1.1 System + PackageRevision API contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. Persistence, HTTP/service routes, worker lease handling, approval timers, OIDC/session runtime, and disposition routes remain implementation work in P1 and EP-06 respectively.
 
 Feature implementation MUST NOT infer missing contracts or bypass open hard stops for authority-dependent, customer-specific, production, or qualification work.
 

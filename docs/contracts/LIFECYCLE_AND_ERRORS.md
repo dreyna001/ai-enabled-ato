@@ -44,9 +44,13 @@ The following rules apply to every state machine:
 5. An idempotent replay with the same `Idempotency-Key` and the same normalized
    request returns the original outcome and does not repeat a transition,
    completed model step, approval decision, or export.
-6. Reuse of an `Idempotency-Key` for a different normalized request is a
-   conflict and performs no state change.
-7. State transitions are server-enforced. A client-supplied state is never
+6. Reuse of an `Idempotency-Key` for a different normalized request digest is a
+   conflict (`idempotency_key_conflict`, HTTP 409) and performs no state change.
+7. Idempotency records for the P1.1 replay-safe operations listed in Section
+   2.1.4 are retained for exactly 24 hours from first successful completion.
+   Expired records may be deleted. Key reuse after expiry is allowed only after
+   the prior row is removed; reuse does not alter immutable artifacts.
+8. State transitions are server-enforced. A client-supplied state is never
    authoritative.
 
 ## 2. Legal state transitions
@@ -95,6 +99,125 @@ No other `PackageRevision` transition is legal. In particular:
 - `invalid` and `quarantined` MUST NOT be repaired in place.
 - A transient model, database, storage, scanner, or network failure MUST NOT
   quarantine otherwise valid source material.
+
+#### 2.1.1 Optimistic concurrency (`revision_version`)
+
+Each `PackageRevision` persists a positive integer `revision_version`. The
+initial value is `1` on creation. The server increments `revision_version`
+exactly once for:
+
+- each successful source-artifact addition through
+  `POST /api/v1/package-revisions/{id}/files`, and
+- each successful lifecycle transition of the owning revision.
+
+The strong ETag for a `PackageRevision` is the quoted form `"v{revision_version}"`.
+`GET`, revision creation, file upload, finalize, and confirm responses return
+the current ETag in the `ETag` response header where applicable. File upload
+returns the revision ETag even though the response body is a `SourceArtifact`.
+
+`POST /api/v1/package-revisions/{id}/confirm` requires `If-Match` against the
+current revision ETag. A missing header returns HTTP 428 `if_match_required`. A
+stale header returns HTTP 412 `etag_mismatch`. Illegal parent state or pending
+proposals remain HTTP 409 or HTTP 422 as listed in Section 4; they are not
+reported as stale ETags.
+
+#### 2.1.2 Upload, finalize, and confirm boundaries (P1.1)
+
+These rules define the HTTP/service contract for the System + PackageRevision
+slice. They do not implement malware scanning, extraction, or synthetic worker
+processing. Customer extraction remains blocked while **HS-005** is open.
+
+**Upload** (`POST /api/v1/package-revisions/{id}/files`):
+
+- Legal only while the owning revision is `uploading`.
+- Bytes are streamed to a generated temporary path, `fsync`ed, validated, and
+  atomically renamed to content-addressed final storage before any database row
+  references the blob.
+- A successful upload inserts the `SourceArtifact` reference and increments
+  `revision_version` exactly once.
+- New artifacts initialize `malware_scan_status=pending` and
+  `extraction_status=pending`. The API does not perform scan or extraction.
+
+**Finalize** (`POST /api/v1/package-revisions/{id}/finalize`):
+
+- Legal only while the revision is `uploading`.
+- The server writes a durable validated `content-manifest.json`, then performs
+  the `uploading -> scanning` transition atomically with manifest digest
+  assignment and `revision_version` increment.
+- No scan or extraction work is claimed complete by this operation.
+
+**Confirm** (`POST /api/v1/package-revisions/{id}/confirm`):
+
+- Legal only while the revision is `awaiting_confirmation`.
+- Requires current `If-Match`, `Idempotency-Key`, authenticated principal,
+  owner-group authorization, and validated CSRF context.
+- Succeeds only when every `FactProposal` for the revision is non-`pending`.
+- Performs `awaiting_confirmation -> ready` atomically with
+  `revision_version` increment and seals canonical facts.
+
+#### 2.1.3 Authentication and object authorization (pre-EP-06)
+
+Package routes require an injected authenticated principal carrying `actor_id`
+and `groups`. No request header may self-assert identity; external
+`X-User-Id`, `X-Groups`, or equivalent headers are ignored for authorization.
+
+Until OIDC/session runtime exists (**EP-06**), the production application
+returns HTTP 401 `authentication_required` for package routes. Contract and
+service tests may override or inject the authentication dependency.
+
+Mutations also require a validated CSRF context (`X-CSRF-Token` plus
+server-side Origin validation). No insecure development bypass and no
+`LOCAL_PASSWORD_AUTH_ENABLED` path exist for package mutations.
+
+Object authorization for this slice is default-deny:
+
+- **Reads** (`GET` system, list revisions, get revision, list proposals):
+  principal must be a member of `System.owner_group` or one of
+  `System.viewer_groups`.
+- **Mutations** (create system, create revision, upload, finalize, confirm,
+  proposal accept/reject): principal must be a member of `System.owner_group`.
+
+Unauthorized access returns HTTP 403 `authorization_denied` without leaking
+sensitive object existence or field details beyond what the route contract
+requires.
+
+#### 2.1.4 Idempotency-required operations (P1.1)
+
+`Idempotency-Key` is required on:
+
+| Operation | Route |
+| --- | --- |
+| Create system | `POST /api/v1/systems` |
+| Create revision | `POST /api/v1/systems/{system_id}/package-revisions` |
+| Upload artifact | `POST /api/v1/package-revisions/{id}/files` |
+| Finalize upload | `POST /api/v1/package-revisions/{id}/finalize` |
+| Confirm revision | `POST /api/v1/package-revisions/{id}/confirm` |
+
+Replay semantics:
+
+- same key + same normalized request digest → return the stored HTTP status,
+  headers (including `ETag` where applicable), and body without repeating
+  domain mutation, filesystem writes, or audit side effects beyond the stored
+  idempotency outcome record;
+- same key + different digest → HTTP 409 `idempotency_key_conflict`, no state
+  change.
+
+Idempotency records are retained for 24 hours from first successful
+completion. This retention interval is a protocol invariant, not an operator
+setting.
+
+#### 2.1.5 Transaction and audit boundaries (P1.1)
+
+For applicable package mutations, the server commits atomically:
+
+1. domain state change (including `revision_version` when incremented),
+2. idempotency outcome record, and
+3. append-only audit event.
+
+Filesystem bytes and `content-manifest.json` MUST become durable before database
+references that depend on them. If audit HMAC credentials or authentication
+dependencies required to append audit events are unavailable, the operation
+fails closed and reports no success.
 
 ### 2.2 FactProposal review
 
@@ -601,8 +724,9 @@ The following invariants are mandatory:
 5. A human must accept or edit every required LLM-normalized proposal before
    its value enters a ready revision.
 6. A review revision does not modify immutable model output.
-7. Mutable review and proposal writes require a current ETag. Stale writes are
-   HTTP 412, not HTTP 409.
+7. Mutable review, proposal, and package-confirmation writes require a current
+   ETag. Stale writes are HTTP 412, not HTTP 409. Missing required `If-Match`
+   on confirm is HTTP 428.
 8. The export submitter cannot approve the same export.
 9. Approval is bound to the exact `payload_manifest_sha256`. Any payload or
    review change invalidates the pending or approved use and transitions the

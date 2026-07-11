@@ -200,6 +200,9 @@
           "400": {
             "$ref": "#/components/responses/ProblemResponse"
           },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
           "403": {
             "$ref": "#/components/responses/ProblemResponse"
           },
@@ -260,6 +263,9 @@
               }
             }
           },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
           "403": {
             "$ref": "#/components/responses/ProblemResponse"
           },
@@ -283,6 +289,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/PackageRevisionResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
           },
           "403": {
             "$ref": "#/components/responses/ProblemResponse"
@@ -366,6 +375,11 @@
         "responses": {
           "201": {
             "description": "Stored source artifact",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -375,6 +389,9 @@
             }
           },
           "400": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "401": {
             "$ref": "#/components/responses/ProblemResponse"
           },
           "403": {
@@ -419,6 +436,9 @@
           "202": {
             "$ref": "#/components/responses/PackageRevisionResponse"
           },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
           "403": {
             "$ref": "#/components/responses/ProblemResponse"
           },
@@ -458,6 +478,9 @@
           "200": {
             "$ref": "#/components/responses/PackageRevisionResponse"
           },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
           "403": {
             "$ref": "#/components/responses/ProblemResponse"
           },
@@ -468,6 +491,9 @@
             "$ref": "#/components/responses/ProblemResponse"
           },
           "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "428": {
             "$ref": "#/components/responses/ProblemResponse"
           },
           "default": {
@@ -1678,7 +1704,7 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9._:-]{16,128}$"
         },
-        "description": "Required for contract-designated replay-safe operations. Reusing a key with the same request returns the original outcome; reusing it with a different request returns 409."
+        "description": "Required for contract-designated replay-safe operations. The server stores a normalized request digest with the original outcome for 24 hours from first successful completion. Reusing a key with the same normalized request returns the original outcome without repeating side effects. Reusing a key with a different digest returns HTTP 409 idempotency_key_conflict. After expiry the record may be deleted; key reuse is allowed only after row removal and does not affect immutable artifacts."
       },
       "IfMatch": {
         "name": "If-Match",
@@ -1688,7 +1714,7 @@
           "type": "string",
           "pattern": "^\\\"[A-Za-z0-9._:-]{1,128}\\\"$"
         },
-        "description": "Strong ETag for the current target representation. For a disposition, use the quoted decimal value of its current version. A stale value returns 412; weak tags and '*' are rejected."
+        "description": "Strong ETag for the current target representation. PackageRevision resources use the quoted form \"v{revision_version}\". Disposition mutations use the quoted decimal disposition version. A stale value returns HTTP 412 etag_mismatch; a missing required header returns HTTP 428 if_match_required. Weak tags and '*' are rejected."
       },
       "CsrfToken": {
         "name": "X-CSRF-Token",
@@ -1704,7 +1730,7 @@
     },
     "headers": {
       "ETag": {
-        "description": "Strong current resource version. Disposition ETags are the quoted decimal disposition version.",
+        "description": "Strong current resource version. PackageRevision ETags are the quoted form \"v{revision_version}\". Disposition ETags are the quoted decimal disposition version.",
         "schema": {
           "type": "string",
           "pattern": "^\\\"[A-Za-z0-9._:-]{1,128}\\\"$"

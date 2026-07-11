@@ -144,7 +144,7 @@ Run persistence follows this order:
 3. Write `artifact-manifest.json` last.
 4. Mark the run `succeeded` only after manifest durability and the database commit.
 
-The application must never report success from a database row alone or from files lacking a durable manifest. State changes and their material audit outcomes must remain consistent. Illegal transitions return HTTP `409` and write a denied audit event. Mutable review updates require `If-Match`; stale writes return `412`.
+The application must never report success from a database row alone or from files lacking a durable manifest. State changes and their material audit outcomes must remain consistent. Illegal transitions return HTTP `409` and write a denied audit event. `PackageRevision` mutations covered by the P1.1 API slice commit domain state (including `revision_version` when incremented), the idempotency outcome record, and the append-only audit event atomically. Mutable review updates require `If-Match`; stale writes return `412`. `POST /api/v1/package-revisions/{id}/confirm` without `If-Match` returns `428`.
 
 Every immutable object contains or is referenced by a SHA-256 digest. Stored JSON contains `schema_version`. User display names and external IDs are never filesystem paths.
 
@@ -179,7 +179,9 @@ Expired idempotent leases are requeued only while transport budget remains. At m
 
 Network errors, HTTP `429`, and HTTP `5xx` use exponential backoff with jitter, honor `Retry-After`, and remain bounded by configured attempts and the run deadline. Authentication, authorization, malformed requests, policy failures, and other HTTP `4xx` responses are not transport-retryable. One schema-repair attempt is separate from transport retry.
 
-`Idempotency-Key` is required for revision creation/finalization, run start, export-draft creation, approval decision, and export delivery. Export delivery has a unique durable record. V1 performs no external writeback.
+`Idempotency-Key` is required on system creation, revision creation, file upload, revision finalization, revision confirmation, run start, export-draft creation, approval decision, and export delivery. Replay with the same key and normalized request digest returns the original outcome without repeating side effects. Reuse with a different digest returns HTTP `409` `idempotency_key_conflict`. Idempotency records are retained for 24 hours from first successful completion as a protocol invariant, not an operator setting. Expired records may be deleted; key reuse after expiry is allowed only after row removal and does not affect immutable artifacts. Export delivery has a unique durable record. V1 performs no external writeback.
+
+Package routes require an injected authenticated principal with `actor_id` and `groups`; no request header may self-assert identity. Until OIDC/session runtime exists, the production application returns HTTP `401` `authentication_required`. Package mutations also require validated CSRF context; no insecure development bypass or `LOCAL_PASSWORD_AUTH_ENABLED` path exists. Reads require `System.owner_group` or `viewer_groups` membership; mutations require `owner_group` membership. Unauthorized access returns HTTP `403` `authorization_denied` without leaking sensitive object details. Audit HMAC credentials remain deployment-credential-referenced; unavailable authentication or audit dependencies fail closed.
 
 ## 7. Logging, audit, metrics, and disk thresholds
 

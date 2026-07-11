@@ -515,6 +515,7 @@
         "effective_data_labels",
         "authority_manifest_id",
         "content_manifest_sha256",
+        "revision_version",
         "status",
         "created_by",
         "created_at"
@@ -593,6 +594,11 @@
         "content_manifest_sha256": {
           "$ref": "#/$defs/Sha256OrNull",
           "$comment": "Required field. Null only during pre-finalization states: uploading, and archived or invalid historical rows that never reached scanning. The uploading -> scanning transition requires a durable validated content manifest and atomically sets this SHA-256. ready always has a non-null digest."
+        },
+        "revision_version": {
+          "type": "integer",
+          "minimum": 1,
+          "$comment": "Optimistic-concurrency token persisted with the revision. Initial value 1 on creation. Incremented exactly once for each successful source-artifact addition and each successful lifecycle transition. Exposed as strong ETag \"v{revision_version}\"."
         },
         "status": {
           "enum": [

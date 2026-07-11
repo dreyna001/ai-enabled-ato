@@ -91,14 +91,25 @@ REQUIRED_API_METHODS = {
 }
 
 IDEMPOTENCY_KEY_OPERATIONS = {
+    ("post", "/systems"),
     ("post", "/systems/{system_id}/package-revisions"),
+    ("post", "/package-revisions/{id}/files"),
     ("post", "/package-revisions/{id}/finalize"),
+    ("post", "/package-revisions/{id}/confirm"),
     ("post", "/package-revisions/{id}/runs"),
     ("post", "/review-revisions/{id}/submit"),
     ("post", "/review-revisions/{id}/export-drafts"),
     ("post", "/approvals/{id}/approve"),
     ("post", "/approvals/{id}/reject"),
     ("get", "/exports/{id}/download"),
+}
+
+P11_IDEMPOTENCY_KEY_OPERATIONS = {
+    ("post", "/systems"),
+    ("post", "/systems/{system_id}/package-revisions"),
+    ("post", "/package-revisions/{id}/files"),
+    ("post", "/package-revisions/{id}/finalize"),
+    ("post", "/package-revisions/{id}/confirm"),
 }
 
 IF_MATCH_OPERATIONS = {
@@ -435,6 +446,10 @@ def test_openapi_idempotency_concurrency_and_security_contracts() -> None:
         assert "412" in openapi["paths"][path][method]["responses"], (
             f"{method.upper()} {path} must declare stale-write response 412"
         )
+    confirm = openapi["paths"]["/package-revisions/{id}/confirm"]["post"]
+    assert "428" in confirm["responses"], (
+        "POST /package-revisions/{id}/confirm must declare missing-precondition response 428"
+    )
 
     assert openapi["security"] == [{"sessionCookie": []}]
     session_cookie = openapi["components"]["securitySchemes"]["sessionCookie"]
@@ -902,6 +917,9 @@ def test_frozen_contract_amendment_cross_doc_consistency() -> None:
     assert "Sha256OrNull" in domain_schema["$defs"]
 
     assert "content_manifest_sha256: sha256 | null" in technical_spec
+    assert "revision_version" in package_revision["required"]
+    assert package_revision["properties"]["revision_version"]["minimum"] == 1
+    assert '"v{revision_version}"' in technical_spec
     assert "uploading -> scanning" in lifecycle
     assert "atomically sets" in lifecycle
     assert "DATABASE_DSN_CREDENTIAL_REFERENCE" in technical_spec
@@ -1164,3 +1182,83 @@ def test_disposition_decision_graph_is_contract_only() -> None:
         "evidence_requested",
         "weakness_confirmed",
     }
+
+
+def test_p11_system_package_revision_api_contract() -> None:
+    openapi = _load_json(CONTRACTS_DIR / "openapi.json")
+    domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
+    technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
+    lifecycle = _lifecycle_markdown()
+    operations = OPERATIONS_PATH.read_text(encoding="utf-8")
+    parameters = openapi["components"]["parameters"]
+    package_revision = domain["$defs"]["PackageRevision"]
+
+    assert "revision_version" in package_revision["required"]
+    assert package_revision["properties"]["revision_version"]["type"] == "integer"
+    assert package_revision["properties"]["revision_version"]["minimum"] == 1
+
+    etag_header = openapi["components"]["headers"]["ETag"]
+    if_match = parameters["IfMatch"]
+    assert "v{revision_version}" in etag_header["description"]
+    assert "v{revision_version}" in if_match["description"]
+    assert "428" in if_match["description"]
+    assert "if_match_required" in if_match["description"]
+
+    idempotency = parameters["IdempotencyKey"]
+    assert "24 hours" in idempotency["description"]
+    assert "idempotency_key_conflict" in idempotency["description"]
+
+    for method, path in P11_IDEMPOTENCY_KEY_OPERATIONS:
+        assert "IdempotencyKey" in _operation_parameters(openapi, method, path), (
+            f"{method.upper()} {path} must require Idempotency-Key"
+        )
+
+    upload_response = openapi["paths"]["/package-revisions/{id}/files"]["post"][
+        "responses"
+    ]["201"]
+    assert "ETag" in upload_response["headers"]
+
+    for response_name in ("PackageRevisionResponse",):
+        assert "ETag" in openapi["components"]["responses"][response_name]["headers"]
+
+    confirm = openapi["paths"]["/package-revisions/{id}/confirm"]["post"]
+    assert "IfMatch" in _operation_parameters(openapi, "post", "/package-revisions/{id}/confirm")
+    assert "428" in confirm["responses"]
+    assert "412" in confirm["responses"]
+
+    auth_fragments = (
+        ("injected authenticated principal", lifecycle, technical_spec, operations),
+        ("actor_id", lifecycle, technical_spec, operations),
+        ("groups", lifecycle, technical_spec, operations),
+        ("self-assert identity", lifecycle, technical_spec, operations),
+        ("authentication_required", lifecycle, technical_spec, operations),
+        ("LOCAL_PASSWORD_AUTH_ENABLED", lifecycle, technical_spec, operations),
+        ("authorization_denied", lifecycle, technical_spec, operations),
+        ("owner_group", lifecycle, technical_spec, operations),
+        ("viewer_groups", lifecycle, technical_spec, operations),
+        ("CSRF", lifecycle, technical_spec, operations),
+    )
+    for fragment, lifecycle_text, spec_text, operations_text in auth_fragments:
+        assert fragment in lifecycle_text, f"missing lifecycle P1.1 auth boundary: {fragment}"
+        assert fragment in spec_text, f"missing technical-spec P1.1 auth boundary: {fragment}"
+        assert fragment in operations_text, f"missing operations P1.1 auth boundary: {fragment}"
+
+    boundary_fragments = (
+        "`uploading`",
+        "durable",
+        "malware_scan_status=pending",
+        "extraction_status=pending",
+        "uploading -> scanning",
+        "awaiting_confirmation -> ready",
+        "non-`pending`",
+        "HS-005",
+        "24 hours",
+        "idempotency outcome record",
+        "commits atomically",
+    )
+    for fragment in boundary_fragments:
+        assert fragment in lifecycle, f"missing lifecycle P1.1 boundary: {fragment}"
+
+    assert "HTTP/service routes remain planned/partial" in (
+        TRACEABILITY_PATH.read_text(encoding="utf-8")
+    )

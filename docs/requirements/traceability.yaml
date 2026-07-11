@@ -204,11 +204,20 @@
       "requirement_id": "R-016",
       "spec_section": "32",
       "requirement_text": "Consequential requests are idempotent and mutable resources enforce optimistic concurrency.",
-      "epic": "EP-06-review-portal",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned idempotency, duplicate-request, ETag, and stale-write conflict tests",
-      "status": "planned"
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "docs/contracts/openapi.json",
+        "docs/OPERATIONS_AND_RECOVERY.md"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts",
+        "tests/test_contracts.py::test_p11_system_package_revision_api_contract"
+      ],
+      "verification_type": "P1.1 contract tests for revision_version ETag, 428/412 confirm preconditions, five-operation idempotency set, 24-hour retention invariant, and auth boundary text; HTTP/service route implementation remains planned/partial",
+      "status": "partial"
     },
     {
       "requirement_id": "R-017",
@@ -675,9 +684,10 @@
       "test_ids": [
         "tests/test_contracts.py::test_openapi_references_are_local_and_resolve_recursively",
         "tests/test_contracts.py::test_openapi_minimum_methods_and_health_root_override",
-        "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts"
+        "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts",
+        "tests/test_contracts.py::test_p11_system_package_revision_api_contract"
       ],
-      "verification_type": "OpenAPI parse, recursive reference, method, security, idempotency, and concurrency validation complete; info.version frozen at 1.0.0",
+      "verification_type": "OpenAPI parse, recursive reference, method, security, idempotency, concurrency, and P1.1 package-route contract validation complete; info.version frozen at 1.0.0; HTTP/service routes remain planned/partial",
       "status": "implemented"
     },
     {
@@ -697,9 +707,10 @@
         "tests/test_contracts.py::test_job_attempt_status_field_invariants",
         "tests/test_contracts.py::test_expired_lease_recovery_contract_semantics",
         "tests/test_contracts.py::test_pending_approval_expiry_uses_approval_expiry_days_default",
-        "tests/test_contracts.py::test_disposition_decision_graph_is_contract_only"
+        "tests/test_contracts.py::test_disposition_decision_graph_is_contract_only",
+        "tests/test_contracts.py::test_p11_system_package_revision_api_contract"
       ],
-      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, reviewed expired-lease recovery, HS-010 pending_approval expiry formula, and EP-06-bounded disposition decision graph; job persistence implements the contract while public package routes, approval timers, and portal disposition routes remain unimplemented",
+      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, reviewed expired-lease recovery, HS-010 pending_approval expiry formula, EP-06-bounded disposition decision graph, and P1.1 System + PackageRevision optimistic concurrency, idempotency, auth boundary, and upload/finalize/confirm semantics; job persistence implements the P1.0 contract while public package HTTP/service routes, approval timers, OIDC/session runtime, and portal disposition routes remain planned/partial",
       "status": "implemented"
     },
     {
