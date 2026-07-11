@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "33333333-3333-4333-8333-333333333333",
+  "package_revision_id": "11111111-1111-4111-8111-111111111111",
+  "authority_manifest_id": "authority.v2",
+  "analysis_profile_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "prompt_bundle_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "completed_at": "2026-07-10T20:00:00Z",
+  "files": [
+    {
+      "path": "human/assessment-results.md",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "size_bytes": 2048
+    }
+  ]
+}

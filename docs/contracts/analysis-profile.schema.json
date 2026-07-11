@@ -1,0 +1,766 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/analysis-profile.schema.json",
+  "title": "ATO Deterministic Analysis Profile",
+  "$comment": "Semantic validation MUST enforce unique assessment-item, artifact, and cadence-rule identifiers; resolve every authority reference against the pinned authority manifest; verify the profile digest used by a run; and evaluate status ceilings, exact expected-row coverage, evidence staleness, and applicability against package facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "profile_version",
+    "authority_manifest_id",
+    "generated_at",
+    "qualification_status",
+    "certification_class",
+    "impact_level",
+    "assessment_items",
+    "artifact_requirements",
+    "cadence_rules",
+    "status_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.0.0"
+    },
+    "profile_id": {
+      "enum": [
+        "fedramp_20x_program",
+        "fedramp_rev5_transition",
+        "fisma_agency_security"
+      ]
+    },
+    "profile_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "authority_manifest_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "qualification_status": {
+      "enum": [
+        "draft",
+        "qualified",
+        "retired"
+      ]
+    },
+    "certification_class": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "B",
+        "C",
+        null
+      ]
+    },
+    "impact_level": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "low",
+        "moderate",
+        "high",
+        null
+      ]
+    },
+    "assessment_items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/assessmentItem"
+      }
+    },
+    "artifact_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/artifactRequirement"
+      }
+    },
+    "cadence_rules": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/cadenceRule"
+      }
+    },
+    "status_policy": {
+      "$ref": "#/$defs/statusPolicy"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "profile_id": {
+            "const": "fedramp_20x_program"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "certification_class": {
+            "enum": [
+              "B",
+              "C"
+            ]
+          },
+          "impact_level": {
+            "type": "null"
+          },
+          "assessment_items": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assessmentItem"
+                },
+                {
+                  "properties": {
+                    "assessment_item_type": {
+                      "enum": [
+                        "fedramp_rule",
+                        "fedramp_ksi"
+                      ]
+                    },
+                    "applicability": {
+                      "properties": {
+                        "paths": {
+                          "items": {
+                            "const": "program"
+                          }
+                        },
+                        "impact_levels": {
+                          "maxItems": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "profile_id": {
+            "const": "fedramp_rev5_transition"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "certification_class": {
+            "type": "null"
+          },
+          "impact_level": {
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ]
+          },
+          "assessment_items": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assessmentItem"
+                },
+                {
+                  "properties": {
+                    "assessment_item_type": {
+                      "const": "nist_control"
+                    },
+                    "applicability": {
+                      "properties": {
+                        "paths": {
+                          "items": {
+                            "const": "rev5_transition"
+                          }
+                        },
+                        "classes": {
+                          "maxItems": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "profile_id": {
+            "const": "fisma_agency_security"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "certification_class": {
+            "type": "null"
+          },
+          "impact_level": {
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ]
+          },
+          "assessment_items": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assessmentItem"
+                },
+                {
+                  "properties": {
+                    "assessment_item_type": {
+                      "const": "nist_control"
+                    },
+                    "applicability": {
+                      "properties": {
+                        "paths": {
+                          "items": {
+                            "const": "agency_fisma"
+                          }
+                        },
+                        "classes": {
+                          "maxItems": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "certification_class": {
+            "const": "B"
+          }
+        },
+        "required": [
+          "certification_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "assessment_items": {
+            "items": {
+              "properties": {
+                "applicability": {
+                  "properties": {
+                    "classes": {
+                      "contains": {
+                        "const": "B"
+                      },
+                      "minContains": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "certification_class": {
+            "const": "C"
+          }
+        },
+        "required": [
+          "certification_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "assessment_items": {
+            "items": {
+              "properties": {
+                "applicability": {
+                  "properties": {
+                    "classes": {
+                      "contains": {
+                        "const": "C"
+                      },
+                      "minContains": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "impact_level": {
+            "const": "low"
+          }
+        },
+        "required": [
+          "impact_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "assessment_items": {
+            "items": {
+              "properties": {
+                "applicability": {
+                  "properties": {
+                    "impact_levels": {
+                      "contains": {
+                        "const": "low"
+                      },
+                      "minContains": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "impact_level": {
+            "const": "moderate"
+          }
+        },
+        "required": [
+          "impact_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "assessment_items": {
+            "items": {
+              "properties": {
+                "applicability": {
+                  "properties": {
+                    "impact_levels": {
+                      "contains": {
+                        "const": "moderate"
+                      },
+                      "minContains": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "impact_level": {
+            "const": "high"
+          }
+        },
+        "required": [
+          "impact_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "assessment_items": {
+            "items": {
+              "properties": {
+                "applicability": {
+                  "properties": {
+                    "impact_levels": {
+                      "contains": {
+                        "const": "high"
+                      },
+                      "minContains": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "authorityRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_id",
+        "source_pointer"
+      ],
+      "properties": {
+        "authority_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "source_pointer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "paths",
+        "classes",
+        "impact_levels",
+        "affects"
+      ],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "program",
+              "rev5_transition",
+              "agency_fisma"
+            ]
+          }
+        },
+        "classes": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "B",
+              "C"
+            ]
+          }
+        },
+        "impact_levels": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ]
+          }
+        },
+        "affects": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "provider",
+              "assessor",
+              "agency",
+              "fedramp",
+              "system_owner"
+            ]
+          }
+        }
+      }
+    },
+    "assessmentItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessment_item_type",
+        "assessment_item_id",
+        "title",
+        "requirement_text",
+        "force",
+        "owner",
+        "applicability",
+        "authority_refs",
+        "required_evidence_kinds",
+        "model_analysis_allowed"
+      ],
+      "properties": {
+        "assessment_item_type": {
+          "enum": [
+            "nist_control",
+            "fedramp_rule",
+            "fedramp_ksi"
+          ]
+        },
+        "assessment_item_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9()._-]{1,127}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "requirement_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "force": {
+          "enum": [
+            "MUST",
+            "MUST_NOT",
+            "SHOULD",
+            "SHOULD_NOT",
+            "MAY",
+            "customer_required"
+          ]
+        },
+        "owner": {
+          "enum": [
+            "provider",
+            "assessor",
+            "agency",
+            "fedramp",
+            "system_owner",
+            "shared"
+          ]
+        },
+        "applicability": {
+          "$ref": "#/$defs/applicability"
+        },
+        "authority_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/authorityRef"
+          }
+        },
+        "required_evidence_kinds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,63}$"
+          }
+        },
+        "model_analysis_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "artifactRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "display_name",
+        "required",
+        "owner",
+        "official_schema_authority_id",
+        "human_readable_required",
+        "machine_readable_required",
+        "export_paths",
+        "authority_refs"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "owner": {
+          "enum": [
+            "provider",
+            "assessor",
+            "agency",
+            "system_owner",
+            "product_analysis",
+            "shared"
+          ]
+        },
+        "official_schema_authority_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "human_readable_required": {
+          "type": "boolean"
+        },
+        "machine_readable_required": {
+          "type": "boolean"
+        },
+        "export_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(human|machine|provenance|validation)/[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+            "maxLength": 512
+          }
+        },
+        "authority_refs": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/authorityRef"
+          }
+        }
+      }
+    },
+    "cadenceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cadence_rule_id",
+        "description",
+        "date_field",
+        "comparison",
+        "duration_days",
+        "severity",
+        "authority_refs"
+      ],
+      "properties": {
+        "cadence_rule_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{2,127}$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "date_field": {
+          "type": "string",
+          "pattern": "^(/([^~/]|~[01])*)+$",
+          "maxLength": 1000
+        },
+        "comparison": {
+          "enum": [
+            "age_at_most",
+            "interval_at_most",
+            "history_at_least",
+            "date_not_after",
+            "date_not_before"
+          ]
+        },
+        "duration_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650
+        },
+        "severity": {
+          "enum": [
+            "analysis_blocker",
+            "export_blocker",
+            "warning"
+          ]
+        },
+        "authority_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/authorityRef"
+          }
+        }
+      }
+    },
+    "statusPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed_statuses",
+        "no_evidence_status",
+        "incomplete_context_ceiling",
+        "all_stale_ceiling",
+        "system_may_be_more_favorable_than_model",
+        "exact_row_coverage_required",
+        "repair_attempts"
+      ],
+      "properties": {
+        "allowed_statuses": {
+          "const": [
+            "supported",
+            "partial",
+            "unsupported",
+            "insufficient_evidence"
+          ]
+        },
+        "no_evidence_status": {
+          "const": "insufficient_evidence"
+        },
+        "incomplete_context_ceiling": {
+          "const": "partial"
+        },
+        "all_stale_ceiling": {
+          "const": "partial"
+        },
+        "system_may_be_more_favorable_than_model": {
+          "const": false
+        },
+        "exact_row_coverage_required": {
+          "const": true
+        },
+        "repair_attempts": {
+          "const": 1
+        }
+      }
+    }
+  }
+}

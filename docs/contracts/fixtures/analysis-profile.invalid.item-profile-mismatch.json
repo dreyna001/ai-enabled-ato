@@ -1,0 +1,78 @@
+{
+  "schema_version": "2.0.0",
+  "profile_id": "fisma_agency_security",
+  "profile_version": "2.0.0",
+  "authority_manifest_id": "authority.v2",
+  "generated_at": "2026-07-10T20:00:00Z",
+  "qualification_status": "draft",
+  "certification_class": null,
+  "impact_level": "moderate",
+  "assessment_items": [
+    {
+      "assessment_item_type": "fedramp_rule",
+      "assessment_item_id": "FR-1",
+      "title": "Mismatched program requirement",
+      "requirement_text": "This program item does not belong in a FISMA profile.",
+      "force": "MUST",
+      "owner": "provider",
+      "applicability": {
+        "paths": [
+          "program"
+        ],
+        "classes": [],
+        "impact_levels": [
+          "moderate"
+        ],
+        "affects": [
+          "provider"
+        ]
+      },
+      "authority_refs": [
+        {
+          "authority_id": "authority.v2",
+          "source_pointer": "/requirements/FR-1"
+        }
+      ],
+      "required_evidence_kinds": [
+        "evidence_document"
+      ],
+      "model_analysis_allowed": true
+    }
+  ],
+  "artifact_requirements": [
+    {
+      "artifact_id": "ssp_security",
+      "display_name": "Security Plan Draft",
+      "required": true,
+      "owner": "system_owner",
+      "official_schema_authority_id": null,
+      "human_readable_required": true,
+      "machine_readable_required": true,
+      "export_paths": [
+        "human/ssp-security-draft.md",
+        "machine/ssp-security-draft.json"
+      ],
+      "authority_refs": [
+        {
+          "authority_id": "authority.v2",
+          "source_pointer": "/artifacts/ssp-security"
+        }
+      ]
+    }
+  ],
+  "cadence_rules": [],
+  "status_policy": {
+    "allowed_statuses": [
+      "supported",
+      "partial",
+      "unsupported",
+      "insufficient_evidence"
+    ],
+    "no_evidence_status": "insufficient_evidence",
+    "incomplete_context_ceiling": "partial",
+    "all_stale_ceiling": "partial",
+    "system_may_be_more_favorable_than_model": false,
+    "exact_row_coverage_required": true,
+    "repair_attempts": 1
+  }
+}

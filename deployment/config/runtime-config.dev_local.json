@@ -1,0 +1,5 @@
+{
+  "schema_version": "1.0.0",
+  "runtime_profile": "dev_local",
+  "STORAGE_DATA_PATH": "/data/ato-storage"
+}

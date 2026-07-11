@@ -1,0 +1,758 @@
+{
+  "schema_version": "1.0.0",
+  "requirements": [
+    {
+      "requirement_id": "R-001",
+      "spec_section": "32",
+      "requirement_text": "All generated findings and status labels are draft-only and must never constitute an authorization decision.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md"
+      ],
+      "test_ids": [],
+      "verification_type": "Code review plus planned report, portal, and refusal tests",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-002",
+      "spec_section": "32",
+      "requirement_text": "Each installation serves exactly one customer enterprise.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned architecture and schema review",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-003",
+      "spec_section": "32",
+      "requirement_text": "FedRAMP 20x Program Class C packages conform to the reviewed official package contract and semantic rules.",
+      "epic": "EP-03-fedramp-20x",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Blocked by HS-001; planned official-schema and semantic end-to-end validation",
+      "status": "blocked"
+    },
+    {
+      "requirement_id": "R-004",
+      "spec_section": "32",
+      "requirement_text": "The agency FISMA workflow is restricted to the security-only authorization boundary.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/fixtures/domain.valid.fisma-package-revision.json"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_contract_fixtures_follow_contracts"
+      ],
+      "verification_type": "Published domain contract fixtures plus planned agency-boundary end-to-end validation",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-005",
+      "spec_section": "32",
+      "requirement_text": "DoD, intelligence-community, and classified authorization inputs are rejected.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/fixtures/domain.invalid.profile-boundary.json"
+      ],
+      "test_ids": [],
+      "verification_type": "Code review plus planned negative authorization-path and classified-data tests",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-006",
+      "spec_section": "32",
+      "requirement_text": "Deterministic routing policy is evaluated before every model call.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/model_routing.py",
+        "src/ato_service/model_gateway.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_model_routing.py",
+        "tests/ato_service/test_model_gateway.py::test_routing_evaluated_before_callback_on_policy_denial",
+        "tests/ato_service/test_model_gateway.py::test_routing_evaluated_before_callback_on_allowed_call",
+        "tests/ato_service/test_model_gateway.py::test_allowed_route_with_disabled_vision_fails_closed_with_zero_calls"
+      ],
+      "verification_type": "Deterministic routing-policy and model-gateway unit tests with zero-call policy-ordering coverage; no production worker or model callsite exists yet",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-007",
+      "spec_section": "32",
+      "requirement_text": "Package revisions and analysis runs are immutable and replay cannot mutate prior artifacts.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "src/ato_service/blobs.py",
+        "src/ato_service/content_manifests.py",
+        "src/ato_service/storage_reconciliation.py",
+        "src/ato_service/db/dsn.py",
+        "src/ato_service/db/models.py",
+        "src/ato_service/db/session.py",
+        "src/ato_service/lifecycle_transitions.py",
+        "migrations/versions/20260710_0001_initial_p1_domain.py",
+        "alembic.ini"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_blobs.py",
+        "tests/ato_service/test_content_manifests.py::test_orders_artifacts_deterministically_and_replays_idempotently",
+        "tests/ato_service/test_session_and_storage_reconciliation.py",
+        "tests/ato_service/test_db.py::test_alembic_head_exists_and_initial_migration_references_all_tables",
+        "tests/ato_service/test_db.py::test_require_database_dsn_reads_absolute_utf8_file",
+        "tests/ato_service/test_lifecycle_transitions.py"
+      ],
+      "verification_type": "Deterministic blob, content-manifest, and staging-reconciliation tests plus schema and migration review; full immutable DB, run, and job replay remains planned for P1",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-008",
+      "spec_section": "32",
+      "requirement_text": "Canonical facts retain field-level source provenance through proposal and human confirmation.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned provenance proposal and confirmation tests",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-009",
+      "spec_section": "32",
+      "requirement_text": "Every analysis produces exactly one matrix row per expected assessment item with no missing, duplicate, or extra rows.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/matrix_coverage.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_matrix_coverage.py::test_missing_rows_reports_sorted_missing_ids",
+        "tests/ato_service/test_matrix_coverage.py::test_duplicate_actual_rows_reports_sorted_duplicate_ids",
+        "tests/ato_service/test_matrix_coverage.py::test_extra_rows_reports_sorted_extra_ids",
+        "tests/ato_service/test_matrix_coverage.py::test_simultaneous_missing_duplicate_and_extra_mismatch"
+      ],
+      "verification_type": "Deterministic matrix-coverage validator regressions for missing, duplicate, and extra rows; analysis pipeline does not call the validator yet",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-010",
+      "spec_section": "32",
+      "requirement_text": "Citations are bound to source hashes and stable offsets and remain valid across processing.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned verbatim-excerpt, hash, and offset validation tests",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-011",
+      "spec_section": "32",
+      "requirement_text": "Official FedRAMP and OSCAL payloads remain schema-pure and are validated against reviewed official schemas.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Blocked by HS-001; planned official FedRAMP and OSCAL schema validation",
+      "status": "blocked"
+    },
+    {
+      "requirement_id": "R-012",
+      "spec_section": "32",
+      "requirement_text": "Assessor-owned fields are import-only and cannot be generated or changed by the model.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json"
+      ],
+      "test_ids": [],
+      "verification_type": "Current schema and prompt review plus planned assessor-field contract tests",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-013",
+      "spec_section": "32",
+      "requirement_text": "A POA&M weakness is created or routed only after explicit human confirmation.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned deterministic POA&M routing and human-confirmation tests",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-014",
+      "spec_section": "32",
+      "requirement_text": "Portal and API access use OIDC and default-deny object-level authorization.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned OIDC and role-by-object API authorization tests; production deployment also depends on HS-003",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-015",
+      "spec_section": "32",
+      "requirement_text": "Submitters cannot approve their own export and every approval is bound to the exact export payload hash.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned self-approval, changed-payload, expiry, and replay tests",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-016",
+      "spec_section": "32",
+      "requirement_text": "Consequential requests are idempotent and mutable resources enforce optimistic concurrency.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned idempotency, duplicate-request, ETag, and stale-write conflict tests",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "R-017",
+      "spec_section": "32",
+      "requirement_text": "Uploaded packages and documents are extracted safely with path, type, malware, parser, and resource controls.",
+      "epic": "EP-04-secure-intake",
+      "implementation_files": [
+        "src/ato_service/blobs.py",
+        "src/ato_service/runtime_config.py"
+      ],
+      "test_ids": [],
+      "verification_type": "Current JSON/text path and size control review plus planned malicious-file fixture suite",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-018",
+      "spec_section": "32",
+      "requirement_text": "Audit history is tamper-evident and its integrity can be verified.",
+      "epic": "EP-08-onprem-release",
+      "implementation_files": [
+        "src/ato_service/db/models.py"
+      ],
+      "test_ids": [],
+      "verification_type": "Current audit-record review plus planned HMAC chain and tamper-verification tests",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-019",
+      "spec_section": "32",
+      "requirement_text": "Production recovery meets a one-hour recovery point objective and a four-hour recovery time objective.",
+      "epic": "EP-08-onprem-release",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Blocked by HS-008; planned isolated-host restore drill with measured RPO and RTO",
+      "status": "blocked"
+    },
+    {
+      "requirement_id": "R-020",
+      "spec_section": "32",
+      "requirement_text": "AI behavior passes the qualification gates and produces an immutable evaluation record.",
+      "epic": "EP-07-advanced-analysis",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Blocked by HS-006; planned adjudicated-holdout evaluation",
+      "status": "blocked"
+    },
+    {
+      "requirement_id": "R-021",
+      "spec_section": "32",
+      "requirement_text": "The approved model endpoint and model snapshot can be changed through configuration without code changes.",
+      "epic": "EP-07-advanced-analysis",
+      "implementation_files": [
+        "src/ato_service/runtime_config.py",
+        "src/ato_service/model_routing.py"
+      ],
+      "test_ids": [],
+      "verification_type": "Configuration review plus planned endpoint-swap integration test",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-022",
+      "spec_section": "32",
+      "requirement_text": "The product installs and operates on RHEL 9 with tested upgrade, rollback, backup, restore, and smoke procedures.",
+      "epic": "EP-08-onprem-release",
+      "implementation_files": [
+        "deployment/systemd/ato-api.service",
+        "deployment/nginx/ato-api.conf",
+        "deployment/README.md",
+        "scripts/install.sh",
+        "scripts/smoke_service_chain.sh"
+      ],
+      "test_ids": [
+        "tests/test_deployment_contract.py::test_shell_scripts_pass_bash_syntax_check",
+        "tests/test_deployment_contract.py::test_systemd_unit_hardens_service_and_declares_writable_storage",
+        "tests/test_deployment_contract.py::test_install_script_does_not_auto_start_migrate_or_smoke_by_default",
+        "tests/test_deployment_contract.py::test_smoke_script_requires_ready_http_200_by_default"
+      ],
+      "verification_type": "API-only deployment scaffold and deterministic asset contracts are implemented; live RHEL 9 install, upgrade, rollback, backup, restore, and smoke drills remain required",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-023",
+      "spec_section": "10.3, 31, 32",
+      "requirement_text": "Every implementation phase preserves one synchronized runtime/deployment contract across validated JSON, credential references, explicit capability dependencies, process assets, operator docs, traceability, and deterministic tests.",
+      "epic": "Cross-cutting: EP-00-contracts through EP-08-onprem-release",
+      "implementation_files": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/runtime-config.schema.json",
+        "src/ato_service/runtime_config.py",
+        "deployment/config/runtime-config.onprem.example.json",
+        "docs/CONFIGURATION.md",
+        "deployment/README.md",
+        "deployment/systemd/ato-api.service",
+        "deployment/nginx/ato-api.conf",
+        "scripts/install.sh",
+        "scripts/smoke_service_chain.sh"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_runtime_config.py::test_load_onprem_config_from_external_path_without_base_dir",
+        "tests/ato_service/test_runtime_config.py::test_rejects_remote_http_model_endpoint_despite_loopback_opt_in",
+        "tests/test_deployment_contract.py::test_systemd_unit_points_to_canonical_runtime_config",
+        "tests/test_deployment_contract.py::test_install_script_is_idempotent_and_explicit_about_side_effects",
+        "tests/test_deployment_contract.py::test_deployment_readme_matches_current_installer_contract"
+      ],
+      "verification_type": "Current API-only surface is contract-tested; requirement remains cross-cutting as later phases add capabilities and processes",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-001",
+      "spec_section": "28.1",
+      "requirement_text": "Schema behavior is covered by representative positive and negative fixtures.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/fixtures/domain.valid.fisma-package-revision.json",
+        "docs/contracts/fixtures/domain.invalid.profile-boundary.json",
+        "docs/contracts/fixtures/domain.invalid.ready-null-manifest.json"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_contract_fixtures_follow_contracts"
+      ],
+      "verification_type": "Published machine-contract schema fixtures plus planned negative domain regressions",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-002",
+      "spec_section": "28.1",
+      "requirement_text": "Deterministic validation covers boundary, missing, empty, duplicate, and malformed inputs.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/fixtures/domain.invalid.profile-boundary.json",
+        "docs/contracts/fixtures/domain.invalid.ready-null-manifest.json"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_contract_fixtures_follow_contracts",
+        "tests/test_contracts.py::test_package_revision_content_manifest_sha256_nullability"
+      ],
+      "verification_type": "Published contract fixture validation plus planned empty and duplicate regressions",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-003",
+      "spec_section": "28.1, 30 EP-01, 33",
+      "requirement_text": "Configured input and package limits are enforced, and malicious archive, XML, Office, and SVG inputs fail closed.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/runtime_config.py",
+        "src/ato_service/blobs.py",
+        "src/ato_service/content_manifests.py",
+        "src/ato_service/model_gateway.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_runtime_config.py",
+        "tests/ato_service/test_limit_enforcement.py",
+        "tests/ato_service/test_content_manifests.py",
+        "tests/ato_service/test_model_gateway.py::test_call_limit_exceeded_makes_zero_extra_calls"
+      ],
+      "verification_type": "Deterministic configured-limit enforcement across runtime config, blobs, content manifests, and model-gateway budgets; malicious archive, XML, Office, and SVG intake remains planned for P3",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-004",
+      "spec_section": "28.1",
+      "requirement_text": "Every state transition is checked deterministically and both legal and illegal transitions are tested.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/lifecycle_transitions.py",
+        "src/ato_service/problems.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_lifecycle_transitions.py",
+        "tests/ato_service/test_problem_taxonomy.py::test_illegal_state_transition_returns_409_and_preserves_state"
+      ],
+      "verification_type": "Deterministic lifecycle transition unit tests and HTTP Problem mapping for illegal transitions; no production mutation route or audit write exists yet",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-005",
+      "spec_section": "28.1, 31 P0",
+      "requirement_text": "Job lease expiry, retry, crash, replay, and partial-write recovery preserve correct state without duplicate side effects.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/blobs.py",
+        "src/ato_service/content_manifests.py",
+        "src/ato_service/storage_reconciliation.py",
+        "src/ato_service/db/session.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_blobs.py::test_replay_rehashes_existing_blob_and_preserves_bytes",
+        "tests/ato_service/test_blobs.py::test_rejects_same_size_corrupted_existing_blob",
+        "tests/ato_service/test_blobs.py::test_cleans_temp_file_after_stream_failure",
+        "tests/ato_service/test_content_manifests.py::test_cleans_temp_after_manifest_write_failure",
+        "tests/ato_service/test_session_and_storage_reconciliation.py::test_session_scope_rolls_back_reraises_and_closes_on_error",
+        "tests/ato_service/test_session_and_storage_reconciliation.py::test_cleanup_deletes_only_stale_recognized_staging_files"
+      ],
+      "verification_type": "Filesystem replay and corruption, partial-write cleanup, stale-staging reconciliation, and session rollback helpers; job lease, retry, and worker crash recovery remain planned for P1",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-006",
+      "spec_section": "28.1",
+      "requirement_text": "Deterministic status ceilings prevent unsupported favorable outcomes and route POA&M candidates for required human action.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned status-ceiling and POA&M-routing test class",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "P0-007",
+      "spec_section": "28.1",
+      "requirement_text": "The authorization test matrix covers RBAC, object-level authorization, CSRF, and self-approval denial.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned role-by-object, CSRF, and self-approval security tests",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "P0-008",
+      "spec_section": "28.1",
+      "requirement_text": "Portal rendering and downloads resist stored or reflected XSS and unsafe content handling.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned browser XSS and unsafe-download regression suite",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "P0-009",
+      "spec_section": "30 EP-01, 33, 34",
+      "requirement_text": "A published failure taxonomy distinguishes invalid input, policy block, quarantine, dependency failure, retryable failure, and terminal failure.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "src/ato_service/authority_manifest.py",
+        "src/ato_service/problems.py",
+        "src/ato_service/health.py",
+        "src/ato_service/readiness.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_health_api.py::test_readiness_unavailable_maps_to_stable_problem",
+        "tests/ato_service/test_health_api.py::test_readiness_degraded_maps_to_reconciliation_required",
+        "tests/ato_service/test_health_api.py::test_readiness_probe_exception_returns_problem_not_500",
+        "tests/ato_service/test_health_api.py::test_retryable_503_problem_includes_retry_after_header",
+        "tests/ato_service/test_readiness.py::test_authority_manifest_unavailable_on_digest_mismatch",
+        "tests/ato_service/test_readiness.py::test_authority_manifest_degraded_for_draft_status",
+        "tests/ato_service/test_readiness.py::test_authority_manifest_verification_streams_artifact_bytes",
+        "tests/ato_service/test_readiness.py::test_create_readiness_probe_returns_exact_five_keys",
+        "tests/ato_service/test_readiness.py::test_probe_swallows_check_exceptions",
+        "tests/ato_service/test_readiness.py::test_probe_contains_unexpected_sync_check_exceptions",
+        "tests/ato_service/test_lifecycle_transitions.py::test_illegal_state_transition_error_is_immutable_and_typed",
+        "tests/ato_service/test_problem_taxonomy.py::test_illegal_state_transition_returns_409_and_preserves_state",
+        "tests/ato_service/test_problem_taxonomy.py::test_model_gateway_policy_errors_return_403_without_callback",
+        "tests/ato_service/test_problem_taxonomy.py::test_model_call_limit_exceeded_returns_422_without_callback",
+        "tests/ato_service/test_problem_taxonomy.py::test_matrix_coverage_invalid_returns_422_without_exposing_ids",
+        "tests/test_contracts.py::test_implemented_problem_codes_are_documented_in_error_taxonomy",
+        "tests/test_contracts.py::test_readiness_check_names_match_operations_contract"
+      ],
+      "verification_type": "Published taxonomy plus typed lifecycle, model-gateway, and matrix-coverage Problem mappings and health/readiness tests; quarantine handling and broader production route taxonomy remain planned",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-010",
+      "spec_section": "31 P0",
+      "requirement_text": "The P0 exit gate runs the existing suite together with policy-ordering, replay, crash-recovery, and exact-completeness regressions.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        ".github/workflows/contracts.yml",
+        "src/ato_service/blobs.py",
+        "src/ato_service/content_manifests.py",
+        "src/ato_service/lifecycle_transitions.py",
+        "src/ato_service/matrix_coverage.py",
+        "src/ato_service/model_gateway.py",
+        "src/ato_service/model_routing.py",
+        "src/ato_service/problems.py",
+        "src/ato_service/runtime_config.py",
+        "src/ato_service/storage_reconciliation.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_model_gateway.py::test_routing_evaluated_before_callback_on_policy_denial",
+        "tests/ato_service/test_model_gateway.py::test_allowed_route_with_disabled_vision_fails_closed_with_zero_calls",
+        "tests/ato_service/test_blobs.py::test_replay_rehashes_existing_blob_and_preserves_bytes",
+        "tests/ato_service/test_blobs.py::test_rejects_same_size_corrupted_existing_blob",
+        "tests/ato_service/test_content_manifests.py::test_cleans_temp_after_manifest_write_failure",
+        "tests/ato_service/test_session_and_storage_reconciliation.py::test_cleanup_deletes_only_stale_recognized_staging_files",
+        "tests/ato_service/test_session_and_storage_reconciliation.py::test_session_scope_rolls_back_reraises_and_closes_on_error",
+        "tests/ato_service/test_problem_taxonomy.py::test_illegal_state_transition_returns_409_and_preserves_state",
+        "tests/ato_service/test_limit_enforcement.py::test_loaded_runtime_limits_enforce_blob_single_file_boundary",
+        "tests/ato_service/test_matrix_coverage.py::test_missing_rows_reports_sorted_missing_ids",
+        "tests/ato_service/test_matrix_coverage.py::test_duplicate_actual_rows_reports_sorted_duplicate_ids",
+        "tests/ato_service/test_matrix_coverage.py::test_extra_rows_reports_sorted_extra_ids"
+      ],
+      "verification_type": "CI `.github/workflows/contracts.yml` runs contract tests and the full `python -m pytest -m \"not integration\"` gate; P1 job lease, API mutation routes, and automatic pipeline wiring remain tracked by their own partial requirements, not claimed here",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P0-011",
+      "spec_section": "33",
+      "requirement_text": "The historical Block 1 developer CLI has been retired; `ato_service` is the active implementation entrypoint.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/__init__.py",
+        "src/ato_service/__main__.py",
+        "src/ato_service/authority_manifest.py",
+        "src/ato_service/main.py",
+        "src/ato_service/runtime_config.py",
+        "deployment/config/runtime-config.dev_local.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_main.py::test_build_app_from_config_validates_without_connecting",
+        "tests/ato_service/test_main.py::test_valid_draft_manifest_starts_and_disposes_engine",
+        "tests/ato_service/test_main.py::test_missing_authority_manifest_fails_startup_before_engine_creation",
+        "tests/ato_service/test_main.py::test_schema_invalid_authority_manifest_fails_startup",
+        "tests/ato_service/test_main.py::test_digest_invalid_authority_manifest_fails_startup",
+        "tests/ato_service/test_main.py::test_build_app_from_config_disposes_engine_on_lifespan_failure",
+        "tests/ato_service/test_main.py::test_load_app_from_config_path_builds_app",
+        "tests/ato_service/test_main.py::test_main_requires_config_path"
+      ],
+      "verification_type": "Block 1 retirement recorded; config-driven service construction, lifespan cleanup, authority validation, and the health boundary are the active entry surface",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P0-012",
+      "spec_section": "33",
+      "requirement_text": "Published FISMA domain contract fixtures remain the canonical positive and negative validation examples after Block 1 retirement.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "docs/contracts/fixtures/domain.valid.fisma-package-revision.json",
+        "docs/contracts/fixtures/domain.invalid.profile-boundary.json"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_contract_fixtures_follow_contracts",
+        "tests/test_contracts.py::test_package_revision_content_manifest_sha256_nullability"
+      ],
+      "verification_type": "Published contract fixture validation replaces retired Block 1 golden-fixture regressions",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P0-013",
+      "spec_section": "33",
+      "requirement_text": "Production processing has no runtime bypass that can send sensitive, CUI, classified, production, or unknown data to an unapproved model endpoint.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "src/ato_service/model_gateway.py",
+        "src/ato_service/model_routing.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_model_gateway.py::test_external_sensitive_labels_denied_without_bypass",
+        "tests/ato_service/test_model_gateway.py::test_classified_data_denied_with_zero_calls",
+        "tests/ato_service/test_model_gateway.py::test_external_customer_production_denied_with_zero_calls",
+        "tests/ato_service/test_model_gateway.py::test_unknown_sensitivity_denied_with_zero_calls"
+      ],
+      "verification_type": "Deterministic model-gateway zero-call and bypass-denial tests; production worker callsites are not built yet",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P0-014",
+      "spec_section": "33",
+      "requirement_text": "New schema and profile names are introduced only through a documented migration.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [],
+      "test_ids": [],
+      "verification_type": "Planned schema and profile migration review",
+      "status": "planned"
+    },
+    {
+      "requirement_id": "P0-015",
+      "spec_section": "33",
+      "requirement_text": "Retired Block 1 reports are not a compatibility target and must not constrain active `ato_service` contracts.",
+      "epic": "EP-01-core-safety",
+      "implementation_files": [
+        "ATO_TECHNICAL_SPEC.md",
+        "ATO_AI_ACCELERATOR_PLAN.md"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_runtime_deployment_contract_is_persistent_across_active_plans"
+      ],
+      "verification_type": "Normative retirement language and plan-persistence regression replace the obsolete historical-report compatibility requirement",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-001",
+      "spec_section": "34.1",
+      "requirement_text": "Every active repository document is synchronized before the plan is declared implementation-ready.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "ATO_TECHNICAL_SPEC.md",
+        "ATO_AI_ACCELERATOR_PLAN.md",
+        "ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md",
+        "README.md",
+        "docs/contracts/README.md",
+        "docs/CONFIGURATION.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "deployment/README.md",
+        ".cursor/rules/ato-runtime-deployment-contract.mdc",
+        "docs/P0_GATE_RECORD.md",
+        "docs/P1_GATE_RECORD.md"
+      ],
+      "test_ids": [],
+      "verification_type": "Active-document consistency review complete; gate recorded in docs/P1_GATE_RECORD.md",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-002",
+      "spec_section": "34.2",
+      "requirement_text": "Official authority sources are reviewed, pinned, vendored, and hashed before authority-dependent implementation.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/contracts/authority-manifest.json",
+        "docs/contracts/authority-manifest.schema.json"
+      ],
+      "test_ids": [],
+      "verification_type": "Vendored bytes and manifest digests are deterministic; qualified authority review remains open under HS-001 and blocks authority-dependent work only",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-003",
+      "spec_section": "34.3",
+      "requirement_text": "Internal JSON Schemas are published and deterministically validated before feature implementation.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/analysis-profile.schema.json",
+        "docs/contracts/authority-manifest.schema.json",
+        "docs/contracts/content-manifest.schema.json",
+        "docs/contracts/artifact-manifest.schema.json",
+        "docs/contracts/export-manifest.schema.json",
+        "docs/contracts/preflight.schema.json",
+        "docs/contracts/runtime-config.schema.json"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_internal_schemas_validate_against_declared_metaschemas",
+        "tests/test_contracts.py::test_contract_fixtures_follow_contracts"
+      ],
+      "verification_type": "Deterministic metaschema, representative fixture, and cross-contract validation complete; schemas frozen as published P-1 contracts",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-004",
+      "spec_section": "34.4",
+      "requirement_text": "The product API contract is published as OpenAPI 3.1 and its local references resolve.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/contracts/openapi.json"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_openapi_references_are_local_and_resolve_recursively",
+        "tests/test_contracts.py::test_openapi_minimum_methods_and_health_root_override",
+        "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts"
+      ],
+      "verification_type": "OpenAPI parse, recursive reference, method, security, idempotency, and concurrency validation complete; info.version frozen at 1.0.0",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-005",
+      "spec_section": "34.5",
+      "requirement_text": "Legal state transitions and the complete error taxonomy are published before dependent implementation.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "docs/contracts/openapi.json"
+      ],
+      "test_ids": [],
+      "verification_type": "Published lifecycle and error contract; unresolved job, deadline, and disposition details explicitly deferred and do not block P0",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-006",
+      "spec_section": "34.6",
+      "requirement_text": "The product threat model is published before implementation-ready status.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/THREAT_MODEL.md"
+      ],
+      "test_ids": [],
+      "verification_type": "Security contract review",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-007",
+      "spec_section": "34.7",
+      "requirement_text": "The AI label guide and evaluation contract are published before AI qualification or pilot claims.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/AI_EVALUATION_GUIDE.md"
+      ],
+      "test_ids": [],
+      "verification_type": "Published guide review; HS-006 separately blocks qualification and pilot claims pending the adjudicated holdout",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-008",
+      "spec_section": "34.8",
+      "requirement_text": "The operations and recovery contract is published before production-readiness claims.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/OPERATIONS_AND_RECOVERY.md"
+      ],
+      "test_ids": [],
+      "verification_type": "Published operations contract review; HS-008 separately blocks production readiness",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-009",
+      "spec_section": "34.9",
+      "requirement_text": "Traceability is populated for every P0 requirement.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/requirements/traceability.yaml"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_traceability_fields_ids_and_implemented_paths"
+      ],
+      "verification_type": "Machine-readable traceability review",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-010",
+      "spec_section": "34.10",
+      "requirement_text": "Every hard stop is resolved or explicitly recorded before implementation-ready status.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/authority-manifest.json",
+        "docs/requirements/hard-stops.yaml"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_hard_stop_register_is_complete_and_evidence_backed"
+      ],
+      "verification_type": "Hard-stop register and manifest review",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-011",
+      "spec_section": "34",
+      "requirement_text": "After P-1 is complete, P0 core safety work may proceed and must not infer missing contracts or bypass open hard stops.",
+      "epic": "EP-00-contracts",
+      "implementation_files": [
+        "docs/P1_GATE_RECORD.md"
+      ],
+      "test_ids": [],
+      "verification_type": "P-1 gate recorded; P0 may start; authority-dependent and customer-specific work remains gated by hard stops",
+      "status": "implemented"
+    }
+  ]
+}

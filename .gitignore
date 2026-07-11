@@ -3,6 +3,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
+.tmp-pycache/
 config.local.env
 .env
 data/incoming/*

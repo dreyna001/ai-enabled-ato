@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "package_revision",
+  "package_revision_id": "11111111-1111-4111-8111-111111111111",
+  "system_id": "22222222-2222-4222-8222-222222222222",
+  "parent_revision_id": null,
+  "profile_id": "fedramp_20x_program",
+  "certification_class": null,
+  "impact_level": "moderate",
+  "data_origin": "synthetic",
+  "sensitivity": "internal_unclassified",
+  "effective_data_labels": [
+    "synthetic",
+    "internal_unclassified"
+  ],
+  "authority_manifest_id": "authority.v2",
+  "content_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "ready",
+  "created_by": "fixture-author",
+  "created_at": "2026-07-10T20:00:00Z"
+}

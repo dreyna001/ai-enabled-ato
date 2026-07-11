@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/preflight.schema.json",
+  "title": "ATO Internal Preflight Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_revision_id",
+    "analysis_eligible",
+    "export_eligible",
+    "readiness",
+    "deterministic_checks",
+    "analysis_blockers",
+    "export_blockers",
+    "warnings",
+    "authority_fingerprint",
+    "profile_fingerprint",
+    "evaluated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "package_revision_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "analysis_eligible": {
+      "type": "boolean",
+      "$comment": "Runtime code must derive this value from applicable failed analysis-blocking checks and verify it agrees with analysis_blockers."
+    },
+    "export_eligible": {
+      "type": "boolean",
+      "$comment": "Runtime code must derive this value from all applicable failed checks that block export and verify it agrees with export_blockers."
+    },
+    "readiness": {
+      "$ref": "#/$defs/readiness"
+    },
+    "deterministic_checks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/deterministicCheck"
+      },
+      "$comment": "Runtime code must enforce unique check_id values and stable check meanings across schema-compatible releases."
+    },
+    "analysis_blockers": {
+      "$ref": "#/$defs/checkIdList",
+      "$comment": "Each value must resolve to a failed deterministic check that blocks analysis. Runtime code validates membership and severity."
+    },
+    "export_blockers": {
+      "$ref": "#/$defs/checkIdList",
+      "$comment": "Each value must resolve to a failed deterministic check that blocks export. Runtime code validates membership and severity."
+    },
+    "warnings": {
+      "$ref": "#/$defs/checkIdList",
+      "$comment": "Each value must resolve to a warning deterministic check. Runtime code validates membership and outcome."
+    },
+    "authority_fingerprint": {
+      "$ref": "#/$defs/authorityFingerprint"
+    },
+    "profile_fingerprint": {
+      "$ref": "#/$defs/profileFingerprint"
+    },
+    "evaluated_at": {
+      "$ref": "#/$defs/utcDateTime"
+    }
+  },
+  "$defs": {
+    "uuidV4": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "utcDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "checkId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_.-]+$"
+    },
+    "checkIdList": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/checkId"
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator",
+        "score"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "$comment": "The readiness score is informational only. Runtime code must verify numerator is the count of passed applicable checks, denominator is the count of all applicable checks, numerator does not exceed denominator, and score equals numerator divided by denominator. Runtime code must not use numerator, denominator, or score to determine analysis_eligible or export_eligible."
+    },
+    "deterministicCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "severity",
+        "outcome",
+        "message",
+        "evidence_references"
+      ],
+      "properties": {
+        "check_id": {
+          "$ref": "#/$defs/checkId"
+        },
+        "severity": {
+          "enum": [
+            "analysis_blocker",
+            "export_blocker",
+            "warning"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "passed",
+            "failed",
+            "not_applicable"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S"
+        },
+        "evidence_references": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/evidenceReference"
+          }
+        }
+      }
+    },
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference_id",
+        "sha256"
+      ],
+      "properties": {
+        "reference_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^\\S(?:.{0,510}\\S)?$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "$comment": "Runtime code must resolve each reference within the authorized package or pinned authority inputs and verify the referenced bytes against sha256."
+    },
+    "authorityFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_manifest_id",
+        "sha256"
+      ],
+      "properties": {
+        "authority_manifest_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "$comment": "Runtime code must verify the digest against the exact pinned authority manifest used for evaluation."
+    },
+    "profileFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_version",
+        "sha256"
+      ],
+      "properties": {
+        "profile_id": {
+          "enum": [
+            "fedramp_20x_program",
+            "fedramp_rev5_transition",
+            "fisma_agency_security"
+          ]
+        },
+        "profile_version": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 64,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "$comment": "Runtime code must verify the digest against the exact deterministic analysis profile used for evaluation."
+    }
+  }
+}

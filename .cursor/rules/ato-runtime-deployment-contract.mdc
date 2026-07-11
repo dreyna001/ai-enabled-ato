@@ -1,0 +1,17 @@
+---
+description: Preserve the ATO runtime configuration and deployment contract in every implementation phase
+alwaysApply: true
+---
+
+# ATO Runtime and Deployment Contract
+
+- Follow `ATO_TECHNICAL_SPEC.md` Section 31, then `docs/requirements/traceability.yaml` and `docs/requirements/hard-stops.yaml`. Product-plan documents do not override them.
+- Keep non-secret runtime settings in the schema-validated JSON selected by `ATO_RUNTIME_CONFIG_PATH` or `--config`. Do not introduce `config.env` or per-setting environment overrides.
+- Keep secret bytes outside JSON. JSON may contain only credential references; `ATO_DATABASE_DSN_FILE` is a development/migration bootstrap exception.
+- Use explicit capability flags with fail-fast dependency validation. Do not add capability bundles or presets until at least three real optional capabilities need them and precedence/migration rules are approved.
+- Treat code, schemas, examples, systemd/nginx assets, install/smoke scripts, operator docs, traceability, and deployment-contract tests as one runtime contract. Change them together when a value or behavior changes.
+- Add process-specific configuration and credentials only when that process exists. Apply least privilege: root-owned application code, narrow writable paths, and only the credentials each process consumes.
+- Never overwrite live customer configuration or credentials. Ship placeholder deployment files inactive and require explicit migration, start, and smoke actions.
+- Keep `/health/ready` deterministic and free of model calls. Deployment contract tests do not replace live RHEL, systemd, PostgreSQL, TLS, backup, or recovery validation.
+- Do not add worker, portal, timer, model-hosting, or active proxy assets before the corresponding runtime and acceptance tests exist.
+- Use `docs/CONFIGURATION.md`, `deployment/README.md`, and `docs/OPERATIONS_AND_RECOVERY.md` for the detailed operator contract.

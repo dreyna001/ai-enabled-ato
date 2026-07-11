@@ -1,0 +1,350 @@
+"""Tests for config-driven app construction and runtime entrypoint wiring."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from ato_service.authority_manifest import AuthorityManifestVerificationError
+from ato_service.db.dsn import DATABASE_DSN_FILE_ENV_VAR
+from ato_service.db.session import DatabaseConfigurationError
+from ato_service.main import (
+    RUNTIME_CONFIG_PATH_ENV_VAR,
+    build_app_from_config,
+    load_app_from_config_path,
+    resolve_database_dsn,
+)
+from ato_service.runtime_config import RuntimeConfig, load_runtime_config_from_dict
+
+ROOT = Path(__file__).resolve().parents[2]
+POSTGRES_URL = "postgresql+asyncpg://ato:secret@localhost:5432/ato_test"
+
+
+def _dev_config(tmp_path: Path) -> RuntimeConfig:
+    return load_runtime_config_from_dict(
+        {
+            "schema_version": "1.0.0",
+            "runtime_profile": "dev_local",
+            "STORAGE_DATA_PATH": "/data/ato-storage",
+        },
+        base_dir=tmp_path,
+    )
+
+
+def _write_runtime_config(tmp_path: Path) -> Path:
+    config_path = tmp_path / "runtime-config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "runtime_profile": "dev_local",
+                "STORAGE_DATA_PATH": "/data/ato-storage",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def _write_draft_authority_manifest(tmp_path: Path) -> tuple[Path, Path]:
+    artifact_bytes = b"draft-authority-bytes"
+    artifact_path = (
+        tmp_path
+        / "reference"
+        / "authorities"
+        / "fixture"
+        / "draft-authority.json"
+    )
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_bytes(artifact_bytes)
+    manifest = {
+        "schema_version": "1.0.0",
+        "manifest_id": "fixture.draft",
+        "status": "draft",
+        "created_at": "2026-07-10T22:33:12Z",
+        "approved_at": None,
+        "approved_by": None,
+        "sources": [
+            {
+                "authority_id": "fixture-authority",
+                "title": "Fixture Authority",
+                "source_url": "https://example.test/draft-authority.json",
+                "source_version_or_date": "2026-07-10",
+                "retrieved_at_utc": "2026-07-10T22:33:12Z",
+                "effective_date": "2026-07-10",
+                "sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+                "size_bytes": len(artifact_bytes),
+                "local_path": (
+                    "reference/authorities/fixture/draft-authority.json"
+                ),
+                "review_status": "pending",
+            }
+        ],
+    }
+    manifest_path = tmp_path / "authority-manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path, artifact_path
+
+
+@pytest.fixture
+def dsn_file(tmp_path: Path) -> Path:
+    path = tmp_path / "database.dsn"
+    path.write_text(POSTGRES_URL, encoding="utf-8")
+    return path
+
+
+def test_resolve_database_dsn_uses_protected_file_for_dev_local(
+    tmp_path: Path,
+    dsn_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_DSN_FILE_ENV_VAR, str(dsn_file))
+    config = _dev_config(tmp_path)
+
+    assert resolve_database_dsn(config) == POSTGRES_URL
+
+
+def test_resolve_database_dsn_prefers_runtime_credential_reference(
+    tmp_path: Path,
+    dsn_file: Path,
+) -> None:
+    config = RuntimeConfig(
+        runtime_profile="dev_local",
+        storage_data_path=tmp_path,
+        document={
+            "schema_version": "1.0.0",
+            "runtime_profile": "dev_local",
+            "DATABASE_DSN_CREDENTIAL_REFERENCE": {
+                "source": "root_owned_file",
+                "path": str(dsn_file.resolve()),
+            },
+        },
+    )
+
+    assert resolve_database_dsn(config) == POSTGRES_URL
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        POSTGRES_URL,
+        "postgresql://ato:secret@localhost:5432/ato_test",
+        "postgres://ato:secret@localhost:5432/ato_test",
+    ],
+)
+def test_build_app_from_config_validates_without_connecting(
+    tmp_path: Path,
+    dsn: str,
+) -> None:
+    config = _dev_config(tmp_path)
+    config.storage_data_path.mkdir(parents=True, exist_ok=True)
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        engine = MagicMock()
+        engine.connect = MagicMock()
+        engine.dispose = AsyncMock()
+        create_engine.return_value = engine
+
+        build_app_from_config(config, dsn=dsn)
+
+        create_engine.assert_not_called()
+        engine.connect.assert_not_called()
+
+
+def test_build_app_from_config_rejects_non_postgresql_explicit_dsn(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        with pytest.raises(DatabaseConfigurationError, match="PostgreSQL is required"):
+            build_app_from_config(config, dsn="sqlite:///ato.db")
+
+        create_engine.assert_not_called()
+
+
+def test_valid_draft_manifest_starts_and_disposes_engine(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+    config.storage_data_path.mkdir(parents=True, exist_ok=True)
+    manifest_path, _artifact_path = _write_draft_authority_manifest(tmp_path)
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        engine = MagicMock()
+        connect_cm = AsyncMock()
+        connect_cm.__aenter__.return_value = AsyncMock()
+        connect_cm.__aexit__.return_value = None
+        engine.connect.return_value = connect_cm
+        engine.dispose = AsyncMock()
+        create_engine.return_value = engine
+
+        app = build_app_from_config(
+            config,
+            dsn=POSTGRES_URL,
+            authority_manifest_path=manifest_path,
+            project_root=tmp_path,
+        )
+
+        with TestClient(app) as client:
+            response = client.get("/health/live")
+            assert response.status_code == 200
+
+        engine.dispose.assert_awaited_once()
+
+
+def test_missing_authority_manifest_fails_startup_before_engine_creation(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+    missing_manifest = tmp_path / "missing-authority-manifest.json"
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        app = build_app_from_config(
+            config,
+            dsn=POSTGRES_URL,
+            authority_manifest_path=missing_manifest,
+            project_root=tmp_path,
+        )
+
+        with pytest.raises(
+            AuthorityManifestVerificationError,
+            match="missing or unreadable",
+        ):
+            with TestClient(app):
+                pass
+
+        create_engine.assert_not_called()
+
+
+def test_schema_invalid_authority_manifest_fails_startup(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+    manifest_path = tmp_path / "authority-manifest.json"
+    manifest_path.write_text(
+        json.dumps({"schema_version": "1.0.0"}),
+        encoding="utf-8",
+    )
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        app = build_app_from_config(
+            config,
+            dsn=POSTGRES_URL,
+            authority_manifest_path=manifest_path,
+            project_root=tmp_path,
+        )
+
+        with pytest.raises(
+            AuthorityManifestVerificationError,
+            match="schema validation",
+        ):
+            with TestClient(app):
+                pass
+
+        create_engine.assert_not_called()
+
+
+def test_digest_invalid_authority_manifest_fails_startup(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+    manifest_path, artifact_path = _write_draft_authority_manifest(tmp_path)
+    artifact_path.write_bytes(b"x" * artifact_path.stat().st_size)
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        app = build_app_from_config(
+            config,
+            dsn=POSTGRES_URL,
+            authority_manifest_path=manifest_path,
+            project_root=tmp_path,
+        )
+
+        with pytest.raises(
+            AuthorityManifestVerificationError,
+            match="sha256 does not match",
+        ):
+            with TestClient(app):
+                pass
+
+        create_engine.assert_not_called()
+
+
+def test_build_app_from_config_disposes_engine_on_lifespan_failure(
+    tmp_path: Path,
+) -> None:
+    config = _dev_config(tmp_path)
+    config.storage_data_path.mkdir(parents=True, exist_ok=True)
+    manifest_path, _artifact_path = _write_draft_authority_manifest(tmp_path)
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        create_engine.return_value = engine
+
+        app = build_app_from_config(
+            config,
+            dsn=POSTGRES_URL,
+            authority_manifest_path=manifest_path,
+            project_root=tmp_path,
+        )
+
+        async def _run_lifespan_with_failure() -> None:
+            async with app.router.lifespan_context(app):
+                raise RuntimeError("failure during serving")
+
+        with pytest.raises(RuntimeError, match="failure during serving"):
+            asyncio.run(_run_lifespan_with_failure())
+
+        engine.dispose.assert_awaited_once()
+
+
+def test_load_app_from_config_path_builds_app(
+    tmp_path: Path,
+    dsn_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_DSN_FILE_ENV_VAR, str(dsn_file))
+    config_path = _write_runtime_config(tmp_path)
+    storage_root = (tmp_path / "data" / "ato-storage").resolve()
+    storage_root.mkdir(parents=True, exist_ok=True)
+    manifest_path, _artifact_path = _write_draft_authority_manifest(tmp_path)
+
+    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+        engine = MagicMock()
+        connect_cm = AsyncMock()
+        connect_cm.__aenter__.return_value = AsyncMock()
+        connect_cm.__aexit__.return_value = None
+        engine.connect.return_value = connect_cm
+        engine.dispose = AsyncMock()
+        create_engine.return_value = engine
+
+        app = load_app_from_config_path(
+            config_path,
+            base_dir=tmp_path,
+            authority_manifest_path=manifest_path,
+            project_root=tmp_path,
+        )
+
+        with TestClient(app) as client:
+            response = client.get("/health/ready")
+            assert response.status_code == 503
+
+        engine.dispose.assert_awaited_once()
+
+
+def test_main_requires_config_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from ato_service.main import main
+
+    monkeypatch.delenv(RUNTIME_CONFIG_PATH_ENV_VAR, raising=False)
+
+    with pytest.raises(SystemExit, match=RUNTIME_CONFIG_PATH_ENV_VAR):
+        main([])

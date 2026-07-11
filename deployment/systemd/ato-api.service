@@ -1,0 +1,62 @@
+[Unit]
+Description=ATO Evidence Analysis API
+Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ato
+Group=ato
+
+WorkingDirectory=/opt/ato-analyzer
+
+Environment=ATO_RUNTIME_CONFIG_PATH=/etc/ato-analyzer/runtime-config.json
+Environment=ATO_AUTHORITY_MANIFEST_PATH=/opt/ato-analyzer/docs/contracts/authority-manifest.json
+Environment=ATO_HOST=127.0.0.1
+Environment=ATO_PORT=8000
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# Protected database DSN: runtime JSON references identifier "database-dsn".
+# Operator provisions /etc/ato-analyzer/credentials/database-dsn out of band.
+# Never place secret values in unit files, env examples, or repository assets.
+#
+# This unit intentionally wires only database-dsn today. Text-model, OIDC, audit,
+# and backup credential references in runtime JSON are schema declarations for
+# future consumers; add matching LoadCredential mappings before those features run.
+LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
+
+ExecStart=/opt/ato-analyzer/venv/bin/ato-service
+
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/ato-packages
+
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ato-api
+
+[Install]
+WantedBy=multi-user.target

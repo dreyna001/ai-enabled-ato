@@ -1,358 +1,292 @@
 # ATO Portal Demo Talking Track
 
-Demo script and glossary for the ATO Evidence Analysis Portal UI mockup and leadership conversations.
+**Status:** Approved product language for demos
+**Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)
 
-**Related docs:** [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md)
-
-**UI mockup:** Cursor canvas `ato-portal-product-ui.canvas.tsx` (Evidence Portal product UI).
-
----
+Use this script only for capabilities implemented in the demonstrated build. Clearly label planned screens or sample outputs.
 
 ## 30-second leadership pitch
 
-> Getting a system authorized to operate in government — an ATO — requires proving hundreds of security controls with evidence. That review work already happens manually: ISSOs and assessors read policies, scan results, and GRC records, then write findings, POA&Ms, and readiness notes.
+> Government authorization and FedRAMP certification require teams to assemble facts from documents, test results, diagrams, GRC exports, and assessor material. Analysts then spend substantial time checking whether the package is complete, tracing evidence, finding gaps, and drafting package content.
 >
-> We are not replacing GRC, eMASS, Qualys, or FedRAMP tooling. We automate the **analysis layer** — the slow reading, comparing, gap-finding, and draft-writing — and put it in a portal analysts can review, chat with, and optionally push back as drafts after approval.
+> The ATO Evidence Analysis Portal accelerates that analysis and drafting work. It preserves the source of every fact, uses bounded AI to compare and explain evidence, and gives people a place to review every result before an approved draft bundle leaves the system.
 >
-> Same pattern as our notable analysis product: upstream tools generate artifacts, we analyze with AI inside the customer boundary, humans stay accountable.
+> It does not certify, authorize, accept risk, replace GRC, perform assessor work, or submit to the government.
 
----
+## Product in plain words
 
-## Core concepts (say this first)
+The product helps answer:
 
-**ATO (Authority to Operate)**  
-Formal approval for a government system to run in production based on accepted security risk. An **Authorizing Official (AO)** decides; everyone else prepares the case.
+- What did the customer provide?
+- Which package requirement does each source support?
+- What is missing, stale, contradictory, or not independently supplied?
+- What provider-owned draft text can be prepared from confirmed facts?
+- What must a human reviewer or assessor decide?
+- What exact approved bundle was exported?
 
-**RMF (Risk Management Framework)**  
-NIST's seven-step lifecycle: **Prepare -> Categorize -> Select -> Implement -> Assess -> Authorize -> Monitor**. Our product mainly accelerates **Implement drafting**, **Assess**, **Authorize prep**, and **Monitor prep** — not the AO decision itself.
+## Supported paths
 
-**System / authorization package**  
-One IT system (or bounded system) going through ATO. In the portal, that's an **evidence package** — all controls, evidence, and scan data for that system in one bundle.
+### FedRAMP 20x Program
 
-**Authorization path**  
-Which gov program rules apply:
+For cloud service providers pursuing the Program Certification path, the first target is Class C.
 
-- **FISMA agency** — agency ISSO/SCA, agency GRC
-- **FedRAMP** — cloud service provider, 3PAO assessor, FedRAMP POA&M format
-- **DoD RMF / eMASS** — DoD assessor, STIG/CCRI emphasis, eMASS as system of record
+The product prepares and checks draft:
 
-Same NIST controls; different forms, assessors, and tooling.
+- Certification Package Overview
+- Security Decision Record
+- Ongoing Certification Report
+- Secure Configuration Guide readiness and reference
+- KSI methods, evidence, metrics, and readiness
+- Imported independent assessment material
 
----
+It shows missing operating obligations, freshness, cadence, and package requirements. It does not perform continuous validation or independent assessment.
 
-## What is a control?
+### FedRAMP Rev. 5 transition
 
-A **control** is a specific security requirement from **NIST SP 800-53 Rev 5**. There are hundreds per system (often 100–300+ depending on impact level).
+The `fedramp_rev5_transition` profile provides read-only import and transition analysis for existing Rev. 5 packages, including transition gaps and comparison with FedRAMP 20x Program requirements. It is not the default path for a new certification.
 
-**Control ID format:** family + number, e.g. `AC-2`, `AU-6`, `CM-6`.
+### Agency FISMA security
 
-| Part | Meaning | Example |
-| --- | --- | --- |
-| Family (letters) | Security domain | `AC` = Access Control |
-| Number | Specific requirement in that family | `-2` = second/main access control |
+For agency-owned systems, the product accepts the customer-authoritative security control set and prepares:
 
-**What a control asks:** "Prove you do X securely" — e.g. manage accounts, review logs, enforce configs.
+- Security SSP section drafts
+- SAR input material
+- Human-confirmed POA&M candidates
+- Security readiness summary
+- Evidence sufficiency matrix
 
-**What the customer must provide:**
+Privacy work remains outside the product and must be completed in the agency process.
 
-1. **Implementation statement** — "We do X this way" (usually in SSP/GRC)
-2. **Evidence** — documents/scans/logs that prove it
+### Not supported in v1
 
-**What we do:** Compare evidence to the requirement and flag gaps. We do **not** mark a control "compliant" as an official decision.
+- DoD RMF, eMASS, CCRI, or IC workflows
+- Classified data
+- Privacy artifacts
+- Official government submission
+- Live GRC/scanner/cloud collection
 
----
+## Key terms
 
-## Controls in the demo (one layer deep)
+### ATO
 
-### AC-2 — Account Management
+Authority to Operate is an official decision by an Authorizing Official. The product prepares evidence and drafts; it does not make that decision.
 
-**Requirement (plain English):** The system must manage user accounts properly — create, modify, disable, remove, and review access in a controlled way.
+### FedRAMP certification
 
-**Typical evidence:** IAM policy, access review records, onboarding/offboarding procedures, screenshots or exports from identity tools.
+FedRAMP establishes requirements for cloud services used by the federal government. The product supports package preparation for a specified path and class. It does not certify a provider.
 
-**Why it shows "Partial" in the demo:** Some evidence exists, but an access review is **stale** (too old) or a claim in the SSP isn't backed by attached proof.
+### System
 
-**Demo line:** "AC-2 is about proving you manage who has access. The AI found policy evidence but flagged that the last access review is outdated — a very common real ATO finding."
+The bounded government system or cloud service being prepared for review.
 
-### AU-6 — Audit Review, Analysis, and Reporting
+### Package revision
 
-**Requirement:** Someone regularly reviews audit logs to detect suspicious activity.
+One immutable snapshot of source files and confirmed facts under its own profile. The profile belongs to the package revision, not the System.
 
-**Typical evidence:** SIEM reports, log review SOPs, tickets showing reviews happened, sample review records.
+### Run
 
-**Why "Supported" in the demo:** Evidence appears current and aligned with the implementation statement.
+One immutable analysis of one package revision under one authority, configuration, prompt, and model profile.
 
-**Demo line:** "AU-6 is log review discipline. Here the evidence matches what they claim — no major gap flagged."
+### Assessment item
 
-### CM-6 — Configuration Settings
+The thing being checked. It may be a FISMA control, FedRAMP rule, or FedRAMP KSI.
 
-**Requirement:** Systems must use secure configurations (baselines), and unauthorized changes must be controlled.
+### Evidence
 
-**Typical evidence:** STIG/CIS baseline docs, config management policy, scan results showing compliance or drift.
+Source material that substantiates a claim: policy, procedure, export, test result, scan result, ticket, review record, configuration record, or similar proof.
 
-**Why "Partial" + POA&M in demo:** STIG/scan findings suggest hosts don't match the stated baseline — technical finding contradicts or weakens the narrative.
+### Provenance
 
-**Demo line:** "CM-6 is where scanner results often matter. Qualys/Tenable/STIG output gets mapped to this control to show ATO impact."
+The exact source of a fact: file hash plus page, section, cell, JSON/XML pointer, text offset, or image region.
 
-### IR-4 — Incident Handling
+### Draft analysis status
 
-**Requirement:** The org can detect, respond to, and handle security incidents per a defined plan.
-
-**Typical evidence:** Incident response plan, tabletop exercise records, runbooks, ticket examples.
-
-**Why "Supported" in demo:** Plan + exercise evidence look current.
-
-**Demo line:** "IR-4 is procedural — do you have a plan and proof you practice it?"
-
-### RA-5 — Vulnerability Monitoring
-
-**Requirement:** Identify and remediate vulnerabilities on an ongoing basis.
-
-**Typical evidence:** Vulnerability scan reports, remediation tickets, scan cadence policy, asset inventory linkage.
-
-**Why "Needs review" in demo:** Scanner export may be present but missing **asset ownership** or clear tie to the authorization boundary.
-
-**Demo line:** "RA-5 connects vuln scanning to ATO. Findings exist, but the package doesn't fully connect scans to the right assets — assessor would ask questions."
-
----
-
-## Evidence (what the portal is really reviewing)
-
-**Evidence** = proof attached to a control (policy PDF text, config export, scan result, log sample, ticket record).
-
-| Term in UI | Meaning |
+| Status | Meaning |
 | --- | --- |
-| **Linked evidence** | Artifact IDs tied to a control in the package |
-| **Current** | Collected recently enough for policy threshold |
-| **Stale** | Too old; assessors often reject or question it |
-| **Unsupported claim** | SSP says "we do X" but evidence doesn't show X |
-| **Missing evidence** | Control references an evidence ID that isn't in the package |
-| **Citation** | Pointer like `ev-iam-policy-2026-02` — AI must cite these, not invent facts |
+| Supported | Supplied context directly supports all material claim elements |
+| Partial | Some support exists, but material elements are missing, stale, weak, or not fully reviewed |
+| Unsupported | Supplied evidence contradicts the claim or shows the implementation is absent |
+| Insufficient evidence | The package lacks enough usable evidence to decide |
 
-**Behind the scenes:** Dates and links checked in code; sufficiency and gap language from bounded LLM over provided text only.
+These labels are not official compliance or authorization results.
 
----
+## Demo flow
 
-## Control status labels in the portal
+### 1. Systems and packages
 
-Aligned with Block 1 matrix rubric — four sufficiency statuses, all draft:
+Say:
 
-| Status | Meaning | Official? |
-| --- | --- | --- |
-| **Supported** | Linked evidence appears to substantiate the implementation claim | No — draft analysis only |
-| **Partial** | Evidence exists but gaps, stale items, or weak linkage remain | No |
-| **Unsupported** | Evidence contradicts or does not show implementation | No |
-| **Insufficient evidence** | No linked evidence, or too thin to assess | No |
+> Each System can have many immutable package revisions. The supported profile and authorization path belong to each PackageRevision, so a System is not locked to one path. Users see only systems their customer identity groups permit.
 
-**Derived rollup — Needs attention:** count of Partial + Unsupported + Insufficient evidence. Used in the package run summary header, not a fifth matrix status.
+Show:
 
-**Demo line:** "These counts are draft analysis readiness for this package run — not Passing/Gaps in GRC, eMASS, or a pipeline compliance dashboard."
+- System name
+- Latest PackageRevision and its profile and path
+- Data origin and sensitivity
+- Readiness and run state
 
----
+Do not say:
 
-## Gov artifacts (Draft Artifacts screen)
+- "This system is compliant."
+- "This system will receive an ATO."
+- "The product selected the baseline."
 
-### SSP — System Security Plan
+### 2. Upload and extraction
 
-**What it is:** The master document describing the system, boundary, and how each control is implemented.  
-**Who owns it:** System owner / ISSO in GRC or eMASS.  
-**What we draft:** A full review-ready SSP using the selected path template and provided package inputs. Missing boundary, inventory, tailoring, or evidence becomes `TBD — input missing`; humans edit before official SSP update.
+Say:
 
-### SAR — Security Assessment Report
+> Before analysis, files are streamed, size-checked, malware-scanned, type-checked, and safely extracted. Every source is hashed. If the format is unfamiliar, AI may propose field mappings, but a person must confirm them before they become trusted package facts. After review, confirmation seals the current revision as ready. Any later source, confirmed fact, profile, label, or link change creates a child revision rather than changing the ready revision.
 
-**What it is:** Assessor's official report of findings from testing/review.  
-**Who owns it:** SCA / 3PAO sign-off.  
-**What we draft:** A full SAR input pack — finding language, severity, control mapping, citations, and assessor questions. The SCA / 3PAO still owns the official SAR.
+Show:
 
-### POA&M — Plan of Action and Milestones
+- Per-file status
+- Rejected or quarantined reason
+- Extracted source locator
+- Pending proposals
 
-**What it is:** Tracked list of weaknesses, remediation plans, due dates, risk — lives in GRC/eMASS.  
-**What we draft:** A full draft POA&M export — all open or updated weakness items, path-specific fields, milestones, owners, risk, and citations. ISSO approves before import to GRC/eMASS.
+### 3. Preflight readiness
 
-**Demo POA&M fields:**
+Say:
 
-- **Weakness** — what's wrong (e.g. STIG baseline not enforced)
-- **Milestone** — what must happen to fix it (re-scan, attach evidence, update SSP)
-- **Risk / citations** — severity framing + proof pointers (`ev-stig-2026-05`, `scan-tenable-2026-06`)
+> Preflight separates two questions. Can we safely analyze this snapshot? And is the package complete enough to export? Missing evidence may still be useful to analyze because it tells the team what to request.
 
-### SAP — Security Assessment Plan
+Show:
 
-**What it is:** Assessor's plan for *what* to test before the assessment.  
-**What we draft:** A full draft SAP: assessment scope, methods, controls to test, sampling approach, schedule, and focus areas derived from gaps.
+- Analysis blockers
+- Export blockers
+- Warnings
+- Informational readiness percentage
 
-### RAR — Risk Assessment Report
+Do not describe the percentage as the decision.
 
-**What it is:** Risk analysis supporting the authorization decision.  
-**What we draft:** A full draft RAR from evidence gaps — risk statements, likelihood/impact framing, and residual risk language. ISSO/AO staff review it; we do not accept risk.
+### 4. Evidence matrix
 
----
+Say:
 
-## Other terms in the demo
+> The matrix gives exactly one row for every expected assessment item. The model proposes an evidence-based result, and deterministic code checks citations, row coverage, stale evidence, missing context, and status limits.
 
-**NIST SP 800-53 Rev 5**  
-The control catalog. "Rev 5" is the current revision — our baseline.
+Show:
 
-**FIPS 199 impact level (Low / Moderate / High)**  
-How bad failure would be for confidentiality, integrity, availability. Drives **how many controls** apply — not determined by our product.
+- Status and context-complete marker
+- Source citations
+- Gaps and questions
+- Model output separately from human disposition
 
-**CUI (Controlled Unclassified Information)**  
-Sensitive unclassified data. Package declares max classification; processing stays in customer boundary.
+### 5. FedRAMP package view
 
-**OSCAL**  
-Standard JSON/XML format for SSP, SAP, assessment results, POA&M. We import/export standard model names; GRC remains authoritative.
+Say:
 
-**FedRAMP Moderate**  
-FedRAMP baseline for moderate-impact cloud systems — common for CSPs. Header pill shows path + impact context.
+> For the FedRAMP 20x Program path, the portal organizes the package around the official CPO, SDR, OCR, SCG reference, KSI material, and imported independent assessment inputs. Official JSON is validated against the pinned schema, then separate semantic rules check whether the package is actually ready.
 
-**Readiness summary (package run summary header)**  
-Deterministic rollups from the latest analysis run: Supported / Partial / Unsupported / Insufficient evidence counts, **Needs attention** total, evidence items in package, stale evidence flags, validation warnings. **Not** live pass/gap or attestation inventory from a pipeline tool.
+Show:
 
-**ConMon (Continuous Monitoring)**  
-FedRAMP ongoing monthly monitoring after initial authorization. **Locked strategy:** ConMon prep and gated export to GRC (Option 1) — delta analysis, POA&M update drafts, narrative draft; GRC and FedRAMP process remain authoritative. We do **not** replace the ConMon workflow or submit to FedRAMP Marketplace (Option 2). See ConMon strategy in [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md).
+- Official schema result
+- Semantic readiness blockers
+- Assessor-owned fields marked import-only
+- KSI methods and metric history
+- Freshness and next-report dates
 
-**Significant change / SCR (FedRAMP)**  
-Material system change that may require re-assessment. Our **significant-change brief** (in plan) compares packages; we don't run the SCR workflow.
+Do not describe an SSP/SAR/POA&M bundle as the primary 20x package.
 
----
+### 6. Agency FISMA view
 
-## Screen-by-screen with definitions
+Say:
 
-### Overview
+> For an agency system, the customer supplies the tailored control list and agency templates. We analyze the security evidence and prepare security drafts. The product does not choose tailoring or cover the privacy package.
 
-- **Active packages** — systems with evidence bundles in flight (one bundle = one system + one assessment cycle snapshot)
+Show:
 
-  **What an evidence bundle contains** (file-drop or import — not live GRC sync):
+- Control inventory
+- SSP security draft
+- SAR input pack
+- Security readiness and privacy-scope notice
 
-  | Layer | Examples |
-  | --- | --- |
-  | **Metadata** | System name, authorization path (FISMA / FedRAMP / DoD), impact level, assessment date, boundary summary, data classification |
-  | **Controls** | 800-53 Rev 5 IDs in scope, implementation statements, linked evidence IDs |
-  | **Evidence artifacts** | Policies, SOPs, access reviews, log review records, IR plans, configs, tickets, screenshots — PDF, DOCX, XLSX, text/markdown |
-  | **Scanner / STIG exports** | Qualys, Tenable, SCAP/STIG, SCC, CCRI findings imported as read-only inputs |
-  | **Attestation exports (optional)** | Pipeline attestation bundles the customer exported (JSON/OSCAL/in-toto) — we ingest, we do not collect from CI/CD |
-  | **OSCAL (optional)** | Partial or full SSP, POA&M, SAP, assessment-results from GRC/eMASS |
-  | **Architecture (optional)** | Boundary/network diagrams — PNG, PDF pages, or structured exports from draw.io / Visio |
-  | **Prior package (optional)** | Last SSP/POA&M/evidence snapshot for delta, ConMon prep, or significant-change comparison |
+### 7. Human review
 
-  **Demo line:** "Same idea as our notable payload — everything the ISSO would assemble for one assessor review cycle, bounded and citeable. GRC and scanners stay authoritative; we analyze the bundle they export or drop."
+Say:
 
-- **Package run summary** — per-run rollups: Supported / Partial / Unsupported / Insufficient evidence, Needs attention, evidence in package, stale flags, validation warnings (from `package_run_summary` in report JSON)
-- **Drafts awaiting review** — AI-generated full draft documents not yet human-approved
+> AI results never silently become accepted findings. A reviewer can accept, edit, reject, request evidence, or confirm a weakness. The original run remains unchanged, and every human decision is versioned and audited.
 
-**Behind the scenes:** Portal reads archived analysis runs. Summary counts are deterministic rollups from the latest matrix — not live GRC sync, not pipeline pass/gap.
+Show:
 
-### Control Review (control matrix)
+- Model proposal
+- Human disposition
+- Comment history
+- Evidence request
 
-- **Control list** — 800-53 controls in scope; filter by sufficiency status, stale evidence, or open gaps
-- **AI evidence finding** — LLM summary bounded to linked evidence
-- **Draft SAR finding** — creates assessor-facing finding draft for that control
-- **Re-analyze controls needing attention** — after customer re-ingests new evidence, re-run matrix for flagged controls only (does not trigger external scans)
+### 8. Approval and export
 
-**Behind the scenes:** Controls from OSCAL SSP or package manifest. LLM output schema-validated; stale dates and broken links caught deterministically first. Gap clusters (Block 6) group related weaknesses by control family for POA&M prep.
+Say:
 
-### Readiness (assessor checklist)
+> The package owner submits one exact draft payload. A different approver reviews that hash. Any content change invalidates the approval. V1 produces a downloadable ZIP and does not write directly into GRC or FedRAMP.
 
-- **Assessor readiness checklist** — draft flags for common rejection patterns before export (stale evidence, missing links, narrative gaps, OSCAL validation failures)
-- **Upload checklist** — path-aware list of what is still missing before a full analysis run
+Show:
 
-**Demo line:** "This simulates what a 3PAO might push back on — it is not an authorization decision."
+- Submitted hash
+- Submitter and approver
+- Expiration
+- Export manifest and validation results
 
-**Behind the scenes:** Deterministic checks first; bounded LLM for narrative completeness flags. Inspired by reviewer simulation in Boundera/Paramify; scoped to one imported package.
+### 9. Package assistant
 
-### Draft Artifacts
+Say:
 
-- **Export OSCAL** — machine-readable draft for GRC import (validated before gated writeback)
-- **Paired export** — OSCAL plus ISSO-readable markdown from the same run
-- **Send to approval** — human gate before writeback
+> The assistant can explain only this authorized package and must cite its sources. It cannot browse the web, run tools, change records, certify the package, accept risk, or recommend an authorization decision.
 
-**Behind the scenes:** Path-aware field mapping (FedRAMP vs eMASS vs agency). Export writes draft OSCAL models; official records unchanged until GRC import after approval.
+Good demo questions:
 
-### Assistant
+- "What evidence supports this assessment item?"
+- "Why is this row partial?"
+- "Which package fields are still missing?"
+- "What changed from the previous run?"
 
-- Refuses **authorization** questions — AO decision, not AI
-- Returns **readiness summary** — counts and gaps from the package
+Refusal demo:
 
-**Behind the scenes:** Retrieval over one archived package only. Citations required; no open-web grounding.
+- "Should the AO approve this system?"
+- "Mark this control compliant."
+- "Accept this risk."
 
-### Approvals
+## Security and deployment wording
 
-- **GRC import** — push approved draft into Archer/CSAM/etc.
-- **Blocked by path** — eMASS writeback disabled when package is FedRAMP
+Use:
 
-**Behind the scenes:** `action_gated` capability profile. No writeback without explicit human approval.
+> The application is installed on customer infrastructure. Model routing is separately controlled. The initial external model profile is limited to synthetic or explicitly approved redacted non-production data. Real customer production, sensitive, CUI, unknown, and classified data are blocked from that external route. A future approved internal endpoint can change the routing policy without changing the application workflow.
 
-### Audit Trail
+Do not use:
 
-- **Run** — one analysis execution (validate -> LLM -> reports -> audit log)
-- **Package delta** — when a prior package is linked, what changed in controls, evidence, and matrix status
-- **Validation warnings** — schema/date/link issues caught before trusting output
+- "Everything stays inside the customer boundary" when the model endpoint is external.
+- "CUI-ready" without a customer-approved endpoint, network, deployment, and security assessment.
+- "Air-gapped" unless the demonstrated deployment has no external dependency.
+- "Automated compliance decision."
 
-**Behind the scenes:** Append-only audit record per run: package_id, path, timestamp, model profile, input hash, output paths, warning count.
+## Common questions
 
----
+### Does it replace GRC?
 
-## 10-second definitions cheat sheet (while clicking)
+No. It prepares and reviews evidence-bound drafts. GRC and government processes remain authoritative.
 
-| Term | Say this |
-| --- | --- |
-| Control | A NIST security requirement we must prove with evidence |
-| AC-2 | Prove you manage user accounts properly |
-| Evidence | The proof documents/scans tied to a control |
-| SSP | Official "how we implement controls" document |
-| SAR | Assessor's official findings report |
-| POA&M | Official remediation tracker for weaknesses |
-| Partial | Some proof, but gaps — not ready for assessor without fixes |
-| Needs attention | Partial + Unsupported + Insufficient evidence — rollup only |
-| Stale | Evidence too old to trust |
-| Draft | AI wrote it; human must review before it's official |
-| GRC/eMASS | Where official records live — we don't replace them |
+### Does it replace an ISSO or assessor?
 
----
+No. It reduces reading, comparison, and drafting effort. Humans provide and review facts, confirm weaknesses, supply independent conclusions, and make official decisions.
 
-## Leadership one-liner per screen
+### Can it use customer production data with OpenAI?
 
-1. **Overview** — "For this package run, how many controls look supported vs need attention?"
-2. **Control Review** — "Filter to gaps and stale evidence — does the proof actually hold up?"
-3. **Readiness** — "What would an assessor likely push back on before we export?"
-4. **Draft Artifacts** — "Turn evidence and gaps into full draft ATO documents humans can review."
-5. **Assistant** — "Ask questions about this package — with citations, not guesses."
-6. **Approvals** — "Nothing hits GRC without a person."
-7. **Audit Trail** — "Every AI run is logged; deltas show what changed since last month."
+Not under the default policy. The external profile blocks customer production, sensitive, CUI, classified, and unknown data. Any different use requires an explicitly approved deployment policy and boundary; classified remains unsupported.
 
----
+### Does a valid JSON file mean the FedRAMP package is complete?
 
-## Suggested demo flow (5 minutes)
+No. The product checks both the official schema and the applicable package rules, dates, assessor inputs, KSI material, and other obligations.
 
-1. **Overview** — three packages, one ready for review
-2. **Control Review** — AC-2 stale evidence and unsupported claim
-3. **Readiness** — assessor checklist flags before export (not a pass/fail decision)
-4. **Draft Artifacts** — full draft SSP / POA&M export for human review
-5. **Assistant** — citation discipline; refuse authorization decision
-6. **Approvals** — human gate before writeback
-7. **Audit Trail** — traceable runs; package delta if prior month linked
+### Does it perform continuous monitoring?
 
-**Close:** "The ATO process does not go away. We make the manual analysis inside it faster, more consistent, and reviewable."
+No. It can analyze supplied snapshots and prepare OCR or delta material. It does not collect telemetry, run validations, or host the review process.
 
----
+### Does approval make the output official?
 
-## Objection handling (leadership)
+No. Product approval only authorizes export of that exact draft bundle. Official use and decisions happen in the customer's or government's authoritative process.
 
-| Objection | Response |
-| --- | --- |
-| "We already have Archer / eMASS / FedRAMP tools" | "Those are the system of record. We accelerate the analysis and draft-writing those tools do not do well." |
-| "Can AI grant our ATO?" | "No. AO and assessors decide. We produce evidence-bound drafts and readiness summaries." |
-| "Is our data leaving the boundary?" | "Production answer: no. On-prem first, local model, no default public LLM egress. Early OpenAI prototyping is synthetic/redacted only." |
-| "Why not build this inside GRC?" | "GRC vendors optimize tracking and workflow. We optimize evidence analysis and generative draft quality." |
-| "What's the ROI?" | "ISSOs and assessors spend weeks per package on manual evidence review and document prep. We target that labor, not tool replacement." |
+## Mandatory close
 
----
+End every demo with:
 
-## Tie-back to notable analysis (internal audience)
-
-| Notable IR | ATO portal |
-| --- | --- |
-| SIEM alert | GRC/scanner/evidence package |
-| Automated investigation report | Control evidence review + draft gov artifacts |
-| Analyst portal + case chat | Evidence portal + package chat |
-| Optional Splunk writeback | Optional GRC/eMASS draft writeback after approval |
-| Does not close incidents autonomously | Does not grant ATO autonomously |
+> This is an evidence analysis and draft-preparation product. Every material result remains traceable to supplied sources and subject to human review. The system does not make certification, compliance, risk-acceptance, or authorization decisions.

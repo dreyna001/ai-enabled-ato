@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "hard_stop_id": "HS-001",
+      "condition": "A reviewed authority snapshot is unavailable, or an authority digest does not match.",
+      "blocked_work": "Authority-dependent implementation and release.",
+      "status": "open",
+      "owner": "qualified authority reviewer (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/authority-manifest.json"
+      ],
+      "notes": "The manifest is draft, approval fields are null, and every source review_status is pending. Vendored, digest-verified authority bytes do not constitute qualified human review."
+    },
+    {
+      "hard_stop_id": "HS-002",
+      "condition": "A customer-approved agency FISMA template pack and field mapping have not been supplied.",
+      "blocked_work": "Claims of agency field parity or customer-ready FISMA export.",
+      "status": "open",
+      "owner": "customer agency template owner (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md"
+      ],
+      "notes": "No customer-specific template pack or field mapping is evidenced in the repository. Official standard schemas do not establish parity with an agency-specific rendering."
+    },
+    {
+      "hard_stop_id": "HS-003",
+      "condition": "Customer IdP issuer, client, and group mapping inputs have not been supplied and verified.",
+      "blocked_work": "Production identity deployment.",
+      "status": "open",
+      "owner": "customer identity administrator (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "docs/CONFIGURATION.md",
+        "deployment/README.md"
+      ],
+      "notes": "The repository defines an identity contract but contains no verified customer IdP values or completed group-mapping test evidence."
+    },
+    {
+      "hard_stop_id": "HS-004",
+      "condition": "A customer-approved model endpoint data policy has not been supplied and verified.",
+      "blocked_work": "Any real customer model call.",
+      "status": "open",
+      "owner": "customer security and data authority (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/THREAT_MODEL.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "docs/CONFIGURATION.md",
+        "deployment/README.md"
+      ],
+      "notes": "Design-time routing controls and default-deny requirements are documented, but they are not evidence of customer approval for a real endpoint or customer data."
+    },
+    {
+      "hard_stop_id": "HS-005",
+      "condition": "An approved production malware scanner is not configured, operational, and verified.",
+      "blocked_work": "Customer file extraction.",
+      "status": "open",
+      "owner": "customer platform security owner (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/THREAT_MODEL.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "docs/CONFIGURATION.md",
+        "deployment/README.md"
+      ],
+      "notes": "The scanner behavior is a target contract and the scanner is customer-provided. No operational scanner or verification evidence is present."
+    },
+    {
+      "hard_stop_id": "HS-006",
+      "condition": "A written SME label guide and adjudicated holdout meeting qualification requirements are unavailable.",
+      "blocked_work": "AI qualification or pilot claims.",
+      "status": "open",
+      "owner": "AI qualification lead and qualified SMEs (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/AI_EVALUATION_GUIDE.md"
+      ],
+      "notes": "The written label and evaluation contract is published, but no qualified dual-SME labels, adjudicated sealed holdout, or passing immutable live evaluation record is present."
+    },
+    {
+      "hard_stop_id": "HS-007",
+      "condition": "A named GRC API, field map, credentials, and test tenant are unavailable.",
+      "blocked_work": "Vendor writeback.",
+      "status": "out_of_scope",
+      "owner": "product owner",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/THREAT_MODEL.md",
+        "docs/OPERATIONS_AND_RECOVERY.md"
+      ],
+      "notes": "External writeback is explicitly out of scope for v1. No GRC integration inputs are inferred; this hard stop must be revisited if writeback is proposed later."
+    },
+    {
+      "hard_stop_id": "HS-008",
+      "condition": "A customer backup target and customer key ownership have not been supplied and verified.",
+      "blocked_work": "Production readiness.",
+      "status": "open",
+      "owner": "customer backup and key owner (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "docs/CONFIGURATION.md",
+        "deployment/README.md"
+      ],
+      "notes": "The operations contract specifies required backup behavior but does not select a customer backup target, product, encryption key, or verified owner."
+    },
+    {
+      "hard_stop_id": "HS-009",
+      "condition": "Required assessor-owned FedRAMP inputs have not been supplied.",
+      "blocked_work": "Claims of complete Class C package readiness.",
+      "status": "open",
+      "owner": "independent assessor and customer package owner (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/domain.schema.json"
+      ],
+      "notes": "Repository contracts preserve assessor-owned material as supplied input and do not authorize generation of assessor conclusions. No customer-specific assessor package inputs are evidenced."
+    },
+    {
+      "hard_stop_id": "HS-010",
+      "condition": "No customer retention or approval override has been supplied and approved.",
+      "blocked_work": "Customer-specific retention or approval behavior that differs from the normative defaults.",
+      "status": "using_default",
+      "owner": "customer policy authority (unassigned)",
+      "evidence_paths": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/OPERATIONS_AND_RECOVERY.md"
+      ],
+      "notes": "Use the normative defaults until an approved customer override is supplied: seven-year primary retention, seven-day approval expiry, and 90-day online backup retention. Do not infer customer-specific policy."
+    }
+  ]
+}

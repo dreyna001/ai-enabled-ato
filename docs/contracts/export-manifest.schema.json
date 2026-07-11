@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/export-manifest.schema.json",
+  "title": "ATO Export Bundle Manifest",
+  "$comment": "Semantic validation MUST recompute every bundled file SHA-256 and size, reject duplicate paths, verify that approval_id binds the exact approved review revision and payload manifest, and verify the run, package revision, system, profile, and authority relationships. Rebuilding from the same approved review revision MUST reproduce identical payload files except for export_id and created_at. Files with official_schema_id MUST validate against the pinned official schema and contain only fields permitted by that schema; product metadata belongs outside official payloads. manifest.json is excluded from files because it cannot hash itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "export_id",
+    "profile_id",
+    "system_id",
+    "package_revision_id",
+    "run_id",
+    "review_revision_id",
+    "approval_id",
+    "created_at",
+    "ai_disclosure",
+    "authority_manifest_id",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "export_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "profile_id": {
+      "enum": [
+        "fedramp_20x_program",
+        "fedramp_rev5_transition",
+        "fisma_agency_security"
+      ]
+    },
+    "system_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "package_revision_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "run_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "review_revision_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "approval_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "created_at": {
+      "$ref": "#/$defs/utcDateTime"
+    },
+    "ai_disclosure": {
+      "const": "AI Disclosure: This report was produced with machine assistance. All findings,\nsummaries, and status labels are draft inference bound to the evidence provided\nin the package. They do not constitute an official compliance determination,\nrisk acceptance, certification, or authorization decision. A qualified human\nreviewer must review and approve the content before use in an authoritative\ngovernment or customer process."
+    },
+    "authority_manifest_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+      "maxLength": 128
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/exportFile"
+      }
+    }
+  },
+  "$defs": {
+    "uuidV4": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "utcDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "exportFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "media_type",
+        "sha256",
+        "size_bytes",
+        "official_schema_id"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?:README\\.txt|(?:human|machine|provenance|validation)/(?!\\.\\.?/)(?!.*(?:/\\.\\.?/|/\\.\\.?$))(?!.*//)[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,502}[A-Za-z0-9])?)$",
+          "maxLength": 512
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "official_schema_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "schema_version": "2.0.0",
+  "profile_id": "fedramp_20x_program",
+  "profile_version": "2.0.0",
+  "authority_manifest_id": "authority.v2",
+  "generated_at": "2026-07-10T20:00:00Z",
+  "qualification_status": "qualified",
+  "certification_class": "C",
+  "impact_level": null,
+  "assessment_items": [
+    {
+      "assessment_item_type": "fedramp_rule",
+      "assessment_item_id": "FR-1",
+      "title": "Representative provider requirement",
+      "requirement_text": "The provider supplies the required evidence.",
+      "force": "MUST",
+      "owner": "provider",
+      "applicability": {
+        "paths": [
+          "program"
+        ],
+        "classes": [
+          "C"
+        ],
+        "impact_levels": [],
+        "affects": [
+          "provider"
+        ]
+      },
+      "authority_refs": [
+        {
+          "authority_id": "authority.v2",
+          "source_pointer": "/requirements/FR-1"
+        }
+      ],
+      "required_evidence_kinds": [
+        "evidence_document"
+      ],
+      "model_analysis_allowed": true
+    }
+  ],
+  "artifact_requirements": [
+    {
+      "artifact_id": "cpo",
+      "display_name": "Cloud Provider Overview",
+      "required": true,
+      "owner": "provider",
+      "official_schema_authority_id": "authority.v2",
+      "human_readable_required": true,
+      "machine_readable_required": true,
+      "export_paths": [
+        "human/cpo.md",
+        "machine/cpo.json"
+      ],
+      "authority_refs": [
+        {
+          "authority_id": "authority.v2",
+          "source_pointer": "/artifacts/cpo"
+        }
+      ]
+    }
+  ],
+  "cadence_rules": [],
+  "status_policy": {
+    "allowed_statuses": [
+      "supported",
+      "partial",
+      "unsupported",
+      "insufficient_evidence"
+    ],
+    "no_evidence_status": "insufficient_evidence",
+    "incomplete_context_ceiling": "partial",
+    "all_stale_ceiling": "partial",
+    "system_may_be_more_favorable_than_model": false,
+    "exact_row_coverage_required": true,
+    "repair_attempts": 1
+  }
+}

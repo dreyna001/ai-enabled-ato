@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0.0",
+  "runtime_profile": "onprem_production",
+  "TEXT_MODEL_ENDPOINT_URL": "https://models.customer.internal/v1",
+  "TEXT_MODEL_NAME": "customer-text-model",
+  "TEXT_MODEL_CONTEXT_TOKENS": 8192,
+  "TEXT_MODEL_MAX_OUTPUT_TOKENS": 1024,
+  "TEXT_MODEL_TIMEOUT_SECONDS": 30,
+  "TEXT_MODEL_MAX_RETRIES": 2,
+  "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
+  "TEXT_MODEL_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "text-model-api-key"
+  },
+  "VISION_MODEL_ENABLED": false,
+  "VISION_MODEL_ENDPOINT_URL": "https://models.customer.internal/v1",
+  "VISION_MODEL_NAME": "customer-vision-model",
+  "VISION_MODEL_CONTEXT_TOKENS": 4096,
+  "VISION_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
+  "MODEL_ENDPOINT_ALLOWLIST": [
+    {
+      "host": "models.customer.internal",
+      "port": 443
+    }
+  ],
+  "MAX_MODEL_CALLS_PER_RUN": 120,
+  "MAX_MODEL_INPUT_TOKENS_PER_RUN": 100000,
+  "MAX_MODEL_OUTPUT_TOKENS_PER_RUN": 20000,
+  "MAX_PACKAGE_BYTES": 2147483648,
+  "MAX_SINGLE_FILE_BYTES": 104857600,
+  "MAX_FILES_PER_REVISION": 500,
+  "MAX_ASSESSMENT_ITEMS": 500,
+  "MAX_EVIDENCE_ITEMS": 2000,
+  "MAX_PDF_PAGES_PER_FILE": 200,
+  "MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE": 2000000,
+  "MAX_CONCURRENT_ANALYSIS_RUNS": 2,
+  "MAX_ACTIVE_ANALYZER_WORKERS": 2,
+  "JOB_HEARTBEAT_SECONDS": 30,
+  "JOB_LEASE_SECONDS": 300,
+  "CHAT_MAX_RETRIEVED_CHUNKS": 8,
+  "CHAT_RATE_LIMIT_PER_USER": {
+    "max_requests": 30,
+    "window_seconds": 60
+  },
+  "CHAT_INPUT_LIMIT": {
+    "value": 4000,
+    "unit": "characters"
+  },
+  "CHAT_TURN_LIMIT": 20,
+  "CHAT_DAILY_TOKEN_LIMIT_PER_USER": 100000,
+  "STORAGE_DATA_PATH": "/var/ato-packages",
+  "STORAGE_WARNING_PERCENT": 80,
+  "STORAGE_REJECTION_PERCENT": 90,
+  "DATABASE_ENGINE": "postgresql",
+  "DATABASE_MAJOR_VERSION": 16,
+  "DATABASE_LISTEN_MODE": "loopback",
+  "DATABASE_DSN_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "database-dsn"
+  },
+  "IDENTITY_PROVIDER_MODE": "oidc",
+  "OIDC_ISSUER_URL": "https://idp.customer.internal/",
+  "OIDC_AUDIENCE": "ato-analyzer",
+  "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "oidc-client-secret"
+  },
+  "SESSION_IDLE_TIMEOUT_MINUTES": 30,
+  "SESSION_ABSOLUTE_TIMEOUT_HOURS": 8,
+  "LOCAL_PASSWORD_AUTH_ENABLED": false,
+  "MALWARE_SCANNER_ENABLED": true,
+  "MALWARE_SCANNER_ID": "customer-scanner",
+  "MALWARE_SCANNER_FAILURE_POLICY": "fail_closed",
+  "RETENTION_YEARS": 7,
+  "APPROVAL_EXPIRY_DAYS": 7,
+  "AUDIT_CHAIN_ALGORITHM": "HMAC-SHA-256",
+  "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "audit-hmac-key"
+  },
+  "AUDIT_ROOT_BACKUP_FREQUENCY": "daily",
+  "BACKUP_RTO_HOURS": 4,
+  "BACKUP_RPO_HOURS": 1,
+  "BACKUP_POSTGRES_WAL_ARCHIVING_ENABLED": true,
+  "BACKUP_FILESYSTEM_SNAPSHOT_INTERVAL_MINUTES": 60,
+  "BACKUP_FULL_FREQUENCY": "daily",
+  "BACKUP_OFF_HOST_ENABLED": true,
+  "BACKUP_ENCRYPTION_ENABLED": true,
+  "BACKUP_KEY_OWNERSHIP": "customer",
+  "BACKUP_ENCRYPTION_KEY_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "backup-encryption-key"
+  },
+  "BACKUP_ONLINE_RETENTION_DAYS": 90,
+  "BACKUP_RESTORE_DRILL_FREQUENCY": "quarterly"
+}

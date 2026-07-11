@@ -1,0 +1,860 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/runtime-config.schema.json",
+  "title": "ATO Validated Runtime Configuration",
+  "description": "Non-secret runtime configuration parsed into JSON-native values before startup validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Startup code must reject secret values in this document, resolve credential references through protected deployment facilities, validate authority manifests, and apply data-routing policy before every model call. JSON Schema cannot verify filesystem ownership/mode, endpoint DNS resolution, egress firewall policy, endpoint qualification, customer approvals, dependency readiness, or cross-field numeric relationships.",
+  "required": [
+    "schema_version",
+    "runtime_profile"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "runtime_profile": {
+      "enum": [
+        "dev_local",
+        "onprem_production"
+      ]
+    },
+    "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": {
+      "type": "boolean",
+      "default": false,
+      "$comment": "Explicit opt-in for HTTP model endpoints that use literal loopback IP addresses (IPv4 127.0.0.0/8 or IPv6 ::1). It does not permit DNS hostnames such as localhost, private-network hosts, or other cleartext endpoints."
+    },
+    "TEXT_MODEL_PROVIDER": {
+      "type": "string",
+      "enum": [
+        "openai_compatible",
+        "aws_bedrock"
+      ],
+      "default": "openai_compatible",
+      "$comment": "Selects the text-model HTTP/API client. OpenAI-compatible uses TEXT_MODEL_ENDPOINT_URL and an API key credential. AWS Bedrock uses AWS_REGION, TEXT_MODEL_NAME as the Bedrock model ID, and the standard AWS credential chain."
+    },
+    "AWS_REGION": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[a-z]{2}(?:-[a-z]+)+-\\d+$",
+      "$comment": "Required when TEXT_MODEL_PROVIDER is aws_bedrock. Secrets stay in the AWS credential chain, not in runtime JSON."
+    },
+    "TEXT_MODEL_ENDPOINT_URL": {
+      "$ref": "#/$defs/secureEndpointUrl"
+    },
+    "TEXT_MODEL_NAME": {
+      "$ref": "#/$defs/modelName"
+    },
+    "TEXT_MODEL_CONTEXT_TOKENS": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "TEXT_MODEL_MAX_OUTPUT_TOKENS": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "TEXT_MODEL_TIMEOUT_SECONDS": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "TEXT_MODEL_MAX_RETRIES": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 2
+    },
+    "TEXT_MODEL_ENDPOINT_PROFILE": {
+      "$ref": "#/$defs/endpointProfile"
+    },
+    "TEXT_MODEL_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference"
+    },
+    "VISION_MODEL_ENABLED": {
+      "type": "boolean"
+    },
+    "VISION_MODEL_ENDPOINT_URL": {
+      "$ref": "#/$defs/secureEndpointUrl"
+    },
+    "VISION_MODEL_NAME": {
+      "$ref": "#/$defs/modelName"
+    },
+    "VISION_MODEL_CONTEXT_TOKENS": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "VISION_MODEL_ENDPOINT_PROFILE": {
+      "$ref": "#/$defs/endpointProfile"
+    },
+    "VISION_MODEL_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference"
+    },
+    "MODEL_ENDPOINT_ALLOWLIST": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/allowedEndpoint"
+      },
+      "$comment": "Startup code must normalize each configured URL to its effective host and port, reject URL userinfo and redirects, resolve DNS safely, and require an exact allowlist match before any request. Semantic validation in runtime_config.py enforces userinfo rejection, production mock-profile rejection, allowlist matching, vision credential dependencies, and contradictory token limits without DNS or network calls."
+    },
+    "MAX_MODEL_CALLS_PER_RUN": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 120
+    },
+    "MAX_MODEL_INPUT_TOKENS_PER_RUN": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "MAX_MODEL_OUTPUT_TOKENS_PER_RUN": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "MAX_PACKAGE_BYTES": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 2147483648
+    },
+    "MAX_SINGLE_FILE_BYTES": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 104857600
+    },
+    "MAX_FILES_PER_REVISION": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 500
+    },
+    "MAX_ASSESSMENT_ITEMS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 500
+    },
+    "MAX_EVIDENCE_ITEMS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 2000
+    },
+    "MAX_PDF_PAGES_PER_FILE": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 200
+    },
+    "MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 2000000
+    },
+    "MAX_CONCURRENT_ANALYSIS_RUNS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2,
+      "default": 2
+    },
+    "MAX_ACTIVE_ANALYZER_WORKERS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2,
+      "default": 2
+    },
+    "JOB_HEARTBEAT_SECONDS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 30
+    },
+    "JOB_LEASE_SECONDS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 300
+    },
+    "CHAT_MAX_RETRIEVED_CHUNKS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "default": 8
+    },
+    "CHAT_RATE_LIMIT_PER_USER": {
+      "$ref": "#/$defs/rateLimit"
+    },
+    "CHAT_INPUT_LIMIT": {
+      "$ref": "#/$defs/measuredInputLimit"
+    },
+    "CHAT_TURN_LIMIT": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "CHAT_DAILY_TOKEN_LIMIT_PER_USER": {
+      "$ref": "#/$defs/positiveInteger"
+    },
+    "STORAGE_DATA_PATH": {
+      "$ref": "#/$defs/absolutePath"
+    },
+    "STORAGE_WARNING_PERCENT": {
+      "const": 80
+    },
+    "STORAGE_REJECTION_PERCENT": {
+      "const": 90
+    },
+    "DATABASE_ENGINE": {
+      "const": "postgresql"
+    },
+    "DATABASE_MAJOR_VERSION": {
+      "const": 16
+    },
+    "DATABASE_LISTEN_MODE": {
+      "enum": [
+        "loopback",
+        "unix_socket"
+      ]
+    },
+    "DATABASE_DSN_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference",
+      "$comment": "Required for onprem_production. References a full SQLAlchemy PostgreSQL DSN supplied through systemd credentials or a root-owned file. The JSON document contains only the reference; startup code resolves it without logging the value."
+    },
+    "IDENTITY_PROVIDER_MODE": {
+      "enum": [
+        "oidc",
+        "saml_identity_aware_proxy"
+      ]
+    },
+    "OIDC_ISSUER_URL": {
+      "$ref": "#/$defs/secureEndpointUrl"
+    },
+    "OIDC_AUDIENCE": {
+      "$ref": "#/$defs/boundedText"
+    },
+    "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference"
+    },
+    "SAML_PROXY_TRUSTED_UPSTREAM_URL": {
+      "$ref": "#/$defs/secureEndpointUrl"
+    },
+    "SAML_PROXY_AUTH_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference"
+    },
+    "SESSION_IDLE_TIMEOUT_MINUTES": {
+      "const": 30
+    },
+    "SESSION_ABSOLUTE_TIMEOUT_HOURS": {
+      "const": 8
+    },
+    "LOCAL_PASSWORD_AUTH_ENABLED": {
+      "const": false
+    },
+    "MALWARE_SCANNER_ENABLED": {
+      "const": true
+    },
+    "MALWARE_SCANNER_ID": {
+      "$ref": "#/$defs/boundedIdentifier"
+    },
+    "MALWARE_SCANNER_FAILURE_POLICY": {
+      "const": "fail_closed"
+    },
+    "RETENTION_YEARS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 7,
+      "$comment": "Seven years is the product default; an approved customer retention policy may configure another positive value."
+    },
+    "APPROVAL_EXPIRY_DAYS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 7,
+      "$comment": "Seven days after approval is the product default; a different value requires an approved customer policy."
+    },
+    "AUDIT_CHAIN_ALGORITHM": {
+      "const": "HMAC-SHA-256"
+    },
+    "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference"
+    },
+    "AUDIT_ROOT_BACKUP_FREQUENCY": {
+      "const": "daily"
+    },
+    "BACKUP_RTO_HOURS": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 4,
+      "default": 4
+    },
+    "BACKUP_RPO_HOURS": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "default": 1
+    },
+    "BACKUP_POSTGRES_WAL_ARCHIVING_ENABLED": {
+      "const": true
+    },
+    "BACKUP_FILESYSTEM_SNAPSHOT_INTERVAL_MINUTES": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 60
+    },
+    "BACKUP_FULL_FREQUENCY": {
+      "const": "daily"
+    },
+    "BACKUP_OFF_HOST_ENABLED": {
+      "const": true
+    },
+    "BACKUP_ENCRYPTION_ENABLED": {
+      "const": true
+    },
+    "BACKUP_KEY_OWNERSHIP": {
+      "const": "customer"
+    },
+    "BACKUP_ENCRYPTION_KEY_CREDENTIAL_REFERENCE": {
+      "$ref": "#/$defs/credentialReference"
+    },
+    "BACKUP_ONLINE_RETENTION_DAYS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 90
+    },
+    "BACKUP_RESTORE_DRILL_FREQUENCY": {
+      "const": "quarterly"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "runtime_profile": {
+            "const": "onprem_production"
+          }
+        },
+        "required": [
+          "runtime_profile"
+        ]
+      },
+      "then": {
+        "required": [
+          "TEXT_MODEL_NAME",
+          "TEXT_MODEL_CONTEXT_TOKENS",
+          "TEXT_MODEL_MAX_OUTPUT_TOKENS",
+          "TEXT_MODEL_TIMEOUT_SECONDS",
+          "TEXT_MODEL_MAX_RETRIES",
+          "TEXT_MODEL_ENDPOINT_PROFILE",
+          "VISION_MODEL_ENABLED",
+          "VISION_MODEL_ENDPOINT_URL",
+          "VISION_MODEL_NAME",
+          "VISION_MODEL_CONTEXT_TOKENS",
+          "VISION_MODEL_ENDPOINT_PROFILE",
+          "MODEL_ENDPOINT_ALLOWLIST",
+          "MAX_MODEL_CALLS_PER_RUN",
+          "MAX_MODEL_INPUT_TOKENS_PER_RUN",
+          "MAX_MODEL_OUTPUT_TOKENS_PER_RUN",
+          "MAX_PACKAGE_BYTES",
+          "MAX_SINGLE_FILE_BYTES",
+          "MAX_FILES_PER_REVISION",
+          "MAX_ASSESSMENT_ITEMS",
+          "MAX_EVIDENCE_ITEMS",
+          "MAX_PDF_PAGES_PER_FILE",
+          "MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE",
+          "MAX_CONCURRENT_ANALYSIS_RUNS",
+          "MAX_ACTIVE_ANALYZER_WORKERS",
+          "JOB_HEARTBEAT_SECONDS",
+          "JOB_LEASE_SECONDS",
+          "CHAT_MAX_RETRIEVED_CHUNKS",
+          "CHAT_RATE_LIMIT_PER_USER",
+          "CHAT_INPUT_LIMIT",
+          "CHAT_TURN_LIMIT",
+          "CHAT_DAILY_TOKEN_LIMIT_PER_USER",
+          "STORAGE_DATA_PATH",
+          "STORAGE_WARNING_PERCENT",
+          "STORAGE_REJECTION_PERCENT",
+          "DATABASE_ENGINE",
+          "DATABASE_MAJOR_VERSION",
+          "DATABASE_LISTEN_MODE",
+          "DATABASE_DSN_CREDENTIAL_REFERENCE",
+          "IDENTITY_PROVIDER_MODE",
+          "SESSION_IDLE_TIMEOUT_MINUTES",
+          "SESSION_ABSOLUTE_TIMEOUT_HOURS",
+          "LOCAL_PASSWORD_AUTH_ENABLED",
+          "MALWARE_SCANNER_ENABLED",
+          "MALWARE_SCANNER_ID",
+          "MALWARE_SCANNER_FAILURE_POLICY",
+          "RETENTION_YEARS",
+          "APPROVAL_EXPIRY_DAYS",
+          "AUDIT_CHAIN_ALGORITHM",
+          "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE",
+          "AUDIT_ROOT_BACKUP_FREQUENCY",
+          "BACKUP_RTO_HOURS",
+          "BACKUP_RPO_HOURS",
+          "BACKUP_POSTGRES_WAL_ARCHIVING_ENABLED",
+          "BACKUP_FILESYSTEM_SNAPSHOT_INTERVAL_MINUTES",
+          "BACKUP_FULL_FREQUENCY",
+          "BACKUP_OFF_HOST_ENABLED",
+          "BACKUP_ENCRYPTION_ENABLED",
+          "BACKUP_KEY_OWNERSHIP",
+          "BACKUP_ENCRYPTION_KEY_CREDENTIAL_REFERENCE",
+          "BACKUP_ONLINE_RETENTION_DAYS",
+          "BACKUP_RESTORE_DRILL_FREQUENCY"
+        ],
+        "properties": {
+          "STORAGE_DATA_PATH": {
+            "const": "/var/ato-packages"
+          },
+          "TEXT_MODEL_ENDPOINT_PROFILE": {
+            "enum": [
+              "external_openai",
+              "internal_openai_compatible"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "runtime_profile": {
+            "const": "onprem_production"
+          },
+          "TEXT_MODEL_PROVIDER": {
+            "const": "aws_bedrock"
+          }
+        },
+        "required": [
+          "runtime_profile",
+          "TEXT_MODEL_PROVIDER"
+        ]
+      },
+      "then": {
+        "required": [
+          "AWS_REGION"
+        ]
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "runtime_profile": {
+                "const": "onprem_production"
+              }
+            },
+            "required": [
+              "runtime_profile"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "TEXT_MODEL_PROVIDER"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "TEXT_MODEL_PROVIDER": {
+                    "const": "openai_compatible"
+                  }
+                },
+                "required": [
+                  "TEXT_MODEL_PROVIDER"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "then": {
+        "required": [
+          "TEXT_MODEL_ENDPOINT_URL"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "TEXT_MODEL_PROVIDER": {
+            "const": "aws_bedrock"
+          }
+        },
+        "required": [
+          "TEXT_MODEL_PROVIDER"
+        ]
+      },
+      "then": {
+        "required": [
+          "AWS_REGION",
+          "TEXT_MODEL_NAME",
+          "TEXT_MODEL_MAX_OUTPUT_TOKENS",
+          "TEXT_MODEL_TIMEOUT_SECONDS"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "TEXT_MODEL_ENDPOINT_URL": {
+            "pattern": "^http://"
+          }
+        },
+        "required": [
+          "TEXT_MODEL_ENDPOINT_URL"
+        ]
+      },
+      "then": {
+        "required": [
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS",
+          "TEXT_MODEL_ENDPOINT_PROFILE"
+        ],
+        "properties": {
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": {
+            "const": true
+          },
+          "TEXT_MODEL_ENDPOINT_PROFILE": {
+            "const": "internal_openai_compatible"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "VISION_MODEL_ENDPOINT_URL": {
+            "pattern": "^http://"
+          }
+        },
+        "required": [
+          "VISION_MODEL_ENDPOINT_URL"
+        ]
+      },
+      "then": {
+        "required": [
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS",
+          "VISION_MODEL_ENDPOINT_PROFILE"
+        ],
+        "properties": {
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": {
+            "const": true
+          },
+          "VISION_MODEL_ENDPOINT_PROFILE": {
+            "const": "internal_openai_compatible"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "OIDC_ISSUER_URL": {
+            "pattern": "^http://"
+          }
+        },
+        "required": [
+          "OIDC_ISSUER_URL"
+        ]
+      },
+      "then": {
+        "required": [
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS"
+        ],
+        "properties": {
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "SAML_PROXY_TRUSTED_UPSTREAM_URL": {
+            "pattern": "^http://"
+          }
+        },
+        "required": [
+          "SAML_PROXY_TRUSTED_UPSTREAM_URL"
+        ]
+      },
+      "then": {
+        "required": [
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS"
+        ],
+        "properties": {
+          "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "VISION_MODEL_ENABLED": {
+            "const": true
+          }
+        },
+        "required": [
+          "VISION_MODEL_ENABLED"
+        ]
+      },
+      "then": {
+        "required": [
+          "VISION_MODEL_ENDPOINT_URL",
+          "VISION_MODEL_NAME",
+          "VISION_MODEL_CONTEXT_TOKENS",
+          "VISION_MODEL_ENDPOINT_PROFILE"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "runtime_profile": {
+            "const": "onprem_production"
+          },
+          "VISION_MODEL_ENABLED": {
+            "const": true
+          }
+        },
+        "required": [
+          "runtime_profile",
+          "VISION_MODEL_ENABLED"
+        ]
+      },
+      "then": {
+        "properties": {
+          "VISION_MODEL_ENDPOINT_PROFILE": {
+            "enum": [
+              "external_openai",
+              "internal_openai_compatible"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "IDENTITY_PROVIDER_MODE": {
+            "const": "oidc"
+          }
+        },
+        "required": [
+          "IDENTITY_PROVIDER_MODE"
+        ]
+      },
+      "then": {
+        "required": [
+          "OIDC_ISSUER_URL",
+          "OIDC_AUDIENCE",
+          "OIDC_CLIENT_CREDENTIAL_REFERENCE"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "IDENTITY_PROVIDER_MODE": {
+            "const": "saml_identity_aware_proxy"
+          }
+        },
+        "required": [
+          "IDENTITY_PROVIDER_MODE"
+        ]
+      },
+      "then": {
+        "required": [
+          "SAML_PROXY_TRUSTED_UPSTREAM_URL",
+          "SAML_PROXY_AUTH_CREDENTIAL_REFERENCE"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "boundedIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "modelName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "endpointProfile": {
+      "enum": [
+        "mock",
+        "external_openai",
+        "internal_openai_compatible"
+      ]
+    },
+    "secureEndpointUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "oneOf": [
+        {
+          "format": "uri",
+          "pattern": "^https://[^\\s]+$"
+        },
+        {
+          "format": "uri",
+          "pattern": "^http://(?:localhost|127(?:\\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}|\\[::1\\])(?::[0-9]{1,5})?(?:/[^\\s]*)?$"
+        }
+      ],
+      "$comment": "Schema syntax permits HTTPS or literal loopback HTTP only. Startup code must reject userinfo, fragments where inappropriate, invalid or implicit disallowed ports, redirects, non-loopback DNS results, DNS rebinding, and any host/port outside the deployment allowlist."
+    },
+    "absolutePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+$",
+      "$comment": "Startup code must resolve and normalize the path without following unsafe links and must verify required ownership, mode, mount, capacity, and containment properties."
+    },
+    "credentialReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "identifier"
+          ],
+          "properties": {
+            "source": {
+              "const": "systemd_credential"
+            },
+            "identifier": {
+              "$ref": "#/$defs/boundedIdentifier"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "path"
+          ],
+          "properties": {
+            "source": {
+              "const": "root_owned_file"
+            },
+            "path": {
+              "$ref": "#/$defs/absolutePath"
+            }
+          }
+        }
+      ],
+      "$comment": "Only a reference is valid here. Startup code must resolve it without logging the value and verify that file-backed credentials are root-owned with mode 0640 or stricter."
+    },
+    "allowedEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "port"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "oneOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*$"
+            },
+            {
+              "pattern": "^[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*$"
+            }
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "$comment": "Startup code must canonicalize DNS names and IP literals and compare the URL's effective host and port exactly; this syntax check is not DNS or SSRF validation."
+    },
+    "rateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_requests",
+        "window_seconds"
+      ],
+      "properties": {
+        "max_requests": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "window_seconds": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "measuredInputLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "unit": {
+          "enum": [
+            "characters",
+            "tokens"
+          ]
+        }
+      },
+      "$comment": "The specification requires a configurable input-length limit but does not prescribe its value or measurement unit; the deployment must choose and enforce one explicitly."
+    }
+  }
+}

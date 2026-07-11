@@ -3,20 +3,32 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ato_analysis"
+name = "ato_service"
 version = "0.1.0"
-description = "ATO Block 1 evidence analysis engine"
+description = "ATO Evidence Analysis Portal durable service"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic",
+    "asyncpg",
+    "fastapi",
     "httpx",
+    "jsonschema[format]",
     "pydantic>=2",
+    "python-multipart",
+    "sqlalchemy[asyncio]>=2",
+    "uvicorn[standard]",
 ]
+
+[project.scripts]
+ato-service = "ato_service.main:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "pytest-mock",
+]
+bedrock = [
+    "boto3>=1.35",
 ]
 
 [tool.setuptools.packages.find]
@@ -25,5 +37,5 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: tests that call live OpenAI (optional)",
+    "integration: optional live dependency tests (PostgreSQL, external services)",
 ]

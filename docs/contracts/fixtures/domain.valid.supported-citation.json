@@ -1,0 +1,26 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "matrix_row",
+  "matrix_row_id": "33333333-3333-4333-8333-333333333333",
+  "assessment_item_type": "nist_control",
+  "assessment_item_id": "AC-2",
+  "model_proposed_status": "supported",
+  "system_status": "supported",
+  "finding_summary": "The supplied evidence supports the assessed requirement.",
+  "gaps": [],
+  "assessor_questions": [],
+  "citations": [
+    {
+      "source_kind": "evidence",
+      "source_id": "44444444-4444-4444-8444-444444444444",
+      "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "chunk_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "start_offset": 10,
+      "end_offset": 80,
+      "page_or_section": "Page 2"
+    }
+  ],
+  "context_complete": true,
+  "producing_run_id": "55555555-5555-4555-8555-555555555555",
+  "source_run_id": "55555555-5555-4555-8555-555555555555"
+}
