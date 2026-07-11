@@ -1088,6 +1088,45 @@ def test_job_and_job_attempt_schema_required_fields() -> None:
     assert "neither creates a `JobAttempt` nor increments `attempt_count`" in lifecycle
 
 
+def test_expired_lease_recovery_contract_semantics() -> None:
+    lifecycle = _lifecycle_markdown()
+    operations = (ROOT / "docs" / "OPERATIONS_AND_RECOVERY.md").read_text(encoding="utf-8")
+    technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
+    domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
+
+    for fragment in (
+        "attempt_count < TEXT_MODEL_MAX_RETRIES + 1",
+        "attempt_count >= TEXT_MODEL_MAX_RETRIES + 1",
+        "dependency_attempts_exhausted",
+        "atomicity conflict",
+        "no active `JobAttempt`",
+        "still `queued`",
+        "job.last_error_code=job_lease_lost",
+        "one `active` `JobAttempt` row exists per `job_id`",
+        "analyzer repository implementation always performs this coupling",
+    ):
+        assert fragment in lifecycle, f"missing lifecycle expired-lease contract: {fragment}"
+
+    for fragment in (
+        "step_key",
+        "step_idempotent",
+        "dependency_attempts_exhausted",
+        "partial unique index",
+        "queued -> running",
+        "last_error_code=job_lease_lost",
+    ):
+        assert fragment in operations, f"missing operations expired-lease contract: {fragment}"
+
+    for fragment in (
+        "one active JobAttempt per job_id",
+        "dependency_attempts_exhausted",
+        "analyzer repository couples `queued -> running`",
+    ):
+        assert fragment in technical_spec, f"missing technical-spec expired-lease contract: {fragment}"
+
+    assert "active JobAttempt per job_id" in domain["$defs"]["JobAttempt"]["$comment"]
+
+
 def test_pending_approval_expiry_uses_approval_expiry_days_default() -> None:
     lifecycle = _lifecycle_markdown()
     assert "submitted_at + APPROVAL_EXPIRY_DAYS" in lifecycle

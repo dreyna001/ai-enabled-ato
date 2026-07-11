@@ -294,9 +294,30 @@ def test_job_indexes_support_claim_run_status_and_lease_expiry() -> None:
         assert index_sql.startswith("CREATE INDEX")
 
 
-def test_job_attempt_index_is_minimal() -> None:
+def test_job_attempt_indexes_include_lookup_and_one_active_invariant() -> None:
     table = _table("job_attempts")
-    assert {index.name for index in table.indexes} == {"ix_job_attempts_job_id"}
+    index_names = {index.name for index in table.indexes}
+    assert index_names == {
+        "ix_job_attempts_job_id",
+        "uq_job_attempts_one_active_per_job",
+    }
+
+
+def test_job_attempt_one_active_per_job_partial_unique_index_ddl() -> None:
+    table = _table("job_attempts")
+    partial_index = next(
+        index
+        for index in table.indexes
+        if index.name == "uq_job_attempts_one_active_per_job"
+    )
+    assert partial_index.unique is True
+    assert list(partial_index.columns.keys()) == ["job_id"]
+
+    dialect = postgresql.dialect()
+    index_sql = str(CreateIndex(partial_index).compile(dialect=dialect))
+    assert "CREATE UNIQUE INDEX uq_job_attempts_one_active_per_job" in index_sql
+    assert "ON job_attempts (job_id)" in index_sql
+    assert "WHERE (status = 'active')" in index_sql or "WHERE status = 'active'" in index_sql
 
 
 def test_postgresql_ddl_compiles_for_job_tables() -> None:
@@ -356,7 +377,21 @@ def test_jobs_migration_upgrade_and_downgrade_operation_order() -> None:
     upgrade_indexes = [
         op_name for op_name, _args, _kwargs in upgrade_ops if op_name == "create_index"
     ]
-    assert upgrade_indexes == ["create_index"] * 5
+    assert upgrade_indexes == ["create_index"] * 6
+
+    downgrade_index_names = [
+        args[0]
+        for op_name, args, kwargs in downgrade_ops
+        if op_name == "drop_index"
+    ]
+    assert downgrade_index_names == [
+        "uq_job_attempts_one_active_per_job",
+        "ix_job_attempts_job_id",
+        "ix_jobs_lease_expires_at",
+        "ix_jobs_status_available_at",
+        "ix_jobs_status",
+        "ix_jobs_run_id",
+    ]
 
     downgrade_index_tables = [
         kwargs["table_name"]
@@ -364,6 +399,7 @@ def test_jobs_migration_upgrade_and_downgrade_operation_order() -> None:
         if op_name == "drop_index"
     ]
     assert downgrade_index_tables == [
+        "job_attempts",
         "job_attempts",
         "jobs",
         "jobs",
@@ -378,6 +414,7 @@ def test_jobs_migration_constraints_match_models() -> None:
         "uq_jobs_run_id_step_key",
         "uq_jobs_job_id_run_id_step_key",
         "uq_job_attempts_job_id_attempt_number",
+        "uq_job_attempts_one_active_per_job",
         "fk_job_attempts_jobs_job_id_run_id_step_key",
         "ck_jobs_lease_fields_match_status",
         "ck_jobs_attempt_count_non_negative",

@@ -943,10 +943,13 @@ Uniqueness:
 ```text
 one Job per (run_id, step_key)
 one JobAttempt per (job_id, attempt_number)
+one active JobAttempt per job_id (partial unique index)
 one completed RunStep per (run_id, step_key)
 ```
 
-Expired-lease recovery terminalizes the active `JobAttempt` as `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at` set. Idempotent jobs then return to `available`; non-idempotent jobs transition to `reconciliation_required`. Schema repair neither creates a `JobAttempt` nor increments `attempt_count`.
+Expired-lease recovery terminalizes the active `JobAttempt` as `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at` set when that row exists, and always sets `job.last_error_code=job_lease_lost` even when no active attempt row exists. Idempotent jobs with remaining transport budget return to `available`. Idempotent jobs at maximum transport budget transition `leased -> failed` and, when the run is `running`, `running -> failed` with `dependency_attempts_exhausted`; they are not requeued. Non-idempotent jobs, atomicity conflicts (expired lease with a completed `RunStep` or with the owning run still `queued`), and expired jobs with no active attempt transition to `reconciliation_required`. When the owning run is already `succeeded`, an outstanding expired job transitions to `reconciliation_required` without mutating the run; when the run is `failed`, `cancelled`, or `policy_blocked`, only the job transitions to `failed`. Schema repair neither creates a `JobAttempt` nor increments `attempt_count`.
+
+The analyzer repository couples `queued -> running` on every claim while the run is still `queued`. The contract permits other claimers to omit that coupling only when explicitly documented outside the analyzer worker path.
 
 Defaults:
 
@@ -955,7 +958,7 @@ Defaults:
 - Maximum active analyzer workers: 2
 - Maximum transport attempts per model step: `TEXT_MODEL_MAX_RETRIES + 1`; default `TEXT_MODEL_MAX_RETRIES` is 2 (two retries after the first attempt)
 
-Expired leases are requeued only when `step_idempotent=true`. Step completion has a unique constraint on `(run_id, step_key)`. Legal job-status transitions, lease operations, and attempt semantics are defined in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 2.7.
+Expired leases on idempotent steps are requeued only while `attempt_count < TEXT_MODEL_MAX_RETRIES + 1`. At maximum transport budget, expired idempotent leases transition the job to `failed` and a `running` run to `failed` with `dependency_attempts_exhausted`. Step completion has a unique constraint on `(run_id, step_key)`. Legal job-status transitions, lease operations, and attempt semantics are defined in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 2.7.
 
 ### 20.1 Filesystem transaction rule
 

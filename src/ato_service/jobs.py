@@ -267,7 +267,6 @@ async def claim_next_eligible_job(
     now: datetime,
     max_attempts: int,
     lease_seconds: int,
-    couple_run_start: bool = True,
 ) -> ClaimedJob | None:
     """Atomically claim the next eligible job within the caller's transaction."""
     now = _require_aware_utc(now, field_name="now")
@@ -301,7 +300,7 @@ async def claim_next_eligible_job(
         )
 
     run_started = False
-    if couple_run_start and current_run_status == AnalysisRunStatus.QUEUED:
+    if current_run_status == AnalysisRunStatus.QUEUED:
         require_analysis_run_transition(
             current_run_status,
             AnalysisRunStatus.RUNNING,
@@ -466,14 +465,94 @@ async def record_job_failure(
         _transition_run_to_failed(run, now=now, error_code=terminal_error_code)
 
 
+def _terminalize_active_attempt_for_lease_loss(
+    attempt: JobAttempt,
+    *,
+    now: datetime,
+) -> None:
+    attempt.status = JobAttemptStatus.FAILED.value
+    attempt.completed_at = now
+    attempt.error_code = ERROR_JOB_LEASE_LOST
+    attempt.error_retryable = True
+
+
+async def _recover_single_expired_job(
+    session: AsyncSession,
+    job: Job,
+    *,
+    now: datetime,
+    max_attempts: int,
+) -> None:
+    if not _lease_is_expired(job.lease_expires_at, now=now):
+        raise JobInvariantError(
+            message="recover selected a job whose lease has not expired"
+        )
+
+    run = await _load_run_for_update(session, job.run_id)
+    has_completed_step = await _has_completed_run_step(
+        session,
+        run_id=job.run_id,
+        step_key=job.step_key,
+    )
+    attempt = await _load_active_attempt_for_update(session, job.job_id)
+
+    if attempt is not None:
+        _terminalize_active_attempt_for_lease_loss(attempt, now=now)
+
+    job.last_error_code = ERROR_JOB_LEASE_LOST
+    _clear_lease_fields(job)
+
+    if has_completed_step:
+        job.status = JobStatus.RECONCILIATION_REQUIRED.value
+        return
+
+    if run is None:
+        job.status = JobStatus.RECONCILIATION_REQUIRED.value
+        return
+
+    run_status = AnalysisRunStatus(run.status)
+    if analysis_run_status_is_terminal(run_status):
+        if run_status == AnalysisRunStatus.SUCCEEDED:
+            job.status = JobStatus.RECONCILIATION_REQUIRED.value
+        else:
+            job.status = JobStatus.FAILED.value
+        return
+
+    if attempt is None:
+        job.status = JobStatus.RECONCILIATION_REQUIRED.value
+        return
+
+    if run_status != AnalysisRunStatus.RUNNING:
+        job.status = JobStatus.RECONCILIATION_REQUIRED.value
+        return
+
+    if not job.step_idempotent:
+        job.status = JobStatus.RECONCILIATION_REQUIRED.value
+        return
+
+    if job.attempt_count >= max_attempts:
+        job.status = JobStatus.FAILED.value
+        _transition_run_to_failed(
+            run,
+            now=now,
+            error_code=ERROR_DEPENDENCY_ATTEMPTS_EXHAUSTED,
+        )
+        return
+
+    job.status = JobStatus.AVAILABLE.value
+    job.available_at = now
+
+
 async def recover_expired_leases(
     session: AsyncSession,
     *,
     now: datetime,
+    max_attempts: int,
     batch_size: int = 100,
 ) -> list[uuid.UUID]:
-    """Recover expired leases under row locks without touching terminal work."""
+    """Recover expired leases under row locks; every selected job leaves ``leased``."""
     now = _require_aware_utc(now, field_name="now")
+    _require_positive_int(max_attempts, field_name="max_attempts")
     _require_positive_int(batch_size, field_name="batch_size")
 
     statement = _recover_select_statement(now=now, batch_size=batch_size)
@@ -481,38 +560,16 @@ async def recover_expired_leases(
     recovered: list[uuid.UUID] = []
 
     for job in jobs:
-        if job.lease_expires_at is None or job.lease_expires_at > now:
-            continue
-
-        run = await _load_run_for_update(session, job.run_id)
-        if run is None:
-            continue
-        if analysis_run_status_is_terminal(AnalysisRunStatus(run.status)):
-            continue
-        if await _has_completed_run_step(
+        await _recover_single_expired_job(
             session,
-            run_id=job.run_id,
-            step_key=job.step_key,
-        ):
-            continue
-
-        attempt = await _load_active_attempt_for_update(session, job.job_id)
-        if attempt is None:
-            continue
-
-        attempt.status = JobAttemptStatus.FAILED.value
-        attempt.completed_at = now
-        attempt.error_code = ERROR_JOB_LEASE_LOST
-        attempt.error_retryable = True
-        job.last_error_code = ERROR_JOB_LEASE_LOST
-        _clear_lease_fields(job)
-
-        if job.step_idempotent:
-            job.status = JobStatus.AVAILABLE.value
-            job.available_at = now
-        else:
-            job.status = JobStatus.RECONCILIATION_REQUIRED.value
-
+            job,
+            now=now,
+            max_attempts=max_attempts,
+        )
+        if job.status == JobStatus.LEASED.value:
+            raise JobInvariantError(
+                message="recover left an expired job in leased status"
+            )
         recovered.append(job.job_id)
 
     return recovered

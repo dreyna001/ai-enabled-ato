@@ -747,4 +747,10 @@ class JobAttempt(Base):
             name="ck_job_attempts_status_fields",
         ),
         Index("ix_job_attempts_job_id", "job_id"),
+        Index(
+            "uq_job_attempts_one_active_per_job",
+            "job_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
     )

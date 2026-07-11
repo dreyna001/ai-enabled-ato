@@ -117,9 +117,17 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_job_attempts_job_id", "job_attempts", ["job_id"])
+    op.create_index(
+        "uq_job_attempts_one_active_per_job",
+        "job_attempts",
+        ["job_id"],
+        unique=True,
+        postgresql_where=sa.text("status = 'active'"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("uq_job_attempts_one_active_per_job", table_name="job_attempts")
     op.drop_index("ix_job_attempts_job_id", table_name="job_attempts")
     op.drop_table("job_attempts")
 

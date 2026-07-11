@@ -173,6 +173,28 @@ def _attempt_snapshot(attempt: JobAttempt) -> dict[str, object]:
     }
 
 
+def _assert_lease_cleared(job: Job) -> None:
+    assert job.status != JobStatus.LEASED.value
+    assert job.lease_owner is None
+    assert job.lease_expires_at is None
+    assert job.heartbeat_at is None
+
+
+def _recover_session(
+    *,
+    job: Job,
+    run: AnalysisRun | None,
+    has_completed_step: bool,
+    attempt: JobAttempt | None,
+) -> _RecordingSession:
+    results: list[MagicMock] = [_scalars_result([job])]
+    if run is not None:
+        results.append(_scalar_result(run))
+    results.append(_scalar_result(has_completed_step))
+    results.append(_scalar_result(attempt))
+    return _RecordingSession(results)
+
+
 def test_claim_sql_uses_skip_locked_and_deterministic_ordering() -> None:
     sql = _compile_sql(_claim_select_statement(now=NOW, max_attempts=3))
 
@@ -595,21 +617,22 @@ def test_recover_expired_lease_requeues_idempotent_job() -> None:
     )
     attempt = _make_attempt()
     run = _make_run(status=AnalysisRunStatus.RUNNING.value)
-    session = _RecordingSession(
-        [
-            _scalars_result([job]),
-            _scalar_result(run),
-            _scalar_result(False),
-            _scalar_result(attempt),
-        ]
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=attempt,
     )
 
-    recovered = _run(recover_expired_leases(session, now=NOW, batch_size=10))
+    recovered = _run(
+        recover_expired_leases(session, now=NOW, max_attempts=3, batch_size=10)
+    )
 
     assert recovered == [JOB_ID]
     assert job.status == JobStatus.AVAILABLE.value
     assert job.available_at == NOW
-    assert job.lease_owner is None
+    assert job.last_error_code == ERROR_JOB_LEASE_LOST
+    _assert_lease_cleared(job)
     assert attempt.status == JobAttemptStatus.FAILED.value
     assert attempt.error_code == ERROR_JOB_LEASE_LOST
     assert attempt.error_retryable is True
@@ -628,19 +651,18 @@ def test_recover_expired_lease_recovers_exact_expiry_boundary() -> None:
     )
     attempt = _make_attempt()
     run = _make_run(status=AnalysisRunStatus.RUNNING.value)
-    session = _RecordingSession(
-        [
-            _scalars_result([job]),
-            _scalar_result(run),
-            _scalar_result(False),
-            _scalar_result(attempt),
-        ]
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=attempt,
     )
 
-    recovered = _run(recover_expired_leases(session, now=NOW))
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
 
     assert recovered == [JOB_ID]
     assert job.status == JobStatus.AVAILABLE.value
+    _assert_lease_cleared(job)
 
 
 def test_recover_expired_lease_marks_non_idempotent_reconciliation() -> None:
@@ -654,22 +676,88 @@ def test_recover_expired_lease_marks_non_idempotent_reconciliation() -> None:
     )
     attempt = _make_attempt()
     run = _make_run(status=AnalysisRunStatus.RUNNING.value)
-    session = _RecordingSession(
-        [
-            _scalars_result([job]),
-            _scalar_result(run),
-            _scalar_result(False),
-            _scalar_result(attempt),
-        ]
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=attempt,
     )
 
-    recovered = _run(recover_expired_leases(session, now=NOW))
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
 
     assert recovered == [JOB_ID]
     assert job.status == JobStatus.RECONCILIATION_REQUIRED.value
+    _assert_lease_cleared(job)
 
 
-def test_recover_expired_lease_skips_terminal_run_and_completed_step() -> None:
+def test_recover_expired_lease_exhausted_budget_fails_job_and_run() -> None:
+    job = _make_job(
+        status=JobStatus.LEASED.value,
+        attempt_count=3,
+        step_idempotent=True,
+        lease_owner=OWNER,
+        lease_expires_at=NOW - timedelta(seconds=1),
+        heartbeat_at=NOW - timedelta(minutes=6),
+    )
+    attempt = _make_attempt(attempt_number=3)
+    run = _make_run(status=AnalysisRunStatus.RUNNING.value)
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=attempt,
+    )
+
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
+
+    assert recovered == [JOB_ID]
+    assert job.status == JobStatus.FAILED.value
+    assert job.last_error_code == ERROR_JOB_LEASE_LOST
+    assert run.status == AnalysisRunStatus.FAILED.value
+    assert run.error_code == ERROR_DEPENDENCY_ATTEMPTS_EXHAUSTED
+    _assert_lease_cleared(job)
+
+
+def test_recover_expired_lease_completed_step_sets_reconciliation_required() -> None:
+    job = _make_job(
+        status=JobStatus.LEASED.value,
+        attempt_count=1,
+        step_idempotent=True,
+        lease_owner=OWNER,
+        lease_expires_at=NOW - timedelta(seconds=1),
+        heartbeat_at=NOW - timedelta(minutes=6),
+    )
+    attempt = _make_attempt()
+    run = _make_run(status=AnalysisRunStatus.RUNNING.value)
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=True,
+        attempt=attempt,
+    )
+
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
+
+    assert recovered == [JOB_ID]
+    assert job.status == JobStatus.RECONCILIATION_REQUIRED.value
+    assert attempt.status == JobAttemptStatus.FAILED.value
+    assert run.status == AnalysisRunStatus.RUNNING.value
+    _assert_lease_cleared(job)
+
+
+@pytest.mark.parametrize(
+    ("run_status", "expected_job_status"),
+    [
+        (AnalysisRunStatus.SUCCEEDED.value, JobStatus.RECONCILIATION_REQUIRED.value),
+        (AnalysisRunStatus.FAILED.value, JobStatus.FAILED.value),
+        (AnalysisRunStatus.CANCELLED.value, JobStatus.FAILED.value),
+        (AnalysisRunStatus.POLICY_BLOCKED.value, JobStatus.FAILED.value),
+    ],
+)
+def test_recover_expired_lease_terminal_run_sets_job_without_mutating_run(
+    run_status: str,
+    expected_job_status: str,
+) -> None:
     job = _make_job(
         status=JobStatus.LEASED.value,
         attempt_count=1,
@@ -678,40 +766,87 @@ def test_recover_expired_lease_skips_terminal_run_and_completed_step() -> None:
         heartbeat_at=NOW - timedelta(minutes=6),
     )
     attempt = _make_attempt()
-    run = _make_run(status=AnalysisRunStatus.FAILED.value)
-    session = _RecordingSession(
-        [
-            _scalars_result([job]),
-            _scalar_result(run),
-        ]
+    run = _make_run(status=run_status)
+    run_before = run.status
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=attempt,
     )
 
-    recovered = _run(recover_expired_leases(session, now=NOW))
-    assert recovered == []
-    assert job.status == JobStatus.LEASED.value
-    assert attempt.status == JobAttemptStatus.ACTIVE.value
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
 
-    job2 = _make_job(
+    assert recovered == [JOB_ID]
+    assert job.status == expected_job_status
+    assert run.status == run_before
+    _assert_lease_cleared(job)
+
+
+def test_recover_expired_lease_missing_active_attempt_sets_reconciliation_required() -> None:
+    job = _make_job(
         status=JobStatus.LEASED.value,
         attempt_count=1,
         lease_owner=OWNER,
         lease_expires_at=NOW - timedelta(seconds=1),
         heartbeat_at=NOW - timedelta(minutes=6),
     )
-    attempt2 = _make_attempt()
-    run2 = _make_run(status=AnalysisRunStatus.RUNNING.value)
-    session2 = _RecordingSession(
-        [
-            _scalars_result([job2]),
-            _scalar_result(run2),
-            _scalar_result(True),
-        ]
+    run = _make_run(status=AnalysisRunStatus.RUNNING.value)
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=None,
     )
 
-    recovered2 = _run(recover_expired_leases(session2, now=NOW))
-    assert recovered2 == []
-    assert job2.status == JobStatus.LEASED.value
-    assert attempt2.status == JobAttemptStatus.ACTIVE.value
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
+
+    assert recovered == [JOB_ID]
+    assert job.status == JobStatus.RECONCILIATION_REQUIRED.value
+    assert job.last_error_code == ERROR_JOB_LEASE_LOST
+    _assert_lease_cleared(job)
+    assert len(session.added) == 0
+
+
+def test_recover_expired_lease_queued_run_sets_reconciliation_without_mutating_run() -> None:
+    job = _make_job(
+        status=JobStatus.LEASED.value,
+        attempt_count=1,
+        step_idempotent=True,
+        lease_owner=OWNER,
+        lease_expires_at=NOW - timedelta(seconds=1),
+        heartbeat_at=NOW - timedelta(minutes=6),
+    )
+    attempt = _make_attempt()
+    run = _make_run(status=AnalysisRunStatus.QUEUED.value)
+    run_before = run.status
+    session = _recover_session(
+        job=job,
+        run=run,
+        has_completed_step=False,
+        attempt=attempt,
+    )
+
+    recovered = _run(recover_expired_leases(session, now=NOW, max_attempts=3))
+
+    assert recovered == [JOB_ID]
+    assert job.status == JobStatus.RECONCILIATION_REQUIRED.value
+    assert job.last_error_code == ERROR_JOB_LEASE_LOST
+    assert run.status == run_before
+    assert attempt.status == JobAttemptStatus.FAILED.value
+    _assert_lease_cleared(job)
+
+
+def test_recover_validates_positive_max_attempts() -> None:
+    session = SimpleNamespace(execute=AsyncMock())
+    with pytest.raises(ValueError, match="max_attempts must be positive"):
+        _run(
+            recover_expired_leases(
+                session,  # type: ignore[arg-type]
+                now=NOW,
+                max_attempts=0,
+            )
+        )
 
 
 @pytest.mark.parametrize(

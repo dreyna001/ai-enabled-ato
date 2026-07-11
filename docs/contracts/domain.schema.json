@@ -2106,7 +2106,7 @@
     "JobAttempt": {
       "type": "object",
       "additionalProperties": false,
-      "$comment": "Semantic validation MUST enforce at most one JobAttempt per (job_id, attempt_number).",
+      "$comment": "Semantic validation MUST enforce at most one JobAttempt per (job_id, attempt_number) and at most one active JobAttempt per job_id.",
       "required": [
         "schema_version",
         "object_type",

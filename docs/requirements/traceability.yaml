@@ -401,7 +401,8 @@
         "src/ato_service/readiness.py",
         "migrations/versions/20260711_0002_jobs_and_job_attempts.py",
         "docs/contracts/LIFECYCLE_AND_ERRORS.md",
-        "docs/contracts/domain.schema.json"
+        "docs/contracts/domain.schema.json",
+        "docs/OPERATIONS_AND_RECOVERY.md"
       ],
       "test_ids": [
         "tests/ato_service/test_blobs.py::test_replay_rehashes_existing_blob_and_preserves_bytes",
@@ -415,9 +416,10 @@
         "tests/ato_service/test_jobs_readiness.py",
         "tests/test_contracts.py::test_job_status_enum_matches_lifecycle_contract",
         "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields",
-        "tests/test_contracts.py::test_job_attempt_status_field_invariants"
+        "tests/test_contracts.py::test_job_attempt_status_field_invariants",
+        "tests/test_contracts.py::test_expired_lease_recovery_contract_semantics"
       ],
-      "verification_type": "Filesystem recovery helpers plus published job/attempt contracts, PostgreSQL jobs and attempts tables, lease-safe claim/heartbeat/completion/failure operations, expired-lease recovery, and real jobs readiness tests; the analyzer worker loop and end-to-end API pipeline remain planned for P1",
+      "verification_type": "Filesystem recovery helpers plus published job/attempt contracts, PostgreSQL jobs and attempts tables, lease-safe claim/heartbeat/completion/failure operations, reviewed expired-lease recovery (budget exhaustion, atomicity conflicts, terminal-run handling), and real jobs readiness tests; the analyzer worker loop and end-to-end API pipeline remain planned for P1",
       "status": "partial"
     },
     {
@@ -686,16 +688,18 @@
       "implementation_files": [
         "docs/contracts/domain.schema.json",
         "docs/contracts/LIFECYCLE_AND_ERRORS.md",
-        "docs/contracts/openapi.json"
+        "docs/contracts/openapi.json",
+        "docs/OPERATIONS_AND_RECOVERY.md"
       ],
       "test_ids": [
         "tests/test_contracts.py::test_job_status_enum_matches_lifecycle_contract",
         "tests/test_contracts.py::test_job_and_job_attempt_schema_required_fields",
         "tests/test_contracts.py::test_job_attempt_status_field_invariants",
+        "tests/test_contracts.py::test_expired_lease_recovery_contract_semantics",
         "tests/test_contracts.py::test_pending_approval_expiry_uses_approval_expiry_days_default",
         "tests/test_contracts.py::test_disposition_decision_graph_is_contract_only"
       ],
-      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, HS-010 pending_approval expiry formula, and EP-06-bounded disposition decision graph; job persistence implements the contract while public package and portal routes remain unimplemented",
+      "verification_type": "Published lifecycle and error contract including P1.0 job/attempt status graph, attempt_count semantics, reviewed expired-lease recovery, HS-010 pending_approval expiry formula, and EP-06-bounded disposition decision graph; job persistence implements the contract while public package routes, approval timers, and portal disposition routes remain unimplemented",
       "status": "implemented"
     },
     {

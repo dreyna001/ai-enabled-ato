@@ -308,7 +308,9 @@ def test_postgresql_ddl_compiles_for_all_tables() -> None:
         assert "TIMESTAMP WITH TIME ZONE" in ddl or table_name == "source_artifacts"
         for index in _table(table_name).indexes:
             index_sql = str(CreateIndex(index).compile(dialect=dialect))
-            assert index_sql.startswith("CREATE INDEX")
+            assert index_sql.startswith("CREATE INDEX") or index_sql.startswith(
+                "CREATE UNIQUE INDEX"
+            )
 
 
 def test_package_revision_status_check_syncs_with_lifecycle_transitions() -> None:

@@ -157,6 +157,8 @@ Required job fields are:
 ```text
 job_id
 run_id
+step_key
+step_idempotent
 status
 attempt_count
 available_at
@@ -173,7 +175,7 @@ Lease defaults are:
 - Maximum active analyzer workers: 2.
 - Model transport attempts: configured; default is two retries after the first attempt.
 
-An expired lease is requeued only when the step is idempotent. Step completion has a unique constraint on `(run_id, step_key)`. A transient retry creates a new attempt record without changing `run_id`; it must not duplicate a completed step or export.
+Expired idempotent leases are requeued only while transport budget remains. At maximum transport budget, expired idempotent leases transition the job to `failed` and a `running` run to `failed` with `dependency_attempts_exhausted`. An expired leased job with a completed `RunStep`, with no active `JobAttempt`, or while the owning run is still `queued`, is an atomicity conflict and transitions to `reconciliation_required`; it must not silently succeed or requeue and must not mutate a `queued` run. Every expired-lease recovery sets `last_error_code=job_lease_lost`, including when no active attempt row exists. When the owning run is already `succeeded`, an outstanding expired job transitions to `reconciliation_required` without mutating the run; when the run is `failed`, `cancelled`, or `policy_blocked`, only the job transitions to `failed`. Step completion has a unique constraint on `(run_id, step_key)`. At most one `active` `JobAttempt` exists per job (partial unique index). The analyzer repository couples `queued -> running` on claim when the run is still `queued`. A transient retry creates a new attempt record without changing `run_id`; it must not duplicate a completed step or export.
 
 Network errors, HTTP `429`, and HTTP `5xx` use exponential backoff with jitter, honor `Retry-After`, and remain bounded by configured attempts and the run deadline. Authentication, authorization, malformed requests, policy failures, and other HTTP `4xx` responses are not transport-retryable. One schema-repair attempt is separate from transport retry.
 
@@ -267,7 +269,9 @@ A startup and periodic reconciler must:
 - Detect database references to missing immutable files and final files with no database reference.
 - Verify that a succeeded run has a durable, hash-valid `artifact-manifest.json`.
 - Repair only deterministic, detectable orphan references; otherwise record a visible integrity failure for operator action.
-- Requeue expired leases only for idempotent steps and preserve attempt history.
+- Requeue expired idempotent leases only while transport budget remains; at maximum budget transition the job to `failed` and a `running` run to `failed` with `dependency_attempts_exhausted`.
+- Transition expired leased jobs with completed steps, missing active attempts, non-idempotent expiry, or outstanding leases on `succeeded` runs to `reconciliation_required`.
+- When the owning run is `failed`, `cancelled`, or `policy_blocked`, transition only the expired job to `failed` without mutating the run.
 - Preserve quarantine, legal holds, immutable revisions/runs, review history, approvals, exports, and audit history.
 - Emit bounded operational status for reconciliation outcomes.
 
@@ -281,7 +285,7 @@ Before an on-prem release, the following must exist and be exercised:
 | --- | --- |
 | Install and secure startup | RHEL 9-compatible install, SELinux, permissions, port/binding, egress, readiness, and smoke-test results |
 | Upgrade and rollback | Backup verification, worker drain, migration-state handling, successful upgrade, compatible rollback or restore, and smoke tests |
-| Worker crash and replay | Kill before and after commit boundaries, lease expiry, idempotent requeue, unique step completion, and no duplicate export |
+| Worker crash and replay | Kill before and after commit boundaries, lease expiry, idempotent requeue only with remaining transport budget, budget-exhausted idempotent expiry failing the run, atomicity-conflict reconciliation, unique step completion, and no duplicate export |
 | Partial-write reconciliation | Fault injection around filesystem and database boundaries and correct orphan handling |
 | Backup and restore | Point-in-time PostgreSQL/filesystem restore, missing-key and corruption cases, audit/artifact verification, and measured one-hour RPO/four-hour RTO |
 | Audit integrity | Chain, wrong-key, chain-break, restored-backup, daily-root, and manifest-index verification |

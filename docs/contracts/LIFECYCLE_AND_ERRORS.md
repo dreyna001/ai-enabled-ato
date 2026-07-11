@@ -272,7 +272,7 @@ Closed job `status` enum (also in `domain.schema.json`):
 | `leased` | A worker holds an unexpired lease. |
 | `completed` | The step completed once under the `(run_id, step_key)` unique constraint. |
 | `failed` | Terminal job failure: non-retryable error or transport retry budget exhausted. |
-| `reconciliation_required` | Expired lease on a non-idempotent step; automatic requeue is forbidden. |
+| `reconciliation_required` | Automatic reclaim is forbidden: non-idempotent expired lease, atomicity conflict (including expired lease while run remains `queued`), missing active attempt, or outstanding expired job after a terminal run outcome. |
 
 `completed`, `failed`, and `reconciliation_required` are terminal job states.
 
@@ -282,20 +282,27 @@ Closed job `status` enum (also in `domain.schema.json`):
 | --- | --- | --- |
 | `available` | `leased` | Claim: `available_at <= now`, no active unexpired lease, owning `AnalysisRun` is `queued` or `running`, `(run_id, step_key)` has no completed `RunStep`, `attempt_count < TEXT_MODEL_MAX_RETRIES + 1`, and a new `JobAttempt` is inserted. |
 | `leased` | `available` | Retryable transient failure with remaining transport budget: terminalize the active `JobAttempt` as `failed`, clear the lease, set `available_at` to bounded backoff, and leave the run `running`. |
-| `leased` | `available` | Expired lease on an idempotent step: terminalize the active `JobAttempt` as `failed` with `job_lease_lost`, clear the lease, and make the job claimable without duplicating a completed step. |
+| `leased` | `available` | Expired lease on an idempotent step while `attempt_count < TEXT_MODEL_MAX_RETRIES + 1`: terminalize the active `JobAttempt` as `failed` with `job_lease_lost`, clear the lease, and make the job claimable without duplicating a completed step. |
 | `leased` | `completed` | Caller owns an unexpired lease, step completion commits once under the `(run_id, step_key)` unique constraint, the active `JobAttempt` ends `succeeded`, and the lease is cleared. |
-| `leased` | `failed` | Non-retryable error, exhausted transport budget after the active attempt ends, or run deadline exceeded while handling this job. |
-| `leased` | `reconciliation_required` | Expired lease on a non-idempotent step before completion: terminalize the active `JobAttempt` as `failed` with `job_lease_lost`. |
+| `leased` | `failed` | Non-retryable error, exhausted transport budget after the active attempt ends, expired idempotent lease at maximum transport budget, or run deadline exceeded while handling this job. |
+| `leased` | `reconciliation_required` | Expired lease on a non-idempotent step; expired leased job with a completed `RunStep` or owning `AnalysisRun` still `queued` (atomicity conflict); expired leased job with no active `JobAttempt`; or an outstanding expired lease while the owning run is already `succeeded`. |
 
 No other job-status transition is legal. In particular:
 
 - there is no `available -> failed` transition; exhausted transport budget makes **claim** illegal and the preceding failure path performs `leased -> failed`
 - a terminal job state MUST NOT return to `available` or `leased`
 - `completed` MUST NOT be set while `(run_id, step_key)` already has a completed `RunStep`
-- reclaiming an idempotent expired lease MUST NOT insert a new `JobAttempt` until a new claim occurs
+- reclaiming an idempotent expired lease with remaining transport budget MUST NOT insert a new `JobAttempt` until a new claim occurs
+- an idempotent expired lease at maximum transport budget MUST NOT return to `available`; it performs `leased -> failed` and, when the run is `running`, `running -> failed` with `dependency_attempts_exhausted`
+- an expired leased job with a completed `RunStep` is an atomicity conflict and MUST transition to `reconciliation_required`; it MUST NOT silently succeed, requeue, or complete
+- an expired leased job whose owning `AnalysisRun` is still `queued` is an atomicity conflict and MUST transition to `reconciliation_required` without mutating the run; claim always couples `queued -> running`, so a `leased` job with a `queued` run is inconsistent
+- when the owning run is `failed`, `cancelled`, or `policy_blocked`, expired-lease handling transitions only the job to `failed` and MUST NOT mutate the run
 
 The first durable claim for a run's initial step MAY perform the coupled
-`AnalysisRun` transition `queued -> running` in the same atomic operation.
+`AnalysisRun` transition `queued -> running` in the same atomic operation. The
+analyzer repository implementation always performs this coupling on claim when
+the run is still `queued`; other claimers MAY omit it only when explicitly
+documented and tested outside the analyzer worker path.
 
 #### 2.7.2 Lease operations
 
@@ -307,9 +314,14 @@ default 30 and `JOB_LEASE_SECONDS` default 300 (five minutes).
 | Claim | Job is `available`, `available_at <= now`, no active unexpired lease, no completed `RunStep` for `(run_id, step_key)`, run not terminal, and `attempt_count < TEXT_MODEL_MAX_RETRIES + 1` | `SELECT ... FOR UPDATE SKIP LOCKED`; transition to `leased`; set `lease_owner`, `lease_expires_at = now + JOB_LEASE_SECONDS`, `heartbeat_at = now`; insert a new `JobAttempt` and increment `attempt_count` by 1. If `attempt_count >= TEXT_MODEL_MAX_RETRIES + 1`, claim is illegal and performs no state change. |
 | Heartbeat | Caller owns an unexpired `leased` job | Advance `heartbeat_at` and extend `lease_expires_at` to `now + JOB_LEASE_SECONDS`. |
 | Complete step | Caller owns an unexpired lease and `(run_id, step_key)` has no completed `RunStep` | Commit completion once under the unique constraint; mark the active `JobAttempt` `succeeded`; transition job to `completed`; clear lease fields. |
-| Record transient failure | Caller owns the lease and the error is transport-retryable | Mark the active `JobAttempt` `failed` with the stable error code; set `last_error_code`; if another claim is legal (`attempt_count < TEXT_MODEL_MAX_RETRIES + 1` after this attempt ends) and the run deadline allows, transition to `available` with backoff on `available_at`; otherwise transition to `failed`. |
-| Recover expired lease | Job is `leased` with expired lease and `step_idempotent=true` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; clear lease fields; transition to `available` with `available_at <= now`; do not duplicate a completed step. |
-| Observe expired non-idempotent lease | Job is `leased` with expired lease and `step_idempotent=false` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; clear lease fields; transition to `reconciliation_required`; block success commit until operator reconciliation. |
+| Record transient failure | Caller owns the lease and the error is transport-retryable | Mark the active `JobAttempt` `failed` with the stable error code; set `last_error_code`; if another claim is legal (`attempt_count < TEXT_MODEL_MAX_RETRIES + 1` after this attempt ends) and the run deadline allows, transition to `available` with backoff on `available_at`; otherwise transition to `failed` and, when the run is `running`, `running -> failed` with the applicable terminal error code. |
+| Recover expired lease | Job is `leased` with expired lease, `step_idempotent=true`, owning run is `running`, no completed `RunStep`, an active `JobAttempt`, and `attempt_count < TEXT_MODEL_MAX_RETRIES + 1` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; set `last_error_code=job_lease_lost`; clear lease fields; transition to `available` with `available_at <= now`. |
+| Fail expired lease at budget | Job is `leased` with expired lease, `step_idempotent=true`, and `attempt_count >= TEXT_MODEL_MAX_RETRIES + 1` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; set `last_error_code=job_lease_lost`; clear lease fields; transition job to `failed`; when the run is `running`, transition run to `failed` with `dependency_attempts_exhausted`. |
+| Observe expired non-idempotent lease | Job is `leased` with expired lease and `step_idempotent=false` | Mark the active `JobAttempt` `failed` with `error_code=job_lease_lost`, `error_retryable=true`, and `completed_at=now`; set `last_error_code=job_lease_lost`; clear lease fields; transition to `reconciliation_required`; block success commit until operator reconciliation. |
+| Resolve expired lease conflict | Job is `leased` with expired lease and either a completed `RunStep` exists, no active `JobAttempt` exists, or owning `AnalysisRun` is still `queued` | Set `last_error_code=job_lease_lost`; terminalize any active `JobAttempt` when present; clear lease fields; transition to `reconciliation_required` without mutating the run; never requeue or complete. |
+| Observe expired job on terminal run | Job is `leased` with expired lease and owning run is terminal | Set `last_error_code=job_lease_lost`; if run is `succeeded`, transition job to `reconciliation_required` without mutating the run. If run is `failed`, `cancelled`, or `policy_blocked`, transition job to `failed` without mutating the run. |
+
+Every expired-lease recovery path sets `job.last_error_code=job_lease_lost`, including when no active `JobAttempt` row exists.
 
 Ownership mismatch, heartbeat after lease loss, completion after lease loss, and
 automatic requeue of a non-idempotent expired step are illegal. A worker that
@@ -344,8 +356,9 @@ The following uniqueness rules are mandatory:
 
 1. At most one `Job` row exists per `(run_id, step_key)`.
 2. At most one `JobAttempt` row exists per `(job_id, attempt_number)`.
-3. At most one completed `RunStep` exists per `(run_id, step_key)`.
-4. Claim is illegal when a completed `RunStep` already exists for the job's `(run_id, step_key)`.
+3. At most one `active` `JobAttempt` row exists per `job_id` (partial unique index).
+4. At most one completed `RunStep` exists per `(run_id, step_key)`.
+5. Claim is illegal when a completed `RunStep` already exists for the job's `(run_id, step_key)`.
 
 Violations are integrity failures and MUST NOT be repaired by inserting duplicate jobs, attempts, or completed steps.
 
@@ -614,8 +627,8 @@ but are not yet implemented in persistence, workers, or portal routes:
 
 | Topic | Contract location | Implementation owner |
 | --- | --- | --- |
-| Job and `JobAttempt` persistence | Section 2.7; `Job`, `JobAttempt` schemas | P1 Postgres jobs/worker foundation |
-| Claim, heartbeat, completion, lease recovery | Section 2.7.2 | P1 worker and reconciler |
+| Job and `JobAttempt` persistence | Section 2.7; `Job`, `JobAttempt` schemas | P1 Postgres jobs foundation (partial) |
+| Claim, heartbeat, completion, lease recovery | Section 2.7.2 | P1 analyzer repository and reconciler |
 | `pending_approval -> expired` timer | Section 2.5 | EP-06 review portal |
 | Disposition mutation routes and UX | Section 2.4.1 | EP-06 review portal |
 

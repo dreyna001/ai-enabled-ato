@@ -108,3 +108,17 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 py -3.12 -m pytest -m "not integration" -q
 ```
 
 **Post-gate result:** `529 passed, 10 skipped, 1 deselected, 1 warning in 4.71s` on Python 3.12. The deselected test is integration-scoped; the warning is the same third-party deprecation warning.
+
+## Post-gate P1.0 job/attempt contract amendment
+
+**Recorded:** 2026-07-11 (append-only; does not reopen or replace the P-1 gate above)
+
+This addendum records contract closure for the job `status` enum, `attempt_count` increment timing, and reviewed expired-lease recovery semantics in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 2.7, `ATO_TECHNICAL_SPEC.md` Section 20, and `docs/OPERATIONS_AND_RECOVERY.md`. It does not claim analyzer worker-loop completion, API mutation routes, or EP-06 approval timers or disposition implementation.
+
+```text
+python3 -m pytest tests/test_contracts.py -q
+```
+
+**Post-gate result:** `22 passed in 1.39s` on Python 3.12.
+
+EP-06 `pending_approval -> expired` timers and disposition mutation routes remain later implementation work.
