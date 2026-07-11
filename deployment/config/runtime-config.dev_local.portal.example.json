@@ -8,11 +8,11 @@
   "OIDC_AUDIENCE": "ato-portal-dev",
   "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
     "source": "root_owned_file",
-    "path": "/workspace/deployment/config/dev-oidc-client-secret"
+    "path": "/absolute/private/path/oidc-client-secret"
   },
   "PORTAL_PUBLIC_ORIGIN": "http://localhost:5173",
   "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
     "source": "root_owned_file",
-    "path": "/workspace/deployment/config/dev-audit-hmac-key"
+    "path": "/absolute/private/path/audit-hmac-key"
   }
 }

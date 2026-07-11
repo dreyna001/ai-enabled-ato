@@ -17,6 +17,7 @@ from ato_service.deterministic_analyzer import DeterministicAnalysisResult
 from ato_service.deterministic_analyzer_worker import (
     drain_deterministic_analysis,
     run_deterministic_analyzer_worker,
+    run_deterministic_analyzer_worker_loop,
 )
 from ato_service.runtime_config import load_runtime_config_from_dict
 
@@ -100,3 +101,56 @@ def test_worker_resolves_dependencies_and_disposes_engine(
     processed = asyncio.run(exercise())
     assert len(processed) == 1
     assert processed[0].matrix_row_count == 3
+
+
+def test_worker_loop_recovers_and_processes_until_shutdown(tmp_path: Path) -> None:
+    process_count = 0
+
+    async def fake_process(*_args: Any, **_kwargs: Any) -> None:
+        nonlocal process_count
+        process_count += 1
+
+    @asynccontextmanager
+    async def fake_session_scope(_session_factory: Any) -> AsyncIterator[Any]:
+        yield MagicMock()
+
+    async def exercise() -> None:
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        with (
+            patch(
+                "ato_service.deterministic_analyzer_worker.create_async_engine_from_url",
+                return_value=engine,
+            ),
+            patch(
+                "ato_service.deterministic_analyzer_worker.create_session_factory",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "ato_service.deterministic_analyzer_worker.session_scope",
+                fake_session_scope,
+            ),
+            patch(
+                "ato_service.deterministic_analyzer_worker.recover_expired_leases",
+                new_callable=AsyncMock,
+            ) as recover,
+            patch(
+                "ato_service.deterministic_analyzer_worker."
+                "process_next_deterministic_analysis_job",
+                side_effect=fake_process,
+            ),
+        ):
+            await run_deterministic_analyzer_worker_loop(
+                _config(tmp_path),
+                dsn="postgresql+asyncpg://ato:secret@localhost/ato",
+                audit_hmac_key=b"audit-test-key",
+                project_root=tmp_path,
+                poll_interval_seconds=0.01,
+                should_stop=lambda: process_count >= 1,
+                now_factory=lambda: NOW,
+            )
+        recover.assert_awaited_once()
+        engine.dispose.assert_awaited_once()
+
+    asyncio.run(exercise())
+    assert process_count == 1

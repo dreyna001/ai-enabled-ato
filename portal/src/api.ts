@@ -370,7 +370,6 @@ export async function cancelRun(
     method: "POST",
     credentials: "include",
     headers: {
-      "Idempotency-Key": crypto.randomUUID(),
       "X-CSRF-Token": session.csrf_token,
       Origin: session.portal_origin,
     },

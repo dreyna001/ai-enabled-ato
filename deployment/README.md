@@ -1,7 +1,7 @@
 # Portal and API Deployment Scaffold
 
 **Status:** Operator packaging for the `ato_service` API, authenticated portal, and synthetic intake worker  
-**Not claimed:** Production release, live RHEL 9 validation, analyzer workers, production/customer file extraction, model hosting, backup automation, or P7 completion
+**Not claimed:** Production release, live RHEL 9 validation, production analyzer service deployment, production/customer file extraction, model hosting, backup automation, or P7 completion
 
 This directory holds install assets and redacted configuration examples. Behavior is contract-tested in [`tests/test_deployment_contract.py`](../tests/test_deployment_contract.py) and [`tests/test_portal_contract.py`](../tests/test_portal_contract.py); passing those tests does not prove a customer host install.
 
@@ -22,7 +22,12 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`../scripts/install.sh`](../scripts/install.sh) | Root installer: layout, package copy, systemd/nginx assets |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
 
-There is no analyzer worker unit, model sidecar, or timer in this slice. the application package includes the long-running `ato-intake-worker` process for `dev_local` synthetic JSON fixtures, but the installer does not deploy, configure, start, or credential that development-only worker by default.
+There is no analyzer worker systemd unit, model sidecar, or timer in this
+slice. The application package includes the long-running `ato-intake-worker`
+and `ato-analyzer-worker` processes for `dev_local` synthetic workflows, but
+the installer does not deploy, configure, start, or credential those
+development-only workers by default. Live service installation remains a later
+release gate.
 
 ## Host layout
 

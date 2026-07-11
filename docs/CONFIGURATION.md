@@ -86,13 +86,31 @@ Do not commit the private config or key. Run migrations, start the worker, final
 ato-intake-worker --config /absolute/private/path/runtime-config.json
 ```
 
-The process claims only `data_origin=synthetic` revisions whose artifacts are all detected and declared `application/json`, commits one lifecycle transition
-per transaction, drains until idle, and exits. It refuses
-`onprem_production`; it has no production systemd unit, OIDC dependency, model
-call, external scanner call, or customer extraction path. **HS-005** remains
+The process claims only `data_origin=synthetic` revisions whose artifacts are
+all detected and declared `application/json`, and commits one lifecycle
+transition per transaction. It refuses `onprem_production`, makes no model or
+external scanner call, and has no customer extraction path. **HS-005** remains
 open. Synthetic `text/plain` revisions are intentionally not claimed and
-remain `scanning` for a later supported worker or explicit operator action;
-the P1.2 command does not silently reinterpret them as JSON.
+remain `scanning` for a later supported worker or explicit operator action.
+
+## Deterministic analyzer worker
+
+`ato-analyzer-worker` is the long-running worker for the implemented
+`deterministic_only` analysis path. It is gated to `runtime_profile=dev_local`,
+confirmed `data_origin=synthetic` revisions, and the pinned synthetic FISMA
+profile. It continuously recovers expired leases, claims durable jobs, writes
+the exact assessment matrix and artifact manifest, and keeps
+`llm_call_count=0`.
+
+It consumes the same validated runtime JSON, database DSN, storage path, and
+audit HMAC credential as intake. No model credential is loaded.
+
+```text
+ato-analyzer-worker --config /absolute/private/path/runtime-config.json
+```
+
+`full` and `targeted` runs, customer-production evidence, scanner integration,
+and model calls remain fail-closed and deferred.
 
 ## Text LLM (OpenAI or Bedrock)
 

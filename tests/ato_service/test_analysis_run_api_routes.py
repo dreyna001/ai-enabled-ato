@@ -158,7 +158,6 @@ def test_post_cancel_returns_accepted(client: TestClient, monkeypatch: pytest.Mo
     response = client.post(
         f"/api/v1/runs/{RUN_ID}/cancel",
         headers={
-            "Idempotency-Key": "idempotency-key-00000002",
             "X-CSRF-Token": CSRF_TOKEN,
             "Origin": ORIGIN,
         },
@@ -226,7 +225,6 @@ def test_cancel_conflict_maps_to_problem(
     response = client.post(
         f"/api/v1/runs/{RUN_ID}/cancel",
         headers={
-            "Idempotency-Key": "idempotency-key-00000003",
             "X-CSRF-Token": CSRF_TOKEN,
             "Origin": ORIGIN,
         },

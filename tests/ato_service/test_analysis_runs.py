@@ -15,11 +15,11 @@ import pytest
 from ato_service.analysis_runs import (
     AnalysisRunPolicyError,
     AnalysisRunValidationError,
+    ConcurrentRunLimitExceededError,
     StartRunInput,
     start_run,
 )
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
-from ato_service.lifecycle_transitions import IllegalStateTransitionError
 from ato_service.package_revisions import PackageRevisionNotFoundError
 from ato_service.runtime_config import load_runtime_config_from_dict
 
@@ -109,7 +109,7 @@ def test_start_run_requires_ready_revision(tmp_path: Path) -> None:
         "ato_service.analysis_runs.load_idempotency_replay",
         new=AsyncMock(return_value=None),
     ):
-        with pytest.raises(IllegalStateTransitionError):
+        with pytest.raises(AnalysisRunPolicyError) as exc_info:
             _run(
                 start_run(
                     session,
@@ -128,6 +128,43 @@ def test_start_run_requires_ready_revision(tmp_path: Path) -> None:
                     now=NOW,
                 )
             )
+    assert exc_info.value.error_code == "analysis_not_eligible"
+
+
+def test_start_run_enforces_concurrent_run_limit(tmp_path: Path) -> None:
+    session = AsyncMock()
+    package_revision = MagicMock(status="ready", data_origin="synthetic")
+    system = MagicMock(owner_group="owners", viewer_groups=["viewers"])
+    result = MagicMock()
+    result.one_or_none.return_value = (package_revision, system)
+    session.execute = AsyncMock(return_value=result)
+    session.scalar = AsyncMock(return_value=2)
+
+    with (
+        patch(
+            "ato_service.analysis_runs.load_idempotency_replay",
+            new=AsyncMock(return_value=None),
+        ),
+        pytest.raises(ConcurrentRunLimitExceededError),
+    ):
+        _run(
+            start_run(
+                session,
+                principal=_principal(),
+                package_revision_id=REVISION_ID,
+                request=StartRunInput(
+                    run_type="deterministic_only",
+                    parent_run_id=None,
+                    assessment_item_ids=(),
+                ),
+                config=_runtime_config(tmp_path),
+                authority_manifest_id="authority.v2",
+                project_root=ROOT,
+                idempotency_key="idempotency-key-01234567",
+                hmac_key=b"x" * MIN_AUDIT_HMAC_KEY_BYTES,
+                now=NOW,
+            )
+        )
 
 
 def test_start_run_missing_revision_raises_not_found(tmp_path: Path) -> None:

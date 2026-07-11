@@ -65,9 +65,11 @@ from ato_service.runtime_config import RuntimeConfig
 from ato_service.deterministic_analyzer import DETERMINISTIC_STEP_KEY
 
 OPERATION_START = "analysis_runs.start"
-OPERATION_CANCEL = "analysis_runs.cancel"
 
 HTTP_ACCEPTED = 202
+DEFAULT_MAX_CONCURRENT_ANALYSIS_RUNS = 2
+# Transaction-scoped namespace reserved for serializing active-run admission.
+_RUN_ADMISSION_ADVISORY_LOCK_ID = 0x41544F52
 
 _RUN_CURSOR_VERSION = 1
 _MATRIX_CURSOR_VERSION = 1
@@ -101,6 +103,12 @@ class AnalysisRunValidationError(ValueError):
         self.error_code = error_code
         self.message = message
         super().__init__(message)
+
+
+class ConcurrentRunLimitExceededError(Exception):
+    """Raised when the configured active-run ceiling has been reached."""
+
+    error_code = "concurrent_run_limit_exceeded"
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,11 +267,7 @@ def _assert_deterministic_run_gate(
     if package_revision.data_origin != "synthetic":
         raise AnalysisRunPolicyError(error_code="model_routing_denied")
     if package_revision.status != "ready":
-        raise IllegalStateTransitionError(
-            error_code="illegal_state_transition",
-            current_state=package_revision.status,
-            target_state="analysis_run",
-        )
+        raise AnalysisRunPolicyError(error_code="analysis_not_eligible")
     if run_type != "deterministic_only":
         raise AnalysisRunPolicyError(error_code="prohibited_model_action")
 
@@ -326,6 +330,28 @@ async def start_run(
     )
     if request.parent_run_id is not None:
         raise AnalysisRunPolicyError(error_code="prohibited_model_action")
+
+    await session.execute(
+        select(func.pg_advisory_xact_lock(_RUN_ADMISSION_ADVISORY_LOCK_ID))
+    )
+    max_concurrent_runs = config.document.get(
+        "MAX_CONCURRENT_ANALYSIS_RUNS",
+        DEFAULT_MAX_CONCURRENT_ANALYSIS_RUNS,
+    )
+    active_run_count = await session.scalar(
+        select(func.count())
+        .select_from(AnalysisRun)
+        .where(
+            AnalysisRun.status.in_(
+                (
+                    AnalysisRunStatus.QUEUED.value,
+                    AnalysisRunStatus.RUNNING.value,
+                )
+            )
+        )
+    )
+    if int(active_run_count or 0) >= int(max_concurrent_runs):
+        raise ConcurrentRunLimitExceededError()
 
     profile = load_pinned_fisma_synthetic_profile(project_root=project_root)
     if package_revision.profile_id != profile["profile_id"]:
@@ -486,27 +512,11 @@ async def cancel_run(
     *,
     principal: AuthenticatedPrincipal,
     run_id: uuid.UUID,
-    idempotency_key: str,
     hmac_key: bytes,
     now: datetime,
 ) -> AnalysisRunMutationResult:
     """Cancel a queued or running analysis run."""
     validated_now = _require_aware_utc(now, field_name="now")
-    request_digest = request_digest_from_payload({"run_id": format_uuid(run_id)})
-    replay = await load_idempotency_replay(
-        session,
-        principal.actor_id,
-        OPERATION_CANCEL,
-        idempotency_key,
-        request_digest,
-        validated_now,
-    )
-    if replay is not None:
-        return AnalysisRunMutationResult(
-            payload=replay.response_body,
-            status=replay.response_status,
-            replayed=True,
-        )
 
     result = await session.execute(_load_run_with_system_statement(run_id))
     row = result.one_or_none()
@@ -550,16 +560,6 @@ async def cancel_run(
         metadata={"status": AnalysisRunStatus.CANCELLED.value},
         now=validated_now,
     )
-    await record_idempotency_outcome(
-        session,
-        principal=principal.actor_id,
-        operation=OPERATION_CANCEL,
-        idempotency_key=idempotency_key,
-        request_digest=request_digest,
-        response_status=HTTP_ACCEPTED,
-        response_body=payload,
-        now=validated_now,
-    )
     return AnalysisRunMutationResult(
         payload=payload,
         status=HTTP_ACCEPTED,
@@ -584,6 +584,12 @@ async def get_run_matrix(
         raise AnalysisRunNotFoundError(run_id=run_id)
     analysis_run, _, system = row
     require_system_read_access(principal, system)
+    if AnalysisRunStatus(analysis_run.status) is not AnalysisRunStatus.SUCCEEDED:
+        raise IllegalStateTransitionError(
+            error_code="illegal_state_transition",
+            current_state=analysis_run.status,
+            target_state="matrix_available",
+        )
 
     filters = [MatrixRow.run_id == run_id]
     if status is not None:

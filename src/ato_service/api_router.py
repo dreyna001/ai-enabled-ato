@@ -580,13 +580,11 @@ def create_api_router() -> APIRouter:
         principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
-        idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
         result = await cancel_run(
             session,
             principal=principal,
             run_id=run_id,
-            idempotency_key=idempotency_key,
             hmac_key=audit_hmac_key,
             now=_utc_now(),
         )

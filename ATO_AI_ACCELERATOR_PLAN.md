@@ -236,12 +236,13 @@ Implemented:
 - Content-addressed storage, immutable manifests, replay/crash reconciliation, and PostgreSQL models/migrations
 - Health/Problem API boundary
 - OIDC session auth, fact proposal review API, React/Vite portal, and long-running synthetic intake worker
+- Deterministic-only analysis-run APIs, durable analyzer worker, exact matrix persistence, and portal run results
 - Portal/API deployment scaffold with `ato-portal.conf`, `ato-intake-worker.service`, and contract tests
 
 Not yet implemented:
 
 - FedRAMP 20x official package contract
-- Analyzer worker loop and runs/matrix review APIs
+- Full and targeted model-backed analysis runs
 - Secure multi-file extraction and production malware scanning
 - Review dispositions, approval workflow, and ZIP export
 - Live-validated production on-prem deployment, upgrade, rollback, backup, and restore

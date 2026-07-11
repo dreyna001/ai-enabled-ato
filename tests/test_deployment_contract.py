@@ -126,6 +126,10 @@ def test_pyproject_declares_service_and_worker_entrypoints() -> None:
     text = _read(PYPROJECT)
     assert 'ato-service = "ato_service.main:main"' in text
     assert 'ato-intake-worker = "ato_service.intake_worker:main"' in text
+    assert (
+        'ato-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"'
+        in text
+    )
 
 
 def test_main_module_defaults_to_loopback(systemd_text: str) -> None:
