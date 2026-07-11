@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.sql.selectable import Select
 
 from ato_service.authority_manifest import (
     AuthorityManifestVerificationError,
@@ -44,12 +45,24 @@ def _dev_config(
     return load_runtime_config_from_dict(document, base_dir=tmp_path)
 
 
-def _make_engine(*, probe_error: Exception | None = None) -> AsyncEngine:
+def _make_engine(
+    *,
+    probe_error: Exception | None = None,
+    reconciliation_count: int = 0,
+) -> AsyncEngine:
     engine = MagicMock(spec=AsyncEngine)
     connection = AsyncMock()
-    connection.execute = AsyncMock(
-        side_effect=probe_error,
-    )
+
+    async def _execute(stmt, *args, **kwargs):
+        if probe_error is not None:
+            raise probe_error
+        if isinstance(stmt, Select):
+            count_result = MagicMock()
+            count_result.scalar_one.return_value = reconciliation_count
+            return count_result
+        return MagicMock()
+
+    connection.execute = AsyncMock(side_effect=_execute)
     connect_cm = AsyncMock()
     connect_cm.__aenter__.return_value = connection
     connect_cm.__aexit__.return_value = None
@@ -150,7 +163,7 @@ def test_database_unavailable_on_probe_failure(tmp_path: Path) -> None:
     checks = _run(run_readiness_checks(deps))
 
     assert checks["database"] == "unavailable"
-    assert checks["jobs"] == "ok"
+    assert checks["jobs"] == "unavailable"
     assert set(checks) == set(READINESS_CHECK_NAMES)
 
 
@@ -278,7 +291,7 @@ def test_authority_manifest_verification_streams_artifact_bytes(
     assert manifest["manifest_id"] == "fixture.approved"
 
 
-def test_jobs_placeholder_always_ok(tmp_path: Path) -> None:
+def test_jobs_unavailable_when_engine_execute_fails(tmp_path: Path) -> None:
     deps = _make_deps(
         tmp_path,
         engine=_make_engine(probe_error=RuntimeError("database down")),
@@ -287,7 +300,7 @@ def test_jobs_placeholder_always_ok(tmp_path: Path) -> None:
 
     checks = _run(run_readiness_checks(deps))
 
-    assert checks["jobs"] == "ok"
+    assert checks["jobs"] == "unavailable"
 
 
 def test_configuration_unavailable_when_dsn_file_missing(

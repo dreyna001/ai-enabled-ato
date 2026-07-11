@@ -119,7 +119,7 @@ Systemd starts only the configured service set and applies least privilege. The 
 | `database` | PostgreSQL connectivity |
 | `storage` | Writable package storage |
 | `authority_manifest` | Pinned authority manifest bytes and approval status |
-| `jobs` | Job subsystem availability |
+| `jobs` | PostgreSQL `jobs` table queryability and presence of `status=reconciliation_required` rows; does not verify analyzer-worker process liveness |
 | `configuration` | Required runtime configuration and DSN reference resolution |
 
 - When the pinned authority manifest is present and digest-valid but not `approved`, `authority_manifest` reports `degraded` and aggregate readiness returns HTTP `503` with `error_code: reconciliation_required`. The current repository manifest is `draft` while **HS-001** is open; local readiness therefore stays degraded/503 until qualified authority review closes HS-001.

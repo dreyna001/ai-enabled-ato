@@ -9,6 +9,7 @@ import os
 import secrets
 from pathlib import Path
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ato_service.authority_manifest import (
@@ -16,6 +17,7 @@ from ato_service.authority_manifest import (
     verify_authority_manifest,
 )
 from ato_service.db.dsn import DatabaseDsnError, require_database_dsn_from_env
+from ato_service.db.models import Job
 from ato_service.db.session import probe_database_connectivity
 from ato_service.health import CheckStatus, ReadinessChecks, ReadinessProbe
 from ato_service.runtime_config import (
@@ -25,6 +27,7 @@ from ato_service.runtime_config import (
 )
 
 _TEMP_DIR_NAME = "_tmp"
+_JOB_RECONCILIATION_REQUIRED_STATUS = "reconciliation_required"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +47,7 @@ async def run_readiness_checks(deps: ReadinessDependencies) -> ReadinessChecks:
     authority_manifest = await _run_sync_check(
         lambda: _check_authority_manifest(deps)
     )
-    jobs = await _run_sync_check(_check_jobs)
+    jobs = await _run_async_check(lambda: _check_jobs(deps))
     configuration = await _run_sync_check(lambda: _check_configuration(deps))
 
     return {
@@ -130,7 +133,21 @@ def _check_authority_manifest(deps: ReadinessDependencies) -> CheckStatus:
     return "ok"
 
 
-def _check_jobs() -> CheckStatus:
+async def _check_jobs(deps: ReadinessDependencies) -> CheckStatus:
+    engine = deps.get_engine()
+    if engine is None:
+        return "unavailable"
+
+    stmt = (
+        select(func.count())
+        .select_from(Job)
+        .where(Job.status == _JOB_RECONCILIATION_REQUIRED_STATUS)
+    )
+    async with engine.connect() as connection:
+        result = await connection.execute(stmt)
+        reconciliation_required_count = result.scalar_one()
+    if reconciliation_required_count > 0:
+        return "degraded"
     return "ok"
 
 
