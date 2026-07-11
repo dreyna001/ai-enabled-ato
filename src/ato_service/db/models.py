@@ -82,6 +82,11 @@ class PackageRevision(Base):
     effective_data_labels: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     authority_manifest_id: Mapped[str] = mapped_column(String(128), nullable=False)
     content_manifest_sha256: Mapped[str | None] = mapped_column(String(64))
+    revision_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("1"),
+    )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -145,6 +150,10 @@ class PackageRevision(Base):
         CheckConstraint(
             "status <> 'ready' OR content_manifest_sha256 IS NOT NULL",
             name="ck_package_revisions_ready_requires_content_manifest_sha256",
+        ),
+        CheckConstraint(
+            "revision_version >= 1",
+            name="ck_package_revisions_revision_version_positive",
         ),
         ck.regex_check(
             "authority_manifest_id",

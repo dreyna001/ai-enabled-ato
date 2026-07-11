@@ -216,6 +216,7 @@ def test_package_revision_columns_match_contract() -> None:
         "effective_data_labels",
         "authority_manifest_id",
         "content_manifest_sha256",
+        "revision_version",
         "status",
         "created_by",
         "created_at",
@@ -475,10 +476,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_jobs_migration() -> None:
+def test_alembic_head_is_package_revision_version_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0002"
+    assert script.get_current_head() == "20260711_0003"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:
