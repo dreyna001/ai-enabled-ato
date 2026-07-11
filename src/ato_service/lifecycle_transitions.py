@@ -176,7 +176,7 @@ _LEGAL_ANALYSIS_RUN_TRANSITIONS: frozenset[
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class IllegalStateTransitionError(Exception):
     """Raised when a requested lifecycle transition is not legal."""
 

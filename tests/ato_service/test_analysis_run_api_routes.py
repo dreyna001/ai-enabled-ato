@@ -25,6 +25,7 @@ from ato_service.api_dependencies import (
 )
 from ato_service.api_router import get_mutation_principal, get_read_principal
 from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.lifecycle_transitions import IllegalStateTransitionError
 from ato_service.main import AppRuntimeSnapshot, AppRuntimeState, create_app
 from ato_service.problems import PROBLEM_MEDIA_TYPE
 from ato_service.runtime_config import load_runtime_config_from_dict
@@ -207,3 +208,28 @@ def test_list_runs_returns_envelope(client: TestClient, monkeypatch: pytest.Monk
     response = client.get(f"/api/v1/package-revisions/{REVISION_ID}/runs")
     assert response.status_code == 200
     assert response.json()["items"][0]["run_id"] == str(RUN_ID).lower()
+
+
+def test_cancel_conflict_maps_to_problem(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_cancel(*_args: Any, **_kwargs: Any) -> AnalysisRunMutationResult:
+        raise IllegalStateTransitionError(
+            error_code="illegal_state_transition",
+            current_state="succeeded",
+            target_state="cancelled",
+        )
+
+    monkeypatch.setattr("ato_service.api_router.cancel_run", fake_cancel)
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post(
+        f"/api/v1/runs/{RUN_ID}/cancel",
+        headers={
+            "Idempotency-Key": "idempotency-key-00000003",
+            "X-CSRF-Token": CSRF_TOKEN,
+            "Origin": ORIGIN,
+        },
+    )
+    assert response.status_code == 409
+    assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)

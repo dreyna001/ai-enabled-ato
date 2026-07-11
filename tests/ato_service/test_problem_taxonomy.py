@@ -301,7 +301,7 @@ def test_p0_typed_error_codes_are_documented_in_lifecycle_taxonomy() -> None:
 def test_illegal_state_transition_returns_409_and_preserves_state(
     run_id: str,
 ) -> None:
-    app = _create_base_app()
+    app = _create_problem_test_app()
     run_states = {run_id: AnalysisRunStatus.SUCCEEDED}
 
     @app.post("/api/v1/runs/{requested_run_id}/cancel")
@@ -460,7 +460,7 @@ def test_model_call_limit_exceeded_returns_422_without_callback(
 def test_matrix_coverage_invalid_returns_422_without_exposing_ids(
     run_id: str,
 ) -> None:
-    app = _create_base_app()
+    app = _create_problem_test_app()
 
     @app.get("/api/v1/runs/{requested_run_id}/matrix")
     async def get_run_matrix(requested_run_id: str) -> None:
