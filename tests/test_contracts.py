@@ -1025,6 +1025,31 @@ def test_job_status_enum_matches_lifecycle_contract() -> None:
     )
 
 
+def test_job_attempt_status_field_invariants() -> None:
+    validator = _validator_for(CONTRACTS_DIR / "domain.schema.json")
+
+    for fixture_name in (
+        "domain.valid.job-attempt-active.json",
+        "domain.valid.job-attempt-succeeded.json",
+        "domain.valid.job-attempt-failed.json",
+    ):
+        errors = list(
+            validator.iter_errors(_load_json(CONTRACT_FIXTURES_DIR / fixture_name))
+        )
+        assert not errors, f"{fixture_name} must validate: {errors[0].message}"
+
+    invalid_fixtures = (
+        "domain.invalid.job-attempt-active-with-completed-at.json",
+        "domain.invalid.job-attempt-succeeded-with-error.json",
+        "domain.invalid.job-attempt-failed-null-error.json",
+    )
+    for fixture_name in invalid_fixtures:
+        errors = list(
+            validator.iter_errors(_load_json(CONTRACT_FIXTURES_DIR / fixture_name))
+        )
+        assert errors, f"{fixture_name} must be rejected by JobAttempt invariants"
+
+
 def test_job_and_job_attempt_schema_required_fields() -> None:
     domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
     job = domain["$defs"]["Job"]

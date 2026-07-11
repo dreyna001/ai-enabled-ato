@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "job_attempt",
+  "attempt_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "job_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "run_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "step_key": "normalize_proposal",
+  "attempt_number": 2,
+  "status": "failed",
+  "lease_owner": "worker-1",
+  "started_at": "2026-07-10T20:00:00Z",
+  "completed_at": "2026-07-10T20:05:01Z",
+  "error_code": null,
+  "error_retryable": true
+}

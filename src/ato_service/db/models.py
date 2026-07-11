@@ -13,12 +13,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -257,6 +259,7 @@ class AnalysisRun(Base):
         foreign_keys=[parent_run_id],
     )
     run_steps: Mapped[list[RunStep]] = relationship(back_populates="analysis_run")
+    jobs: Mapped[list[Job]] = relationship(back_populates="analysis_run")
 
     __table_args__ = (
         ck.enum_check(
@@ -601,4 +604,147 @@ class AuditEvent(Base):
         ),
         Index("ix_audit_events_occurred_at", "occurred_at"),
         Index("ix_audit_events_object_type_object_id", "object_type", "object_id"),
+    )
+
+
+class Job(Base):
+    """Durable Postgres queue row for one ``(run_id, step_key)`` execution unit."""
+
+    __tablename__ = "jobs"
+
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    step_idempotent: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+    )
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(255))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(128))
+
+    analysis_run: Mapped[AnalysisRun] = relationship(back_populates="jobs")
+    attempts: Mapped[list[JobAttempt]] = relationship(
+        back_populates="job",
+        foreign_keys="[JobAttempt.job_id, JobAttempt.run_id, JobAttempt.step_key]",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "step_key", name="uq_jobs_run_id_step_key"),
+        UniqueConstraint(
+            "job_id",
+            "run_id",
+            "step_key",
+            name="uq_jobs_job_id_run_id_step_key",
+        ),
+        ck.enum_check(
+            "status",
+            ev.JOB_STATUS_VALUES,
+            constraint_name="ck_jobs_status",
+        ),
+        ck.regex_check(
+            "step_key",
+            ck.STEP_KEY_REGEX,
+            constraint_name="ck_jobs_step_key",
+        ),
+        ck.regex_check(
+            "last_error_code",
+            ck.ERROR_CODE_REGEX,
+            constraint_name="ck_jobs_last_error_code",
+            nullable=True,
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_jobs_attempt_count_non_negative"),
+        CheckConstraint(
+            "("
+            "(status = 'leased' AND lease_owner IS NOT NULL "
+            "AND char_length(lease_owner) >= 1 "
+            "AND lease_expires_at IS NOT NULL AND heartbeat_at IS NOT NULL) "
+            "OR (status IN ('available', 'completed', 'failed', 'reconciliation_required') "
+            "AND lease_owner IS NULL AND lease_expires_at IS NULL AND heartbeat_at IS NULL)"
+            ")",
+            name="ck_jobs_lease_fields_match_status",
+        ),
+        Index("ix_jobs_run_id", "run_id"),
+        Index("ix_jobs_status", "status"),
+        Index("ix_jobs_status_available_at", "status", "available_at"),
+        Index("ix_jobs_lease_expires_at", "lease_expires_at"),
+    )
+
+
+class JobAttempt(Base):
+    """Child record of a claimed or completed transport attempt for a job."""
+
+    __tablename__ = "job_attempts"
+
+    attempt_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    lease_owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(128))
+    error_retryable: Mapped[bool | None] = mapped_column(Boolean)
+
+    job: Mapped[Job] = relationship(
+        back_populates="attempts",
+        foreign_keys=[job_id, run_id, step_key],
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "run_id", "step_key"],
+            ["jobs.job_id", "jobs.run_id", "jobs.step_key"],
+            ondelete="RESTRICT",
+            name="fk_job_attempts_jobs_job_id_run_id_step_key",
+        ),
+        UniqueConstraint(
+            "job_id",
+            "attempt_number",
+            name="uq_job_attempts_job_id_attempt_number",
+        ),
+        ck.enum_check(
+            "status",
+            ev.JOB_ATTEMPT_STATUS_VALUES,
+            constraint_name="ck_job_attempts_status",
+        ),
+        ck.regex_check(
+            "step_key",
+            ck.STEP_KEY_REGEX,
+            constraint_name="ck_job_attempts_step_key",
+        ),
+        ck.regex_check(
+            "error_code",
+            ck.ERROR_CODE_REGEX,
+            constraint_name="ck_job_attempts_error_code",
+            nullable=True,
+        ),
+        CheckConstraint("attempt_number >= 1", name="ck_job_attempts_attempt_number_positive"),
+        CheckConstraint(
+            "char_length(lease_owner) >= 1",
+            name="ck_job_attempts_lease_owner_min_length",
+        ),
+        CheckConstraint(
+            "("
+            "(status = 'active' AND completed_at IS NULL "
+            "AND error_code IS NULL AND error_retryable IS NULL) "
+            "OR (status = 'succeeded' AND completed_at IS NOT NULL "
+            "AND error_code IS NULL AND error_retryable IS NULL) "
+            "OR (status = 'failed' AND completed_at IS NOT NULL "
+            "AND error_code IS NOT NULL AND error_retryable IS NOT NULL)"
+            ")",
+            name="ck_job_attempts_status_fields",
+        ),
+        Index("ix_job_attempts_job_id", "job_id"),
     )

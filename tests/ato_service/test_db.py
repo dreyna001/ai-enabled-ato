@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+import warnings
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock
@@ -19,6 +20,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, Uuid as UuidType
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from ato_service.db import enums as db_enums
@@ -28,6 +30,8 @@ from ato_service.db.models import (
     AuditEvent,
     FactProposal,
     IdempotencyRecord,
+    Job,
+    JobAttempt,
     PackageRevision,
     RunStep,
     SourceArtifact,
@@ -60,7 +64,7 @@ INITIAL_MIGRATION_PATH = (
 ENV_PATH = ROOT / "migrations" / "env.py"
 ALEMBIC_INI_PATH = ROOT / "alembic.ini"
 
-EXPECTED_TABLES = frozenset(
+INITIAL_MIGRATION_TABLES = frozenset(
     {
         "systems",
         "package_revisions",
@@ -72,6 +76,8 @@ EXPECTED_TABLES = frozenset(
         "audit_events",
     }
 )
+
+EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset({"jobs", "job_attempts"})
 
 FK_SAFE_UPGRADE_TABLE_ORDER = (
     "systems",
@@ -171,8 +177,7 @@ def test_metadata_exposes_expected_tables_only() -> None:
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
 
-def test_metadata_has_no_jobs_or_tenant_columns() -> None:
-    assert "jobs" not in Base.metadata.tables
+def test_metadata_has_no_tenant_columns() -> None:
     for table in Base.metadata.tables.values():
         assert "tenant_id" not in table.c
 
@@ -186,6 +191,8 @@ def test_model_classes_map_to_expected_tables() -> None:
     assert RunStep.__tablename__ == "run_steps"
     assert IdempotencyRecord.__tablename__ == "idempotency_records"
     assert AuditEvent.__tablename__ == "audit_events"
+    assert Job.__tablename__ == "jobs"
+    assert JobAttempt.__tablename__ == "job_attempts"
 
 
 def test_primary_keys_use_uuid_columns() -> None:
@@ -262,10 +269,35 @@ def test_foreign_keys_cover_expected_relationships() -> None:
         "analysis_runs.run_id",
     ) in foreign_keys
     assert (
+        "jobs",
+        "run_id",
+        "analysis_runs.run_id",
+    ) in foreign_keys
+    assert (
         "fact_proposals",
         "model_step_id",
         "run_steps.step_id",
     ) in foreign_keys
+
+
+def test_job_mappers_configure_without_warnings() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        configure_mappers()
+
+    mapper_warnings = [
+        warning
+        for warning in caught
+        if "Job" in str(warning.message) or "JobAttempt" in str(warning.message)
+    ]
+    assert mapper_warnings == []
+
+    assert Job.analysis_run.property.back_populates == "jobs"
+    assert Job.attempts.property.back_populates == "job"
+    assert JobAttempt.job.property.back_populates == "attempts"
+    assert {
+        column.key for column in JobAttempt.job.property._user_defined_foreign_keys
+    } == {"job_id", "run_id", "step_key"}
 
 
 def test_postgresql_ddl_compiles_for_all_tables() -> None:
@@ -441,20 +473,27 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_exists_and_initial_migration_references_all_tables() -> None:
+def test_alembic_head_is_jobs_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260710_0001"
+    assert script.get_current_head() == "20260711_0002"
 
+
+def test_initial_migration_references_only_original_domain_tables() -> None:
     migration_source = _migration_source()
-    for table_name in sorted(EXPECTED_TABLES):
+    for table_name in sorted(INITIAL_MIGRATION_TABLES):
         assert table_name in migration_source
+    assert "job_attempts" not in migration_source
+    assert not re.search(
+        r'op\.create_table\(\s*\n?\s*["\']jobs["\']',
+        migration_source,
+    )
 
 
 def test_initial_migration_is_explicit_and_immutable() -> None:
     migration_source = _migration_source()
 
-    for table_name in EXPECTED_TABLES:
+    for table_name in INITIAL_MIGRATION_TABLES:
         assert re.search(
             rf"op\.create_table\(\s*\n?\s*[\"']{table_name}[\"']",
             migration_source,
@@ -859,12 +898,15 @@ def test_database_dsn_errors_never_include_secret_contents(
     assert secret_dsn not in message
 
 
-def test_db_module_docstring_notes_jobs_table_deferred() -> None:
+def test_db_module_docstring_documents_jobs_persistence() -> None:
     from ato_service import db as db_module
 
     doc = inspect.getdoc(db_module) or ""
     assert "jobs" in doc.lower()
-    assert "omitted" in doc.lower() or "unresolved" in doc.lower()
+    assert "job_attempts" in doc.lower()
+    assert "omitted" not in doc.lower()
+    assert "unresolved" not in doc.lower()
+    assert "deferred" not in doc.lower()
 
 
 @pytest.mark.integration

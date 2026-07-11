@@ -1,7 +1,7 @@
 """PostgreSQL persistence foundation for durable ATO domain state.
 
-The ``jobs`` table is intentionally omitted: persistent job status and attempt
-semantics remain unresolved in the technical specification (Section 20).
+Includes analyzer ``jobs`` and ``job_attempts`` tables for Postgres-backed
+worker claim, lease, and attempt durability per Section 20.
 """
 
 from ato_service.db.base import Base
@@ -10,6 +10,8 @@ from ato_service.db.models import (
     AuditEvent,
     FactProposal,
     IdempotencyRecord,
+    Job,
+    JobAttempt,
     PackageRevision,
     RunStep,
     SourceArtifact,
@@ -39,6 +41,8 @@ __all__ = [
     "DatabaseDsnError",
     "FactProposal",
     "IdempotencyRecord",
+    "Job",
+    "JobAttempt",
     "PackageRevision",
     "RunStep",
     "SourceArtifact",

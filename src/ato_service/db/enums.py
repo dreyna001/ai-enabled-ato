@@ -89,3 +89,17 @@ RUN_STEP_TYPE_VALUES: tuple[str, ...] = (
 
 AUDIT_ACTOR_TYPE_VALUES: tuple[str, ...] = ("user", "service")
 AUDIT_OUTCOME_VALUES: tuple[str, ...] = ("succeeded", "denied", "failed")
+
+JOB_STATUS_VALUES: tuple[str, ...] = (
+    "available",
+    "leased",
+    "completed",
+    "failed",
+    "reconciliation_required",
+)
+
+JOB_ATTEMPT_STATUS_VALUES: tuple[str, ...] = (
+    "active",
+    "succeeded",
+    "failed",
+)

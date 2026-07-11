@@ -2202,6 +2202,12 @@
             "properties": {
               "completed_at": {
                 "type": "null"
+              },
+              "error_code": {
+                "type": "null"
+              },
+              "error_retryable": {
+                "type": "null"
               }
             }
           }
@@ -2210,10 +2216,7 @@
           "if": {
             "properties": {
               "status": {
-                "enum": [
-                  "succeeded",
-                  "failed"
-                ]
+                "const": "succeeded"
               }
             },
             "required": [
@@ -2224,6 +2227,38 @@
             "properties": {
               "completed_at": {
                 "$ref": "#/$defs/UtcDateTime"
+              },
+              "error_code": {
+                "type": "null"
+              },
+              "error_retryable": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "completed_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              },
+              "error_code": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,127}$"
+              },
+              "error_retryable": {
+                "type": "boolean"
               }
             }
           }
