@@ -507,6 +507,11 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         CsrfValidationError,
     )
     from ato_service.concurrency import EtagMismatchError, IfMatchRequiredError
+    from ato_service.analysis_runs import (
+        AnalysisRunNotFoundError,
+        AnalysisRunPolicyError,
+        AnalysisRunValidationError,
+    )
     from ato_service.fact_proposals import (
         FactProposalNotFoundError,
         FactProposalReviewConflictError,
@@ -560,6 +565,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         SystemNotFoundError,
         ParentRevisionNotFoundError,
         FactProposalNotFoundError,
+        AnalysisRunNotFoundError,
     ):
         _register_domain_problem_handler(app, not_found_type)
 
@@ -578,6 +584,8 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
     )
     _register_domain_problem_handler(app, SourceRequestSchemaInvalidError)
     _register_domain_problem_handler(app, PackageRevisionValidationError)
+    _register_domain_problem_handler(app, AnalysisRunValidationError)
+    _register_domain_problem_handler(app, AnalysisRunPolicyError)
     _register_domain_problem_handler(
         app,
         PackageRevisionStorageError,

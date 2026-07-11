@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 ato-service = "ato_service.main:main"
 ato-intake-worker = "ato_service.intake_worker:main"
+ato-deterministic-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"
 
 [project.optional-dependencies]
 dev = [

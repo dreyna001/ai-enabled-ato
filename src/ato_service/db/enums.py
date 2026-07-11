@@ -103,3 +103,18 @@ JOB_ATTEMPT_STATUS_VALUES: tuple[str, ...] = (
     "succeeded",
     "failed",
 )
+
+ASSESSMENT_ITEM_TYPE_VALUES: tuple[str, ...] = (
+    "nist_control",
+    "fedramp_rule",
+    "fedramp_ksi",
+)
+
+MATRIX_STATUS_VALUES: tuple[str, ...] = (
+    "supported",
+    "partial",
+    "unsupported",
+    "insufficient_evidence",
+)
+
+MATRIX_ROW_STATUS_VALUES: tuple[str, ...] = MATRIX_STATUS_VALUES

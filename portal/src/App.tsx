@@ -1,21 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   acceptProposal,
+  cancelRun,
   confirmRevision,
   createRevision,
   createSystem,
   fetchSession,
   finalizeRevision,
   getRevision,
+  getRun,
+  listMatrixRows,
   listProposals,
   listRevisions,
+  listRuns,
   listSystems,
   login,
   logout,
   rejectProposal,
   revisionEtag,
+  startRun,
   uploadJsonFile,
+  type AnalysisRun,
   type FactProposal,
+  type MatrixRow,
   type PackageRevision,
   type Problem,
   type SessionInfo,
@@ -36,6 +43,10 @@ export default function App() {
   const [selectedRevisionId, setSelectedRevisionId] = useState<string>("");
   const [revision, setRevision] = useState<PackageRevision | null>(null);
   const [proposals, setProposals] = useState<FactProposal[]>([]);
+  const [runs, setRuns] = useState<AnalysisRun[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string>("");
+  const [activeRun, setActiveRun] = useState<AnalysisRun | null>(null);
+  const [matrixRows, setMatrixRows] = useState<MatrixRow[]>([]);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [systemsState, setSystemsState] = useState<LoadState>("loading");
@@ -92,6 +103,10 @@ export default function App() {
     if (!selectedRevisionId) {
       setRevision(null);
       setProposals([]);
+      setRuns([]);
+      setSelectedRunId("");
+      setActiveRun(null);
+      setMatrixRows([]);
       setRevisionState("empty");
       return;
     }
@@ -101,13 +116,39 @@ export default function App() {
       setRevision(detail);
       const proposalItems = await listProposals(selectedRevisionId);
       setProposals(proposalItems);
+      const runItems = await listRuns(selectedRevisionId);
+      setRuns(runItems);
+      if (!selectedRunId && runItems.length > 0) {
+        setSelectedRunId(runItems[0].run_id);
+      }
       setRevisionState("ready");
       setError("");
     } catch (problem) {
       setRevisionState("error");
       setError(formatProblem(problem as Problem));
     }
-  }, [selectedRevisionId]);
+  }, [selectedRevisionId, selectedRunId]);
+
+  const refreshRunDetail = useCallback(async () => {
+    if (!selectedRunId) {
+      setActiveRun(null);
+      setMatrixRows([]);
+      return;
+    }
+    try {
+      const run = await getRun(selectedRunId);
+      setActiveRun(run);
+      if (run.status === "succeeded") {
+        const matrix = await listMatrixRows(selectedRunId);
+        setMatrixRows(matrix.items);
+      } else {
+        setMatrixRows([]);
+      }
+      setError("");
+    } catch (problem) {
+      setError(formatProblem(problem as Problem));
+    }
+  }, [selectedRunId]);
 
   useEffect(() => {
     void refreshSession();
@@ -128,13 +169,14 @@ export default function App() {
   }, [refreshRevisionDetail]);
 
   useEffect(() => {
+    void refreshRunDetail();
+  }, [refreshRunDetail]);
+
+  useEffect(() => {
     if (!selectedRevisionId || !revision) {
       return;
     }
-    if (
-      revision.status === "scanning" ||
-      revision.status === "extracting"
-    ) {
+    if (revision.status === "scanning" || revision.status === "extracting") {
       const timer = window.setInterval(() => {
         void refreshRevisionDetail();
       }, 2000);
@@ -142,6 +184,19 @@ export default function App() {
     }
     return undefined;
   }, [selectedRevisionId, revision, refreshRevisionDetail]);
+
+  useEffect(() => {
+    if (!selectedRunId || !activeRun) {
+      return;
+    }
+    if (activeRun.status === "queued" || activeRun.status === "running") {
+      const timer = window.setInterval(() => {
+        void refreshRunDetail();
+      }, 2000);
+      return () => window.clearInterval(timer);
+    }
+    return undefined;
+  }, [selectedRunId, activeRun, refreshRunDetail]);
 
   const pendingProposals = useMemo(
     () => proposals.filter((item) => item.review_status === "pending"),
@@ -367,7 +422,97 @@ export default function App() {
           ) : null}
 
           {revision.status === "ready" ? (
-            <p className="message">Revision is confirmed and ready for analysis runs.</p>
+            <>
+              <p className="message">
+                Draft analysis readiness - not official status in GRC, FedRAMP, or an agency
+                authorization process.
+              </p>
+              <div className="panel-header">
+                <h3>Analysis runs</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void startRun(session, revision.package_revision_id)
+                      .then((created) => {
+                        setSelectedRunId(created.run_id);
+                        return refreshRevisionDetail();
+                      })
+                      .then(refreshRunDetail)
+                      .then(() => setMessage("Deterministic analysis run started."))
+                      .catch((problem) => setError(formatProblem(problem as Problem)));
+                  }}
+                >
+                  Start deterministic run
+                </button>
+              </div>
+              <ul className="list">
+                {runs.map((item) => (
+                  <li key={item.run_id}>
+                    <button
+                      type="button"
+                      className={item.run_id === selectedRunId ? "selected" : ""}
+                      onClick={() => setSelectedRunId(item.run_id)}
+                    >
+                      {item.run_id.slice(0, 8)}… — {item.status}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {activeRun ? (
+                <section className="panel">
+                  <h3>Run status</h3>
+                  <p>
+                    Status: <strong>{activeRun.status}</strong> · LLM calls:{" "}
+                    {activeRun.llm_call_count}
+                  </p>
+                  {activeRun.status === "queued" || activeRun.status === "running" ? (
+                    <>
+                      <p className="status">
+                        Deterministic analyzer worker is processing this run…
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void cancelRun(session, activeRun.run_id)
+                            .then(refreshRunDetail)
+                            .then(refreshRevisionDetail)
+                            .then(() => setMessage("Run cancellation accepted."))
+                            .catch((problem) => setError(formatProblem(problem as Problem)));
+                        }}
+                      >
+                        Cancel run
+                      </button>
+                    </>
+                  ) : null}
+                  {activeRun.status === "succeeded" && matrixRows.length > 0 ? (
+                    <>
+                      <p className="message">
+                        Artifact manifest: {activeRun.artifact_manifest_sha256?.slice(0, 16)}…
+                      </p>
+                      <h4>Matrix</h4>
+                      <table className="matrix-table">
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Status</th>
+                            <th>Summary</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {matrixRows.map((row) => (
+                            <tr key={row.matrix_row_id}>
+                              <td>{row.assessment_item_id}</td>
+                              <td>{row.model_proposed_status}</td>
+                              <td>{row.finding_summary}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  ) : null}
+                </section>
+              ) : null}
+            </>
           ) : null}
         </section>
       ) : null}

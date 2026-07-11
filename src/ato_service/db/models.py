@@ -264,6 +264,7 @@ class AnalysisRun(Base):
     model_profile: Mapped[str] = mapped_column(String(255), nullable=False)
     artifact_manifest_sha256: Mapped[str | None] = mapped_column(String(64))
     llm_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    assessment_item_ids: Mapped[list[str] | None] = mapped_column(JSONB)
     error_code: Mapped[str | None] = mapped_column(String(128))
     error_retryable: Mapped[bool | None] = mapped_column(Boolean)
 
@@ -274,6 +275,10 @@ class AnalysisRun(Base):
     )
     run_steps: Mapped[list[RunStep]] = relationship(back_populates="analysis_run")
     jobs: Mapped[list[Job]] = relationship(back_populates="analysis_run")
+    matrix_rows: Mapped[list[MatrixRow]] = relationship(
+        back_populates="analysis_run",
+        foreign_keys="[MatrixRow.run_id]",
+    )
 
     __table_args__ = (
         ck.enum_check(
@@ -807,6 +812,78 @@ class AuthSession(Base):
         ),
         Index("ix_auth_sessions_absolute_expires_at", "absolute_expires_at"),
         Index("ix_auth_sessions_last_seen_at", "last_seen_at"),
+    )
+
+
+class MatrixRow(Base):
+    """Immutable matrix output row for one assessment item within an analysis run."""
+
+    __tablename__ = "matrix_rows"
+
+    matrix_row_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    assessment_item_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    assessment_item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_proposed_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    system_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    finding_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
+    gaps: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    assessor_questions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    context_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    producing_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    analysis_run: Mapped[AnalysisRun] = relationship(
+        back_populates="matrix_rows",
+        foreign_keys=[run_id],
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "assessment_item_id",
+            name="uq_matrix_rows_run_id_assessment_item_id",
+        ),
+        ck.enum_check(
+            "assessment_item_type",
+            ev.ASSESSMENT_ITEM_TYPE_VALUES,
+            constraint_name="ck_matrix_rows_assessment_item_type",
+        ),
+        ck.regex_check(
+            "assessment_item_id",
+            r"^[A-Za-z0-9][A-Za-z0-9()._-]{1,127}$",
+            constraint_name="ck_matrix_rows_assessment_item_id",
+        ),
+        ck.enum_check(
+            "model_proposed_status",
+            ev.MATRIX_ROW_STATUS_VALUES,
+            constraint_name="ck_matrix_rows_model_proposed_status",
+        ),
+        ck.enum_check(
+            "system_status",
+            ev.MATRIX_ROW_STATUS_VALUES,
+            constraint_name="ck_matrix_rows_system_status",
+        ),
+        CheckConstraint(
+            "char_length(finding_summary) >= 1",
+            name="ck_matrix_rows_finding_summary_min_length",
+        ),
+        Index("ix_matrix_rows_run_id", "run_id"),
+        Index("ix_matrix_rows_run_id_assessment_item_id", "run_id", "assessment_item_id"),
+        Index("ix_matrix_rows_model_proposed_status", "model_proposed_status"),
     )
 
 

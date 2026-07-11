@@ -214,9 +214,22 @@ def _mock_system_row() -> MagicMock:
     return system
 
 
-def test_unimplemented_package_routes_are_not_mounted(client: TestClient) -> None:
-    response = client.get(f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}/runs")
-    assert response.status_code == 404
+def test_analysis_run_routes_are_mounted(
+    client: TestClient,
+    mock_session: MagicMock,
+) -> None:
+    from ato_service.analysis_runs import AnalysisRunsPage
+
+    async def _list_runs_override(*args: object, **kwargs: object) -> AnalysisRunsPage:
+        return AnalysisRunsPage(items=[], next_cursor=None)
+
+    with patch(
+        "ato_service.api_router.list_runs",
+        new=AsyncMock(side_effect=_list_runs_override),
+    ):
+        response = client.get(f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}/runs")
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "next_cursor": None}
 
 
 @pytest.mark.parametrize(

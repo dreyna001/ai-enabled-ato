@@ -78,7 +78,7 @@ INITIAL_MIGRATION_TABLES = frozenset(
 )
 
 EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
-    {"jobs", "job_attempts", "auth_sessions", "oidc_login_states"}
+    {"jobs", "job_attempts", "auth_sessions", "oidc_login_states", "matrix_rows"}
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states"})
 
@@ -327,7 +327,10 @@ def test_postgresql_ddl_compiles_for_all_tables() -> None:
     for table_name in sorted(EXPECTED_TABLES):
         ddl = _compile_create_table(table_name)
         assert f"CREATE TABLE {table_name}" in ddl
-        assert "TIMESTAMP WITH TIME ZONE" in ddl or table_name == "source_artifacts"
+        assert "TIMESTAMP WITH TIME ZONE" in ddl or table_name in {
+            "source_artifacts",
+            "matrix_rows",
+        }
         for index in _table(table_name).indexes:
             index_sql = str(CreateIndex(index).compile(dialect=dialect))
             assert index_sql.startswith("CREATE INDEX") or index_sql.startswith(
@@ -497,10 +500,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_idempotency_headers_artifact_uniq_migration() -> None:
+def test_alembic_head_is_matrix_rows_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0005"
+    assert script.get_current_head() == "20260711_0006"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

@@ -35,6 +35,27 @@ export type FactProposal = {
   review_status: string;
 };
 
+export type AnalysisRun = {
+  run_id: string;
+  package_revision_id: string;
+  run_type: string;
+  status: string;
+  llm_call_count: number;
+  artifact_manifest_sha256: string | null;
+  requested_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type MatrixRow = {
+  matrix_row_id: string;
+  assessment_item_id: string;
+  assessment_item_type: string;
+  model_proposed_status: string;
+  system_status: string;
+  finding_summary: string;
+};
+
 const API_BASE = "/api/v1";
 
 async function parseProblem(response: Response): Promise<Problem> {
@@ -289,4 +310,85 @@ export async function confirmRevision(
 
 export function revisionEtag(revisionVersion: number): string {
   return `"v${revisionVersion}"`;
+}
+
+export async function startRun(
+  session: SessionInfo,
+  revisionId: string,
+): Promise<AnalysisRun> {
+  const response = await fetch(
+    `${API_BASE}/package-revisions/${revisionId}/runs`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID(),
+        "X-CSRF-Token": session.csrf_token,
+        Origin: session.portal_origin,
+      },
+      body: JSON.stringify({
+        run_type: "deterministic_only",
+        parent_run_id: null,
+        assessment_item_ids: [],
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw await parseProblem(response);
+  }
+  return (await response.json()) as AnalysisRun;
+}
+
+export async function listRuns(revisionId: string): Promise<AnalysisRun[]> {
+  const response = await fetch(
+    `${API_BASE}/package-revisions/${revisionId}/runs`,
+    { credentials: "include" },
+  );
+  if (!response.ok) {
+    throw await parseProblem(response);
+  }
+  const payload = (await response.json()) as { items: AnalysisRun[] };
+  return payload.items;
+}
+
+export async function getRun(runId: string): Promise<AnalysisRun> {
+  const response = await fetch(`${API_BASE}/runs/${runId}`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw await parseProblem(response);
+  }
+  return (await response.json()) as AnalysisRun;
+}
+
+export async function cancelRun(
+  session: SessionInfo,
+  runId: string,
+): Promise<AnalysisRun> {
+  const response = await fetch(`${API_BASE}/runs/${runId}/cancel`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      "X-CSRF-Token": session.csrf_token,
+      Origin: session.portal_origin,
+    },
+  });
+  if (!response.ok) {
+    throw await parseProblem(response);
+  }
+  return (await response.json()) as AnalysisRun;
+}
+
+export async function listMatrixRows(
+  runId: string,
+): Promise<{ items: MatrixRow[]; total: number }> {
+  const response = await fetch(`${API_BASE}/runs/${runId}/matrix`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw await parseProblem(response);
+  }
+  return (await response.json()) as { items: MatrixRow[]; total: number };
 }

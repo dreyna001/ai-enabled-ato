@@ -108,3 +108,24 @@ button.selected,
   display: block;
   margin: 1rem 0;
 }
+
+.draft-disclaimer {
+  border-left: 4px solid #c47d00;
+  background: #fff8eb;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.matrix-table th,
+.matrix-table td {
+  border: 1px solid #d7e0ec;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}

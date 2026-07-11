@@ -127,3 +127,61 @@ def map_fact_proposal_to_domain(fact_proposal: Any) -> dict[str, Any]:
             else format_utc_datetime(fact_proposal.reviewed_at)
         ),
     }
+
+
+def map_analysis_run_to_domain(analysis_run: Any) -> dict[str, Any]:
+    """Map a duck-typed AnalysisRun row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "analysis_run",
+        "run_id": format_uuid(analysis_run.run_id),
+        "package_revision_id": format_uuid(analysis_run.package_revision_id),
+        "parent_run_id": (
+            None
+            if analysis_run.parent_run_id is None
+            else format_uuid(analysis_run.parent_run_id)
+        ),
+        "run_type": analysis_run.run_type,
+        "status": analysis_run.status,
+        "requested_by": analysis_run.requested_by,
+        "requested_at": format_utc_datetime(analysis_run.requested_at),
+        "started_at": (
+            None
+            if analysis_run.started_at is None
+            else format_utc_datetime(analysis_run.started_at)
+        ),
+        "completed_at": (
+            None
+            if analysis_run.completed_at is None
+            else format_utc_datetime(analysis_run.completed_at)
+        ),
+        "authority_manifest_id": analysis_run.authority_manifest_id,
+        "analysis_profile_sha256": analysis_run.analysis_profile_sha256,
+        "config_fingerprint": analysis_run.config_fingerprint,
+        "prompt_bundle_sha256": analysis_run.prompt_bundle_sha256,
+        "model_profile": analysis_run.model_profile,
+        "artifact_manifest_sha256": analysis_run.artifact_manifest_sha256,
+        "llm_call_count": analysis_run.llm_call_count,
+        "error_code": analysis_run.error_code,
+        "error_retryable": analysis_run.error_retryable,
+    }
+
+
+def map_matrix_row_to_domain(matrix_row: Any) -> dict[str, Any]:
+    """Map a duck-typed MatrixRow row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "matrix_row",
+        "matrix_row_id": format_uuid(matrix_row.matrix_row_id),
+        "assessment_item_type": matrix_row.assessment_item_type,
+        "assessment_item_id": matrix_row.assessment_item_id,
+        "model_proposed_status": matrix_row.model_proposed_status,
+        "system_status": matrix_row.system_status,
+        "finding_summary": matrix_row.finding_summary,
+        "gaps": list(matrix_row.gaps),
+        "assessor_questions": list(matrix_row.assessor_questions),
+        "citations": list(matrix_row.citations),
+        "context_complete": matrix_row.context_complete,
+        "producing_run_id": format_uuid(matrix_row.producing_run_id),
+        "source_run_id": format_uuid(matrix_row.source_run_id),
+    }
