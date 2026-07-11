@@ -144,3 +144,51 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -m "not integration" -q
 ```
 
 **Post-gate result:** `973 passed, 1 skipped, 1 deselected, 1 warning in 4.97s` on Python 3.12. The warning is the existing third-party Starlette/httpx deprecation warning.
+
+## Post-gate P1.2 synthetic JSON intake worker
+
+**Recorded:** 2026-07-11 (append-only; does not reopen or replace the P-1 gate above)
+
+This addendum records the bounded P1.2 development intake slice. It implements
+only `runtime_profile=dev_local` + `data_origin=synthetic` + all-JSON
+progression from `scanning` through `extracting` to
+`awaiting_confirmation`. Revisions are claimed with
+`SELECT ... FOR UPDATE SKIP LOCKED`, one lifecycle transition commits per
+transaction, and deterministic pending `FactProposal` rows retain source
+SHA-256 plus RFC 6901 pointer provenance. The drain-and-exit worker requires
+the existing database and audit credential contracts and makes zero model or
+external scanner calls.
+
+This addendum does **not** claim the P1/EP-02 exit gate, proposal review or
+confirmation end to end, analyzer worker completion, production malware
+scanner operation, customer extraction, OIDC/session runtime, a worker systemd
+unit, live PostgreSQL acceptance, RHEL validation, or **HS-005** closure.
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ato_service/test_synthetic_intake.py tests/ato_service/test_synthetic_intake_worker.py -q
+```
+
+**Post-gate result:** `20 passed in 0.58s` on Python 3.12.
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_contracts.py tests/test_deployment_contract.py -q
+```
+
+**Post-gate result:** `75 passed in 1.35s` on Python 3.12.
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -m "not integration" -q
+```
+
+**Post-gate result:** `993 passed, 1 skipped, 2 deselected, 1 warning in 5.52s`
+on Python 3.12. The warning is the existing third-party Starlette/httpx
+deprecation warning.
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ato_service/test_synthetic_intake_integration.py -q
+```
+
+**Optional integration result:** `1 skipped in 0.28s` because
+`ATO_TEST_DATABASE_URL` was not configured. Live PostgreSQL transaction,
+constraint, audit-chain, and concurrency evidence therefore remains required
+before the full P1/EP-02 gate can close.
