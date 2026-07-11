@@ -144,7 +144,7 @@ def test_runtime_gate_accepts_only_dev_local(tmp_path: Path) -> None:
         {
             "schema_version": "1.0.0",
             "runtime_profile": "dev_local",
-            "STORAGE_DATA_PATH": "data",
+            "STORAGE_DATA_PATH": "/data",
         },
         base_dir=tmp_path,
     )
