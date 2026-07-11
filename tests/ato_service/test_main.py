@@ -16,6 +16,8 @@ from ato_service.db.dsn import DATABASE_DSN_FILE_ENV_VAR
 from ato_service.db.session import DatabaseConfigurationError
 from ato_service.main import (
     RUNTIME_CONFIG_PATH_ENV_VAR,
+    RUNTIME_STATE_ATTR,
+    AppRuntimeState,
     build_app_from_config,
     load_app_from_config_path,
     resolve_database_dsn,
@@ -145,7 +147,10 @@ def test_build_app_from_config_validates_without_connecting(
     config = _dev_config(tmp_path)
     config.storage_data_path.mkdir(parents=True, exist_ok=True)
 
-    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+    with (
+        patch("ato_service.main.create_async_engine_from_url") as create_engine,
+        patch("ato_service.main.create_session_factory") as create_session_factory,
+    ):
         engine = MagicMock()
         engine.connect = MagicMock()
         engine.dispose = AsyncMock()
@@ -154,6 +159,7 @@ def test_build_app_from_config_validates_without_connecting(
         build_app_from_config(config, dsn=dsn)
 
         create_engine.assert_not_called()
+        create_session_factory.assert_not_called()
         engine.connect.assert_not_called()
 
 
@@ -176,7 +182,10 @@ def test_valid_draft_manifest_starts_and_disposes_engine(
     config.storage_data_path.mkdir(parents=True, exist_ok=True)
     manifest_path, _artifact_path = _write_draft_authority_manifest(tmp_path)
 
-    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+    with (
+        patch("ato_service.main.create_async_engine_from_url") as create_engine,
+        patch("ato_service.main.create_session_factory") as create_session_factory,
+    ):
         engine = MagicMock()
         connect_cm = AsyncMock()
         connection = AsyncMock()
@@ -188,19 +197,34 @@ def test_valid_draft_manifest_starts_and_disposes_engine(
         engine.connect.return_value = connect_cm
         engine.dispose = AsyncMock()
         create_engine.return_value = engine
+        session_factory = MagicMock()
+        create_session_factory.return_value = session_factory
 
         app = build_app_from_config(
             config,
             dsn=POSTGRES_URL,
             authority_manifest_path=manifest_path,
             project_root=tmp_path,
+            audit_hmac_key=b"audit-test-key",
         )
 
         with TestClient(app) as client:
             response = client.get("/health/live")
             assert response.status_code == 200
 
+            runtime_state = getattr(app.state, RUNTIME_STATE_ATTR)
+            assert isinstance(runtime_state, AppRuntimeState)
+            assert runtime_state.config is config
+            assert runtime_state.storage_root == config.storage_data_path
+            assert runtime_state.authority_manifest_id == "fixture.draft"
+            assert runtime_state.session_factory is session_factory
+            assert runtime_state.audit_hmac_key == b"audit-test-key"
+
+        create_session_factory.assert_called_once_with(engine)
         engine.dispose.assert_awaited_once()
+        runtime_state = getattr(app.state, RUNTIME_STATE_ATTR)
+        assert runtime_state.session_factory is None
+        assert runtime_state.audit_hmac_key is None
 
 
 def test_missing_authority_manifest_fails_startup_before_engine_creation(
@@ -287,16 +311,22 @@ def test_build_app_from_config_disposes_engine_on_lifespan_failure(
     config.storage_data_path.mkdir(parents=True, exist_ok=True)
     manifest_path, _artifact_path = _write_draft_authority_manifest(tmp_path)
 
-    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+    with (
+        patch("ato_service.main.create_async_engine_from_url") as create_engine,
+        patch("ato_service.main.create_session_factory") as create_session_factory,
+    ):
         engine = MagicMock()
         engine.dispose = AsyncMock()
         create_engine.return_value = engine
+        session_factory = MagicMock()
+        create_session_factory.return_value = session_factory
 
         app = build_app_from_config(
             config,
             dsn=POSTGRES_URL,
             authority_manifest_path=manifest_path,
             project_root=tmp_path,
+            audit_hmac_key=b"audit-test-key",
         )
 
         async def _run_lifespan_with_failure() -> None:
@@ -307,6 +337,9 @@ def test_build_app_from_config_disposes_engine_on_lifespan_failure(
             asyncio.run(_run_lifespan_with_failure())
 
         engine.dispose.assert_awaited_once()
+        runtime_state = getattr(app.state, RUNTIME_STATE_ATTR)
+        assert runtime_state.session_factory is None
+        assert runtime_state.audit_hmac_key is None
 
 
 def test_load_app_from_config_path_builds_app(

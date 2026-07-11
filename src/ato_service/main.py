@@ -7,19 +7,20 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.types import Lifespan
 
 from ato_service.authority_manifest import verify_authority_manifest
 from ato_service.db.dsn import require_database_dsn_from_env
 from ato_service.db.session import (
     create_async_engine_from_url,
+    create_session_factory,
     require_postgresql_url,
 )
 from ato_service.health import (
@@ -40,11 +41,43 @@ RUNTIME_CONFIG_PATH_ENV_VAR = "ATO_RUNTIME_CONFIG_PATH"
 AUTHORITY_MANIFEST_PATH_ENV_VAR = "ATO_AUTHORITY_MANIFEST_PATH"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
+RUNTIME_STATE_ATTR = "runtime"
+
+
+@dataclass(frozen=True, slots=True)
+class AppRuntimeSnapshot:
+    """Immutable runtime configuration exposed on the application."""
+
+    config: RuntimeConfig
+    storage_root: Path
+    authority_manifest_id: str
+
+
+@dataclass(slots=True)
+class AppRuntimeState:
+    """Mutable runtime dependencies exposed on ``app.state.runtime``."""
+
+    snapshot: AppRuntimeSnapshot
+    session_factory: async_sessionmaker[AsyncSession] | None = None
+    audit_hmac_key: bytes | None = field(default=None, repr=False)
+
+    @property
+    def config(self) -> RuntimeConfig:
+        return self.snapshot.config
+
+    @property
+    def storage_root(self) -> Path:
+        return self.snapshot.storage_root
+
+    @property
+    def authority_manifest_id(self) -> str:
+        return self.snapshot.authority_manifest_id
 
 
 @dataclass(slots=True)
 class _AppRuntime:
     engine: AsyncEngine | None = None
+    session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def _find_project_root(start: Path | None = None) -> Path:
@@ -99,6 +132,7 @@ def create_app(
     *,
     readiness_probe: ReadinessProbe,
     lifespan: Lifespan[FastAPI] | None = None,
+    runtime_state: AppRuntimeState | None = None,
 ) -> FastAPI:
     """Create the service application with injected readiness dependencies."""
     app = FastAPI(
@@ -114,6 +148,8 @@ def create_app(
     register_problem_handlers(app)
     app.include_router(create_health_router(readiness_probe))
     app.openapi = lambda: _custom_openapi(app)
+    if runtime_state is not None:
+        setattr(app.state, RUNTIME_STATE_ATTR, runtime_state)
     return app
 
 
@@ -123,6 +159,7 @@ def build_app_from_config(
     dsn: str | None = None,
     authority_manifest_path: Path | None = None,
     project_root: Path | None = None,
+    audit_hmac_key: bytes | None = None,
 ) -> FastAPI:
     """Wire runtime config, database engine lifecycle, and readiness into an app."""
     resolved_dsn = (
@@ -136,15 +173,34 @@ def build_app_from_config(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        await asyncio.to_thread(
+        manifest = await asyncio.to_thread(
             verify_authority_manifest,
             manifest_path,
             project_root=root,
         )
         runtime.engine = create_async_engine_from_url(resolved_dsn)
+        runtime.session_factory = create_session_factory(runtime.engine)
+        setattr(
+            _app.state,
+            RUNTIME_STATE_ATTR,
+            AppRuntimeState(
+                snapshot=AppRuntimeSnapshot(
+                    config=config,
+                    storage_root=config.storage_data_path,
+                    authority_manifest_id=manifest["manifest_id"],
+                ),
+                session_factory=runtime.session_factory,
+                audit_hmac_key=audit_hmac_key,
+            ),
+        )
         try:
             yield
         finally:
+            runtime_state = getattr(_app.state, RUNTIME_STATE_ATTR, None)
+            if isinstance(runtime_state, AppRuntimeState):
+                runtime_state.session_factory = None
+                runtime_state.audit_hmac_key = None
+            runtime.session_factory = None
             if runtime.engine is not None:
                 await runtime.engine.dispose()
                 runtime.engine = None
