@@ -4,7 +4,20 @@ from __future__ import annotations
 
 import re
 
-_PACKAGE_REVISION_ETAG_PATTERN = re.compile(r'^"v([1-9][0-9]*)"$')
+# OpenAPI If-Match / ETag inner token: [A-Za-z0-9._:-]{1,128}
+_MAX_PACKAGE_REVISION_ETAG_INNER_LENGTH = 128
+_MAX_PACKAGE_REVISION_VERSION_DIGITS = _MAX_PACKAGE_REVISION_ETAG_INNER_LENGTH - 1
+_PACKAGE_REVISION_ETAG_PATTERN = re.compile(
+    rf'^"v([1-9][0-9]{{0,{_MAX_PACKAGE_REVISION_VERSION_DIGITS - 1}}})"$'
+)
+
+
+def _reject_non_positive_int_revision_version(revision_version: object) -> int:
+    if isinstance(revision_version, bool) or not isinstance(revision_version, int):
+        raise ValueError("revision_version must be a positive integer")
+    if revision_version < 1:
+        raise ValueError("revision_version must be a positive integer")
+    return revision_version
 
 
 class IfMatchRequiredError(Exception):
@@ -21,13 +34,17 @@ class EtagMismatchError(Exception):
 
 def format_package_revision_etag(revision_version: int) -> str:
     """Return the quoted strong ETag for a PackageRevision."""
-    if revision_version < 1:
-        raise ValueError("revision_version must be a positive integer")
-    return f'"v{revision_version}"'
+    validated = _reject_non_positive_int_revision_version(revision_version)
+    inner_token = f"v{validated}"
+    if len(inner_token) > _MAX_PACKAGE_REVISION_ETAG_INNER_LENGTH:
+        raise ValueError("revision_version exceeds the supported ETag token length")
+    return f'"{inner_token}"'
 
 
 def parse_package_revision_etag(if_match: str) -> int:
     """Parse a strong PackageRevision ETag into revision_version."""
+    if not isinstance(if_match, str) or any(character.isspace() for character in if_match):
+        raise ValueError("malformed PackageRevision ETag")
     if if_match.startswith("W/") or if_match == "*":
         raise ValueError("weak and wildcard If-Match values are rejected")
     match = _PACKAGE_REVISION_ETAG_PATTERN.fullmatch(if_match)

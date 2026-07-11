@@ -67,7 +67,10 @@ def test_authenticated_principal_normalizes_groups_and_origins() -> None:
         actor_id=" actor-1 ",
         groups=(" owners ", "owners", " viewers "),
         csrf_token="b" * 40,
-        allowed_origins=(" https://portal.example ", "https://portal.example"),
+        allowed_origins=(
+            "HTTPS://PORTAL.EXAMPLE:443",
+            "https://portal.example",
+        ),
     )
 
     assert principal.actor_id == "actor-1"
@@ -86,6 +89,9 @@ def test_authenticated_principal_normalizes_groups_and_origins() -> None:
         {"csrf_token": "x" * 513},
         {"allowed_origins": ()},
         {"allowed_origins": [" "]},
+        {"allowed_origins": ("https://portal.example/path",)},
+        {"allowed_origins": ("http://portal.example",)},
+        {"allowed_origins": ("https://user:pass@portal.example",)},
     ],
 )
 def test_authenticated_principal_rejects_invalid_fields(kwargs: dict) -> None:
@@ -137,7 +143,6 @@ def test_require_mutation_context_validates_csrf_and_origin() -> None:
         ("d" * 32, None),
         ("wrong-token" + ("e" * 24), "https://portal.example"),
         ("d" * 32, "https://evil.example"),
-        ("d" * 32, "https://portal.example/"),
     ],
 )
 def test_require_mutation_context_rejects_invalid_csrf_or_origin(
@@ -151,6 +156,52 @@ def test_require_mutation_context_rejects_invalid_csrf_or_origin(
         require_mutation_context(request, csrf_token, origin)
 
     assert exc_info.value.error_code == "csrf_validation_failed"
+
+
+def test_require_mutation_context_normalizes_origin_before_match() -> None:
+    principal = _principal(
+        csrf_token="d" * 32,
+        allowed_origins=("https://portal.example",),
+    )
+    request = _request(principal)
+
+    assert (
+        require_mutation_context(
+            request,
+            "d" * 32,
+            "HTTPS://PORTAL.EXAMPLE:443/",
+        )
+        is principal
+    )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://portal.example",
+        "https://portal.example/evil",
+        "https://portal.example?query=1",
+        "https://user@portal.example",
+        " https://portal.example",
+    ],
+)
+def test_require_mutation_context_rejects_non_canonical_origins(origin: str) -> None:
+    principal = _principal(csrf_token="d" * 32)
+    request = _request(principal)
+
+    with pytest.raises(CsrfValidationError):
+        require_mutation_context(request, "d" * 32, origin)
+
+
+def test_authenticated_principal_allows_http_localhost_dev_origin() -> None:
+    principal = AuthenticatedPrincipal(
+        actor_id="actor-1",
+        groups=("owners",),
+        csrf_token="c" * 32,
+        allowed_origins=("http://localhost:8080",),
+    )
+
+    assert principal.allowed_origins == ("http://localhost:8080",)
 
 
 def test_require_mutation_context_uses_constant_time_csrf_compare(

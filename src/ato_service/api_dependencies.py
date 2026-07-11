@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ato_service.audit import AuditUnavailableError, require_audit_hmac_key
 from ato_service.blobs import BlobStore
 from ato_service.db.session import session_scope
 from ato_service.main import AppRuntimeState, RUNTIME_STATE_ATTR
@@ -60,9 +61,9 @@ def get_blob_store(request: Request) -> BlobStore:
 def get_audit_hmac_key(request: Request) -> bytes:
     """Return the in-memory audit HMAC key or fail closed when absent."""
     runtime_state = get_runtime_state(request)
-    audit_hmac_key = runtime_state.audit_hmac_key
-    if audit_hmac_key is None:
+    try:
+        return require_audit_hmac_key(runtime_state.audit_hmac_key)
+    except AuditUnavailableError:
         raise AuditDependencyUnavailableError(
             "audit HMAC key is not configured"
-        )
-    return audit_hmac_key
+        ) from None

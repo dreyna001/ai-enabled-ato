@@ -78,6 +78,46 @@ def test_encode_pagination_cursor_is_stable() -> None:
         .decode("ascii")
         .rstrip("="),
         base64.urlsafe_b64encode(
+            json.dumps({"v": True, "created_at": "2026-07-10T20:00:00Z", "id": str(_ITEM_ID)}).encode(
+                "utf-8"
+            )
+        )
+        .decode("ascii")
+        .rstrip("="),
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "v": 1,
+                    "created_at": "2026-02-30T20:00:00Z",
+                    "id": str(_ITEM_ID),
+                }
+            ).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("="),
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "v": 1,
+                    "created_at": "2026-07-10T20:00:00.1234567Z",
+                    "id": str(_ITEM_ID),
+                }
+            ).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("="),
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "v": 1,
+                    "created_at": "2026-07-10T20:00:00.100000Z",
+                    "id": str(_ITEM_ID),
+                }
+            ).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("="),
+        base64.urlsafe_b64encode(
             json.dumps(
                 {
                     "v": 1,
@@ -88,6 +128,8 @@ def test_encode_pagination_cursor_is_stable() -> None:
         )
         .decode("ascii")
         .rstrip("="),
+        encode_pagination_cursor(_CREATED_AT, _ITEM_ID) + "=",
+        encode_pagination_cursor(_CREATED_AT, _ITEM_ID)[:-1] + "A",
         "A" * 2049,
     ],
 )

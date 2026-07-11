@@ -5,6 +5,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 from starlette.requests import Request
 
@@ -12,6 +13,7 @@ MAX_ACTOR_ID_LENGTH = 255
 MAX_GROUP_ID_LENGTH = 255
 MIN_CSRF_TOKEN_LENGTH = 32
 MAX_CSRF_TOKEN_LENGTH = 512
+_HTTP_LOCAL_DEV_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 class AuthenticationRequiredError(Exception):
@@ -64,11 +66,51 @@ def _normalize_groups(groups: Any) -> tuple[str, ...]:
     return tuple(normalized)
 
 
+def _format_origin(scheme: str, host: str, port: int | None) -> str:
+    normalized_host = host.lower()
+    if ":" in normalized_host and not normalized_host.startswith("["):
+        normalized_host = f"[{normalized_host}]"
+    default_port = 443 if scheme == "https" else 80
+    if port is None or port == default_port:
+        return f"{scheme}://{normalized_host}"
+    return f"{scheme}://{normalized_host}:{port}"
+
+
 def _normalize_origin(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
+    if not isinstance(value, str):
+        raise ValueError("origin must be a string")
+    if not value or any(character.isspace() for character in value):
         raise ValueError("origin must be nonempty")
-    return normalized
+
+    parsed = urlparse(value)
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("origin must not include userinfo")
+    if parsed.query:
+        raise ValueError("origin must not include a query")
+    if parsed.fragment:
+        raise ValueError("origin must not include a fragment")
+
+    scheme = parsed.scheme.lower()
+    if not scheme:
+        raise ValueError("origin must include a scheme")
+
+    host = parsed.hostname
+    if not host:
+        raise ValueError("origin must include a host")
+    host_key = host.lower()
+
+    path = parsed.path or ""
+    if path not in ("", "/"):
+        raise ValueError("origin must not include a path")
+
+    if scheme == "https":
+        pass
+    elif scheme == "http" and host_key in _HTTP_LOCAL_DEV_HOSTS:
+        pass
+    else:
+        raise ValueError("origin scheme is not permitted")
+
+    return _format_origin(scheme, host, parsed.port)
 
 
 def _normalize_allowed_origins(origins: Any) -> tuple[str, ...]:
@@ -148,7 +190,11 @@ def require_mutation_context(
         raise CsrfValidationError()
     if not secrets.compare_digest(x_csrf_token, principal.csrf_token):
         raise CsrfValidationError()
-    if origin not in principal.allowed_origins:
+    try:
+        normalized_origin = _normalize_origin(origin)
+    except ValueError:
+        raise CsrfValidationError() from None
+    if normalized_origin not in principal.allowed_origins:
         raise CsrfValidationError()
     return principal
 

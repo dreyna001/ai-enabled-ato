@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from ato_service.api_dependencies import (
@@ -26,6 +27,8 @@ from ato_service.main import (
     AppRuntimeState,
     create_app,
 )
+from ato_service.audit import AuditUnavailableError, AuditValidationError
+from ato_service.problems import PROBLEM_MEDIA_TYPE, register_problem_handlers
 from ato_service.runtime_config import load_runtime_config_from_dict
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,11 +48,14 @@ def _request_for_app(app: FastAPI) -> Request:
     return Request(scope)
 
 
+_VALID_AUDIT_HMAC_KEY = b"a" * 32
+
+
 def _runtime_state(
     tmp_path: Path,
     *,
     session_factory: MagicMock | None = MagicMock(),
-    audit_hmac_key: bytes | None = b"audit-secret",
+    audit_hmac_key: bytes | None = _VALID_AUDIT_HMAC_KEY,
 ) -> AppRuntimeState:
     config = load_runtime_config_from_dict(
         {
@@ -177,13 +183,14 @@ def test_get_blob_store_uses_runtime_storage_root(tmp_path: Path) -> None:
 
 
 def test_get_audit_hmac_key_returns_configured_key(tmp_path: Path) -> None:
+    configured_key = b"c" * 32
     app = create_app(
         readiness_probe=AsyncMock(return_value={}),
-        runtime_state=_runtime_state(tmp_path, audit_hmac_key=b"configured-key"),
+        runtime_state=_runtime_state(tmp_path, audit_hmac_key=configured_key),
     )
     request = _request_for_app(app)
 
-    assert get_audit_hmac_key(request) == b"configured-key"
+    assert get_audit_hmac_key(request) == configured_key
 
 
 def test_get_audit_hmac_key_fails_closed_when_absent(tmp_path: Path) -> None:
@@ -197,7 +204,58 @@ def test_get_audit_hmac_key_fails_closed_when_absent(tmp_path: Path) -> None:
         get_audit_hmac_key(request)
 
 
+def test_get_audit_hmac_key_fails_closed_when_key_is_too_short(tmp_path: Path) -> None:
+    app = create_app(
+        readiness_probe=AsyncMock(return_value={}),
+        runtime_state=_runtime_state(tmp_path, audit_hmac_key=b"short"),
+    )
+    request = _request_for_app(app)
+
+    with pytest.raises(AuditDependencyUnavailableError, match="not configured"):
+        get_audit_hmac_key(request)
+
+
+def test_get_audit_hmac_key_does_not_expose_secret_details(tmp_path: Path) -> None:
+    app = create_app(
+        readiness_probe=AsyncMock(return_value={}),
+        runtime_state=_runtime_state(tmp_path, audit_hmac_key=b"short"),
+    )
+    request = _request_for_app(app)
+
+    with pytest.raises(AuditDependencyUnavailableError) as exc_info:
+        get_audit_hmac_key(request)
+
+    message = str(exc_info.value)
+    assert "at least" not in message
+    assert "32" not in message
+
+
 def test_app_runtime_state_repr_hides_audit_key(tmp_path: Path) -> None:
     runtime_state = _runtime_state(tmp_path, audit_hmac_key=b"secret")
 
     assert "secret" not in repr(runtime_state)
+
+
+def test_audit_dependency_errors_map_to_safe_reconciliation_required_problem() -> None:
+    app = FastAPI()
+    register_problem_handlers(app)
+
+    @app.get("/api/v1/audit-validation")
+    async def audit_validation() -> None:
+        raise AuditValidationError("secret audit validation detail")
+
+    @app.get("/api/v1/audit-unavailable")
+    async def audit_unavailable() -> None:
+        raise AuditUnavailableError("secret audit HMAC key detail")
+
+    client = TestClient(app, raise_server_exceptions=False)
+
+    for path in ("/api/v1/audit-validation", "/api/v1/audit-unavailable"):
+        response = client.get(path)
+        assert response.status_code == 503
+        assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
+        payload = response.json()
+        assert payload["error_code"] == "reconciliation_required"
+        assert payload["retryable"] is True
+        assert "Retry-After" in response.headers
+        assert "secret" not in payload["detail"].lower()

@@ -500,6 +500,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         DatabaseSessionUnavailableError,
         RuntimeStateUnavailableError,
     )
+    from ato_service.audit import AuditUnavailableError, AuditValidationError
     from ato_service.auth_context import (
         AuthenticationRequiredError,
         AuthorizationDeniedError,
@@ -618,6 +619,12 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         AuditDependencyUnavailableError,
         error_code="reconciliation_required",
     )
+    for audit_error_type in (AuditValidationError, AuditUnavailableError):
+        _register_domain_problem_handler(
+            app,
+            audit_error_type,
+            error_code="reconciliation_required",
+        )
 
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(

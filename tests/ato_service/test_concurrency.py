@@ -19,12 +19,18 @@ def test_format_and_parse_package_revision_etag() -> None:
     assert parse_package_revision_etag('"v42"') == 42
 
 
-@pytest.mark.parametrize("revision_version", [0, -1])
+@pytest.mark.parametrize("revision_version", [0, -1, True, 1.5, "1"])
 def test_format_package_revision_etag_rejects_non_positive(
-    revision_version: int,
+    revision_version: object,
 ) -> None:
     with pytest.raises(ValueError):
-        format_package_revision_etag(revision_version)
+        format_package_revision_etag(revision_version)  # type: ignore[arg-type]
+
+
+def test_format_package_revision_etag_rejects_excessive_token_length() -> None:
+    excessive_version = int("9" * 128)
+    with pytest.raises(ValueError, match="ETag token length"):
+        format_package_revision_etag(excessive_version)
 
 
 @pytest.mark.parametrize(
@@ -42,6 +48,9 @@ def test_format_package_revision_etag_rejects_non_positive(
         "",
         '"v"',
         '"v-1"',
+        '"v1 "',
+        ' "v1"',
+        '"v' + "9" * 128 + '"',
     ],
 )
 def test_parse_package_revision_etag_rejects_weak_or_malformed(if_match: str) -> None:
