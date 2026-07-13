@@ -1476,3 +1476,247 @@ class PackageNormalizationStep(Base):
         Index("ix_pkg_norm_steps_package_revision_id", "package_revision_id"),
         Index("ix_pkg_norm_steps_status", "status"),
     )
+
+
+class AuthorizationDecisionRecord(Base):
+    """Externally issued authorization decision metadata attached post-export."""
+
+    __tablename__ = "authorization_decision_records"
+
+    authorization_decision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("systems.system_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    package_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("package_revisions.package_revision_id", ondelete="RESTRICT"),
+    )
+    decision_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_date: Mapped[str] = mapped_column(String(32), nullable=False)
+    issuing_authority: Mapped[str] = mapped_column(String(255), nullable=False)
+    artifact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    attached_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    attached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(decision_type) >= 1",
+            name="ck_auth_decision_records_decision_type_min_length",
+        ),
+        CheckConstraint(
+            "char_length(issuing_authority) >= 1",
+            name="ck_auth_decision_records_issuing_authority_min_length",
+        ),
+        Index("ix_auth_decision_records_system_id", "system_id"),
+    )
+
+
+class ReviewRevision(Base):
+    """Versioned human review revision for one analysis run."""
+
+    __tablename__ = "review_revisions"
+
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    dispositions: Mapped[list["Disposition"]] = relationship(back_populates="review_revision")
+    comments: Mapped[list["ReviewComment"]] = relationship(back_populates="review_revision")
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "version", name="uq_review_revisions_run_id_version"),
+        ck.enum_check(
+            "status",
+            ev.REVIEW_REVISION_STATUS_VALUES,
+            constraint_name="ck_review_revisions_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_review_revisions_version_positive"),
+        Index("ix_review_revisions_run_id", "run_id"),
+    )
+
+
+class Disposition(Base):
+    """Human disposition for one matrix row within a review revision."""
+
+    __tablename__ = "dispositions"
+
+    disposition_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("review_revisions.review_revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    matrix_row_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("matrix_rows.matrix_row_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    edited_summary: Mapped[str | None] = mapped_column(String(4000))
+    notes: Mapped[str | None] = mapped_column(String(4000))
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    decided_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    review_revision: Mapped[ReviewRevision] = relationship(back_populates="dispositions")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "review_revision_id",
+            "matrix_row_id",
+            name="uq_dispositions_review_revision_id_matrix_row_id",
+        ),
+        ck.enum_check(
+            "decision",
+            ev.DISPOSITION_DECISION_VALUES,
+            constraint_name="ck_dispositions_decision",
+        ),
+        CheckConstraint("version >= 1", name="ck_dispositions_version_positive"),
+        Index("ix_dispositions_review_revision_id", "review_revision_id"),
+    )
+
+
+class ReviewComment(Base):
+    """Comment attached to a review revision."""
+
+    __tablename__ = "review_comments"
+
+    review_comment_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("review_revisions.review_revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    matrix_row_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    body: Mapped[str] = mapped_column(String(4000), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    review_revision: Mapped[ReviewRevision] = relationship(back_populates="comments")
+
+    __table_args__ = (
+        CheckConstraint("char_length(body) >= 1", name="ck_review_comments_body_min_length"),
+        Index("ix_review_comments_review_revision_id", "review_revision_id"),
+    )
+
+
+class ExportDraft(Base):
+    """Export draft bound to a submitted review revision."""
+
+    __tablename__ = "export_drafts"
+
+    export_draft_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("review_revisions.review_revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    payload_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    destination_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    approval: Mapped["Approval | None"] = relationship(back_populates="export_draft", uselist=False)
+
+    __table_args__ = (
+        ck.enum_check(
+            "status",
+            ev.EXPORT_DRAFT_STATUS_VALUES,
+            constraint_name="ck_export_drafts_status",
+        ),
+        ck.regex_check(
+            "payload_manifest_sha256",
+            r"^[a-f0-9]{64}$",
+            constraint_name="ck_export_drafts_payload_manifest_sha256",
+        ),
+        CheckConstraint(
+            "destination_type = 'download'",
+            name="ck_export_drafts_destination_type_download",
+        ),
+        Index("ix_export_drafts_review_revision_id", "review_revision_id"),
+    )
+
+
+class Approval(Base):
+    """Export approval bound to exact payload manifest hash."""
+
+    __tablename__ = "approvals"
+
+    approval_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    export_draft_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("export_drafts.export_draft_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    payload_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    submitted_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    decided_by: Mapped[str | None] = mapped_column(String(255))
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(2000))
+
+    export_draft: Mapped[ExportDraft] = relationship(back_populates="approval")
+    export: Mapped["ExportRecord | None"] = relationship(back_populates="approval", uselist=False)
+
+    __table_args__ = (
+        ck.enum_check(
+            "decision",
+            ev.APPROVAL_DECISION_VALUES,
+            constraint_name="ck_approvals_decision",
+        ),
+        ck.regex_check(
+            "payload_manifest_sha256",
+            r"^[a-f0-9]{64}$",
+            constraint_name="ck_approvals_payload_manifest_sha256",
+        ),
+        Index("ix_approvals_export_draft_id", "export_draft_id"),
+    )
+
+
+class ExportRecord(Base):
+    """Immutable export record for one approved download."""
+
+    __tablename__ = "exports"
+
+    export_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    approval_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("approvals.approval_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    profile_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    system_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    package_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    payload_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    approval: Mapped[Approval] = relationship(back_populates="export")
+
+    __table_args__ = (
+        ck.regex_check(
+            "payload_manifest_sha256",
+            r"^[a-f0-9]{64}$",
+            constraint_name="ck_exports_payload_manifest_sha256",
+        ),
+        Index("ix_exports_approval_id", "approval_id"),
+    )
