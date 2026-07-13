@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import {
-  acceptProposal,
   cancelRun,
   confirmRevision,
   createRevision,
@@ -12,22 +11,21 @@ import {
   getRun,
   isCancelledRequest,
   listMatrixRows,
-  listProposals,
   listRevisions,
   listRuns,
   listSystems,
-  rejectProposal,
-  revisionEtag,
   startRun,
-  uploadJsonFile,
 } from "@/api/client";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { IntakeProgressPanel } from "@/components/IntakeProgressPanel";
 import {
   MatrixTableSkeleton,
   RevisionWorkflowSkeleton,
   SystemsListSkeleton,
 } from "@/components/LoadingSkeletons";
+import { PackageEditor } from "@/components/PackageEditor";
+import { PackageUploadPanel } from "@/components/PackageUploadPanel";
 import { PortalLoadFailure } from "@/components/PortalLoadFailure";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,14 +36,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { usePolling } from "@/hooks/usePolling";
+import { usePackageDraft } from "@/hooks/usePackageDraft";
 import { cn } from "@/lib/utils";
 import type {
   AnalysisRun,
-  FactProposal,
   MatrixRow,
   PackageRevision,
   SessionInfo,
@@ -58,7 +54,6 @@ import {
 } from "@/utils/emptyStates";
 import { formatApiError } from "@/utils/formatApiError";
 import {
-  proposalStatusVariant,
   revisionStatusVariant,
   runStatusVariant,
 } from "@/utils/statusLabels";
@@ -66,10 +61,6 @@ import {
 type LoadState = "loading" | "ready" | "error" | "empty";
 
 type ConfirmState =
-  | {
-      kind: "reject-proposal";
-      proposal: FactProposal;
-    }
   | {
       kind: "cancel-run";
       runId: string;
@@ -145,7 +136,6 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
   const [revisions, setRevisions] = useState<PackageRevision[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState(routeRevisionId);
   const [revision, setRevision] = useState<PackageRevision | null>(null);
-  const [proposals, setProposals] = useState<FactProposal[]>([]);
   const [runs, setRuns] = useState<AnalysisRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [activeRun, setActiveRun] = useState<AnalysisRun | null>(null);
@@ -157,6 +147,15 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+
+  const draftEnabled =
+    Boolean(revision) && revision?.status === "awaiting_confirmation";
+
+  const packageDraft = usePackageDraft(session, selectedRevisionId, {
+    enabled: draftEnabled,
+    onSaved: () => setMessage("Draft saved."),
+  });
 
   const syncRoute = useCallback(
     (systemId: string, revisionId: string) => {
@@ -218,7 +217,6 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
     async (signal?: AbortSignal) => {
       if (!selectedRevisionId) {
         setRevision(null);
-        setProposals([]);
         setRuns([]);
         setSelectedRunId("");
         setActiveRun(null);
@@ -230,8 +228,6 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
       try {
         const detail = await getRevision(selectedRevisionId, { signal });
         setRevision(detail);
-        const proposalItems = await listProposals(selectedRevisionId, { signal });
-        setProposals(proposalItems);
         const runItems = await listRuns(selectedRevisionId, { signal });
         setRuns(runItems);
         setRevisionState("ready");
@@ -353,11 +349,6 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
       (activeRun?.status === "queued" || activeRun?.status === "running"),
   });
 
-  const pendingProposals = useMemo(
-    () => proposals.filter((item) => item.review_status === "pending"),
-    [proposals],
-  );
-
   const handleConfirm = async () => {
     if (!confirmState) {
       return;
@@ -365,16 +356,6 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
     setConfirming(true);
     setConfirmError(null);
     try {
-      if (confirmState.kind === "reject-proposal" && revision) {
-        await rejectProposal(
-          session,
-          confirmState.proposal.fact_proposal_id,
-          revisionEtag(revision.revision_version),
-          "Rejected in portal review",
-        );
-        setMessage("Proposal rejected.");
-        await refreshRevisionDetail();
-      }
       if (confirmState.kind === "cancel-run") {
         await cancelRun(session, confirmState.runId);
         setMessage("Run cancellation accepted.");
@@ -516,125 +497,68 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
             {revisionState === "loading" ? <RevisionWorkflowSkeleton /> : null}
 
             {revision.status === "uploading" ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="evidence-upload">Upload synthetic JSON evidence</Label>
-                  <Input
-                    id="evidence-upload"
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) {
-                        return;
-                      }
-                      void uploadJsonFile(session, revision.package_revision_id, file)
-                        .then(() => refreshRevisionDetail())
-                        .then(() => setMessage("File uploaded."))
-                        .catch((err) => setError(formatApiError(err)));
-                    }}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    void finalizeRevision(session, revision.package_revision_id)
-                      .then(() => refreshRevisionDetail())
-                      .then(() =>
-                        setMessage(
-                          "Finalize accepted; intake worker will scan and extract.",
-                        ),
-                      )
-                      .catch((err) => setError(formatApiError(err)));
-                  }}
-                >
-                  Finalize upload
-                </Button>
-              </div>
+              <PackageUploadPanel
+                session={session}
+                revisionId={revision.package_revision_id}
+                onUploaded={() => void refreshRevisionDetail()}
+                onFinalized={() => {
+                  setMessage("Finalize accepted; intake worker will scan and extract.");
+                  void refreshRevisionDetail();
+                }}
+                finalizing={finalizing}
+                onFinalize={async () => {
+                  setFinalizing(true);
+                  try {
+                    await finalizeRevision(session, revision.package_revision_id);
+                  } finally {
+                    setFinalizing(false);
+                  }
+                }}
+              />
             ) : null}
 
             {revision.status === "scanning" || revision.status === "extracting" ? (
-              <p className="text-sm text-muted-foreground">
-                Intake worker is processing this revision…
-              </p>
+              <IntakeProgressPanel status={revision.status} />
             ) : null}
 
             {revision.status === "awaiting_confirmation" ? (
               <div className="space-y-4">
-                <h3 className="text-base font-semibold">Fact proposals</h3>
-                <div className="space-y-4">
-                  {proposals.map((proposal) => (
-                    <Card key={proposal.fact_proposal_id} className="bg-muted/20">
-                      <CardContent className="space-y-3 p-4">
-                        <code className="rounded bg-background px-2 py-1 text-xs">
-                          {proposal.json_pointer}
-                        </code>
-                        <pre className="overflow-auto rounded-md border bg-background p-3 text-xs">
-                          {JSON.stringify(proposal.proposed_value, null, 2)}
-                        </pre>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground">Status</span>
-                          <Badge variant={proposalStatusVariant(proposal.review_status)}>
-                            {proposal.review_status}
-                          </Badge>
-                        </div>
-                        {proposal.review_status === "pending" ? (
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => {
-                                void acceptProposal(
-                                  session,
-                                  proposal.fact_proposal_id,
-                                  revisionEtag(revision.revision_version),
-                                )
-                                  .then(() => refreshRevisionDetail())
-                                  .then(() => setMessage("Proposal accepted."))
-                                  .catch((err) => setError(formatApiError(err)));
-                              }}
-                            >
-                              Accept
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="destructive"
-                              onClick={() =>
-                                setConfirmState({
-                                  kind: "reject-proposal",
-                                  proposal,
-                                })
-                              }
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        ) : null}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    disabled={pendingProposals.length > 0}
-                    onClick={() =>
+                {packageDraft.loadState === "loading" ? (
+                  <RevisionWorkflowSkeleton />
+                ) : null}
+                {packageDraft.loadState === "error" ? (
+                  <AlertBanner tone="error">
+                    {packageDraft.loadError || "Could not load package draft."}
+                  </AlertBanner>
+                ) : null}
+                {packageDraft.loadState === "empty" ? (
+                  <AlertBanner tone="warning">
+                    No package draft is available yet. Wait for extraction to finish or
+                    reload this page.
+                  </AlertBanner>
+                ) : null}
+                {packageDraft.loadState === "ready" &&
+                packageDraft.document &&
+                packageDraft.draft ? (
+                  <PackageEditor
+                    draft={packageDraft.draft}
+                    document={packageDraft.document}
+                    isDirty={packageDraft.isDirty}
+                    saving={packageDraft.saving}
+                    saveError={packageDraft.saveError}
+                    staleConflict={packageDraft.staleConflict}
+                    onDocumentChange={packageDraft.updateDocument}
+                    onSave={() => void packageDraft.saveDraft()}
+                    onReload={() => void packageDraft.reload()}
+                    onConfirm={() =>
                       setConfirmState({
                         kind: "confirm-revision",
                         revisionId: revision.package_revision_id,
-                        etag: revisionEtag(revision.revision_version),
+                        etag: packageDraft.etag,
                       })
                     }
-                  >
-                    Confirm revision
-                  </Button>
-                  {pendingProposals.length > 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Resolve all pending proposals before confirming.
-                    </p>
-                  ) : null}
-                </div>
+                  />
+                ) : null}
               </div>
             ) : null}
 
@@ -770,29 +694,23 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
       <ConfirmDialog
         open={confirmState !== null}
         title={
-          confirmState?.kind === "reject-proposal"
-            ? "Reject proposal"
-            : confirmState?.kind === "cancel-run"
-              ? "Cancel analysis run"
-              : confirmState?.kind === "confirm-revision"
-                ? "Confirm revision"
-                : "Confirm action"
+          confirmState?.kind === "cancel-run"
+            ? "Cancel analysis run"
+            : confirmState?.kind === "confirm-revision"
+              ? "Confirm package"
+              : "Confirm action"
         }
         description={
-          confirmState?.kind === "reject-proposal"
-            ? `Reject the proposed value at ${confirmState.proposal.json_pointer}?`
-            : confirmState?.kind === "cancel-run"
-              ? "Cancel the in-flight deterministic analysis run?"
-              : confirmState?.kind === "confirm-revision"
-                ? "Seal this revision after all proposals are resolved?"
-                : ""
+          confirmState?.kind === "cancel-run"
+            ? "Cancel the in-flight deterministic analysis run?"
+            : confirmState?.kind === "confirm-revision"
+              ? "Seal the displayed package draft as an immutable ready revision?"
+              : ""
         }
         confirmLabel={
-          confirmState?.kind === "reject-proposal"
-            ? "Reject"
-            : confirmState?.kind === "cancel-run"
-              ? "Cancel run"
-              : "Confirm revision"
+          confirmState?.kind === "cancel-run"
+            ? "Cancel run"
+            : "Confirm package"
         }
         confirming={confirming}
         error={confirmError}
@@ -829,7 +747,7 @@ export function LoginPage({
         <CardHeader>
           <CardTitle className="text-2xl">ATO Evidence Analysis Portal</CardTitle>
           <CardDescription>
-            Sign in with OIDC to manage systems, uploads, and fact proposals.
+            Sign in with OIDC to manage systems, uploads, and package drafts.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -63,6 +63,14 @@ const fieldProvenanceEntrySchema = z.object({
   model_step_id: z.string().uuid().nullable().optional(),
 });
 
+const contactPersonSchema = z.object({
+  name: z.string(),
+  role: z.string(),
+  email: z.string(),
+  organization: z.string().optional(),
+  phone: z.string().optional(),
+});
+
 const packageDraftDocumentSchema = z.object({
   package: z.object({
     profile_id: z.enum([
@@ -82,12 +90,12 @@ const packageDraftDocumentSchema = z.object({
     authorization_path: z.string(),
   }),
   contacts: z.object({
-    system_owner: z.array(z.record(z.unknown())),
-    isso: z.array(z.record(z.unknown())),
-    issm: z.array(z.record(z.unknown())),
-    control_owners: z.array(z.record(z.unknown())),
-    assessors: z.array(z.record(z.unknown())),
-    approvers: z.array(z.record(z.unknown())),
+    system_owner: z.array(contactPersonSchema),
+    isso: z.array(contactPersonSchema),
+    issm: z.array(contactPersonSchema),
+    control_owners: z.array(contactPersonSchema),
+    assessors: z.array(contactPersonSchema),
+    approvers: z.array(contactPersonSchema),
   }),
   control_set: z.object({
     source: z.record(z.unknown()),
