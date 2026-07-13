@@ -1,9 +1,9 @@
-# API-Only Deployment Scaffold
+# Portal and API Deployment Scaffold
 
-**Status:** Initial operator packaging for the `ato_service` API process only  
-**Not claimed:** Production release, live RHEL 9 validation, portal UI, analyzer workers, OIDC auth, production/customer file extraction, model hosting, backup automation, or P7 completion
+**Status:** Operator packaging for the `ato_service` API, authenticated portal, and synthetic intake worker  
+**Not claimed:** Production release, live RHEL 9 validation, production analyzer service deployment, production/customer file extraction, model hosting, backup automation, or P7 completion
 
-This directory holds install assets and redacted configuration examples. Behavior is contract-tested in [`tests/test_deployment_contract.py`](../tests/test_deployment_contract.py); passing those tests does not prove a customer host install.
+This directory holds install assets and redacted configuration examples. Behavior is contract-tested in [`tests/test_deployment_contract.py`](../tests/test_deployment_contract.py) and [`tests/test_portal_contract.py`](../tests/test_portal_contract.py); passing those tests does not prove a customer host install.
 
 ## Assets
 
@@ -11,19 +11,23 @@ This directory holds install assets and redacted configuration examples. Behavio
 | --- | --- |
 | [`config/runtime-config.onprem.example.json`](config/runtime-config.onprem.example.json) | Redacted `onprem_production` template (non-secret settings and credential references only) |
 | [`config/runtime-config.dev_local.json`](config/runtime-config.dev_local.json) | Minimal dev profile referenced by local docs |
+| [`config/runtime-config.dev_local.portal.example.json`](config/runtime-config.dev_local.portal.example.json) | Dev profile with loopback OIDC issuer and portal origin for local portal work |
 | [`config/runtime-config.dev_local.openai.example.json`](config/runtime-config.dev_local.openai.example.json) | Dev example for OpenAI-compatible text LLM calls |
 | [`config/runtime-config.dev_local.bedrock.example.json`](config/runtime-config.dev_local.bedrock.example.json) | Dev/work example for AWS Bedrock text LLM calls |
 | [`systemd/ato-api.service`](systemd/ato-api.service) | Unprivileged API unit; pins config path, loopback bind, and API-consumed database/audit credentials |
-| [`nginx/ato-api.conf`](nginx/ato-api.conf) | Inactive TLS edge template; customer must replace host/cert placeholders before enablement |
+| [`systemd/ato-intake-worker.service`](systemd/ato-intake-worker.service) | Long-running `dev_local` synthetic intake worker (inactive until explicitly enabled) |
+| [`nginx/ato-api.conf`](nginx/ato-api.conf) | Inactive TLS edge template for health-only API exposure |
+| [`nginx/ato-portal.conf`](nginx/ato-portal.conf) | Inactive TLS edge template serving the built React portal and proxying `/api/` |
+| [`../portal/`](../portal/) | React/Vite portal source; build with `npm run build` before packaging |
 | [`../scripts/install.sh`](../scripts/install.sh) | Root installer: layout, package copy, systemd/nginx assets |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
 
-There is no worker unit, portal static root, model sidecar, or timer in this
-slice. The application package includes the bounded
-`ato-synthetic-intake-worker` drain command for `dev_local` synthetic JSON
-fixtures, but the installer does not deploy, configure, start, or credential
-that development-only process. It refuses production profiles and does not
-close **HS-005**.
+There is no analyzer worker systemd unit, model sidecar, or timer in this
+slice. The application package includes the long-running `ato-intake-worker`
+and `ato-analyzer-worker` processes for `dev_local` synthetic workflows, but
+the installer does not deploy, configure, start, or credential those
+development-only workers by default. Live service installation remains a later
+release gate.
 
 ## Host layout
 
@@ -32,9 +36,11 @@ close **HS-005**.
 /etc/ato-analyzer/credentials/database-dsn     # root-owned DSN file (never overwritten)
 /etc/ato-analyzer/credentials/audit-hmac-key   # root-owned audit key (never overwritten)
 /opt/ato-analyzer/                             # application venv, package, alembic.ini, migrations/, contracts
+/opt/ato-analyzer/portal/dist                  # built React portal static bundle
 /var/ato-packages/                             # mutable package storage
 /var/ato-packages/_tmp/                        # package staging scratch (service-writable)
 /etc/nginx/conf.d/ato-api.conf.example       # copied once; inactive until TLS promotion
+/etc/nginx/conf.d/ato-portal.conf.example    # copied once; inactive until TLS promotion
 ```
 
 Configuration is JSON-only. Do not introduce `config.env` or shell-source application settings on the host.
@@ -81,11 +87,13 @@ Repeated installs copy fresh package bytes and reinstall `ato_service` from `/op
 
 ## systemd credentials
 
-The shipped `ato-api.service` wires `database-dsn` and `audit-hmac-key`, the two credentials consumed by the current API process. The audit key must contain at least 32 bytes. Text-model, OIDC, and backup credential references remain declarations for later consumers; add matching `LoadCredential` mappings only when those processes or capabilities exist.
+The shipped `ato-api.service` wires `database-dsn` and `audit-hmac-key`, the two credentials consumed by the current API process. The audit key must contain at least 32 bytes. `ato-intake-worker.service` consumes the same credentials for `dev_local` synthetic intake. Text-model, OIDC, and backup credential references remain declarations for later consumers; add matching `LoadCredential` mappings only when those processes or capabilities exist.
 
 ## nginx and TLS
 
-The nginx template listens on `443` with placeholder certificates and proxies **only** `/health/live` and `/health/ready` to loopback `127.0.0.1:8000`. All other paths return `404`. Replace `server_name`, certificate paths, and validate `nginx -t` before reload. Install copies the template to `/etc/nginx/conf.d/ato-api.conf.example`; rename or symlink to `ato-api.conf` before enabling the site.
+`ato-api.conf` listens on `443` with placeholder certificates and proxies **only** `/health/live` and `/health/ready` to loopback `127.0.0.1:8000`. All other paths return `404`.
+
+`ato-portal.conf` serves the built portal from `/opt/ato-analyzer/portal/dist`, proxies `/api/` to the loopback API, and exposes the same health endpoints. Replace `server_name`, certificate paths, and validate `nginx -t` before reload. Install copies templates to `/etc/nginx/conf.d/*.conf.example`; rename or symlink before enabling a site.
 
 ## Smoke and readiness
 
@@ -126,7 +134,7 @@ sudo bash scripts/wsl-local-deploy.sh
 Network-free deployment asset checks:
 
 ```powershell
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/test_deployment_contract.py -q
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/test_deployment_contract.py tests/test_portal_contract.py -q
 ```
 
 Full non-integration gate (includes contracts and service foundation):
@@ -139,4 +147,4 @@ Bash syntax check (when bash is available) is included in `test_deployment_contr
 
 ## Configuration reference
 
-See [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md) for precedence, capability flags, dev vs production profiles, and text LLM provider setup (`TEXT_MODEL_PROVIDER` for OpenAI-compatible or AWS Bedrock).
+See [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md) for precedence, capability flags, dev vs production profiles, OIDC/session settings, and text LLM provider setup (`TEXT_MODEL_PROVIDER` for OpenAI-compatible or AWS Bedrock).

@@ -7,7 +7,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,12 @@ from fastapi.openapi.utils import get_openapi
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.types import Lifespan
 
+from ato_service.app_runtime import (
+    RUNTIME_STATE_ATTR,
+    AppRuntimeSnapshot,
+    AppRuntimeState,
+)
+from ato_service.auth_middleware import SessionAuthenticationMiddleware
 from ato_service.authority_manifest import verify_authority_manifest
 from ato_service.db.dsn import require_database_dsn_from_env
 from ato_service.db.session import (
@@ -42,39 +48,7 @@ RUNTIME_CONFIG_PATH_ENV_VAR = "ATO_RUNTIME_CONFIG_PATH"
 AUTHORITY_MANIFEST_PATH_ENV_VAR = "ATO_AUTHORITY_MANIFEST_PATH"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
-RUNTIME_STATE_ATTR = "runtime"
 API_VERSION_PREFIX = "/api/v1"
-
-
-@dataclass(frozen=True, slots=True)
-class AppRuntimeSnapshot:
-    """Immutable runtime configuration exposed on the application."""
-
-    config: RuntimeConfig
-    storage_root: Path
-    authority_manifest_id: str
-    project_root: Path
-
-
-@dataclass(slots=True)
-class AppRuntimeState:
-    """Mutable runtime dependencies exposed on ``app.state.runtime``."""
-
-    snapshot: AppRuntimeSnapshot
-    session_factory: async_sessionmaker[AsyncSession] | None = None
-    audit_hmac_key: bytes | None = field(default=None, repr=False)
-
-    @property
-    def config(self) -> RuntimeConfig:
-        return self.snapshot.config
-
-    @property
-    def storage_root(self) -> Path:
-        return self.snapshot.storage_root
-
-    @property
-    def authority_manifest_id(self) -> str:
-        return self.snapshot.authority_manifest_id
 
 
 @dataclass(slots=True)
@@ -172,22 +146,41 @@ def create_app(
         version="1.0.0",
         description=(
             "Published P-1 API contract. Implemented in this build: health "
-            "endpoints and the P1.1 Systems + PackageRevision slice "
-            "(systems, package-revisions, file upload, finalize, confirm). "
-            "Other contract paths remain unimplemented."
+            "endpoints, OIDC session auth, the P1.1 Systems + PackageRevision "
+            "slice (systems, package-revisions, file upload, finalize, confirm), "
+            "and fact proposal review. Other contract paths remain unimplemented."
         ),
         servers=[{"url": "/api/v1"}],
         lifespan=lifespan,
     )
     register_problem_handlers(app)
+    app.add_middleware(SessionAuthenticationMiddleware)
     app.include_router(create_health_router(readiness_probe))
     from ato_service.api_router import create_api_router
+    from ato_service.auth_router import create_auth_router
 
     app.include_router(create_api_router(), prefix="/api/v1")
+    app.include_router(create_auth_router(), prefix="/api/v1")
     app.openapi = lambda: _custom_openapi(app)
     if runtime_state is not None:
         setattr(app.state, RUNTIME_STATE_ATTR, runtime_state)
     return app
+
+
+def _mount_embedded_dev_oidc_if_configured(
+    app: FastAPI,
+    config: RuntimeConfig,
+) -> None:
+    """Attach the loopback dev OIDC issuer when configured for dev_local."""
+    from ato_service.oidc_auth import DEV_OIDC_PATH_PREFIX, create_dev_oidc_router, is_embedded_dev_oidc_issuer
+    from ato_service.session_auth import resolve_session_settings
+
+    session_settings = resolve_session_settings(config)
+    if session_settings is None:
+        return
+    if not is_embedded_dev_oidc_issuer(config, session_settings):
+        return
+    app.include_router(create_dev_oidc_router(), prefix=DEV_OIDC_PATH_PREFIX)
 
 
 def build_app_from_config(
@@ -255,10 +248,12 @@ def build_app_from_config(
         get_engine=lambda: runtime.engine,
     )
 
-    return create_app(
+    app = create_app(
         readiness_probe=create_readiness_probe(readiness_deps),
         lifespan=lifespan,
     )
+    _mount_embedded_dev_oidc_if_configured(app, config)
+    return app
 
 
 def load_app_from_config_path(

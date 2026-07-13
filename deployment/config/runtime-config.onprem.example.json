@@ -61,6 +61,7 @@
   "IDENTITY_PROVIDER_MODE": "oidc",
   "OIDC_ISSUER_URL": "https://idp.customer.internal/",
   "OIDC_AUDIENCE": "ato-analyzer",
+  "PORTAL_PUBLIC_ORIGIN": "https://ato-portal.customer.internal/",
   "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
     "source": "systemd_credential",
     "identifier": "oidc-client-secret"

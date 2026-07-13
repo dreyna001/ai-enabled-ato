@@ -192,3 +192,27 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ato_service/test_synthe
 `ATO_TEST_DATABASE_URL` was not configured. Live PostgreSQL transaction,
 constraint, audit-chain, and concurrency evidence therefore remains required
 before the full P1/EP-02 gate can close.
+
+## Post-gate deterministic analysis-run portal slice
+
+**Recorded:** 2026-07-11 (append-only; does not reopen or replace prior gates)
+
+This addendum records the next portal-first vertical slice after confirmation:
+`deterministic_only` run start/list/get/cancel APIs, durable Job/JobAttempt
+execution, a long-running `ato-analyzer-worker`, exact persisted matrix
+coverage for the pinned synthetic FISMA profile, artifact-manifest commit, and
+portal run polling/results. Admission is serialized and bounded by
+`MAX_CONCURRENT_ANALYSIS_RUNS`; the worker makes zero model calls.
+
+The slice remains limited to `dev_local`, confirmed synthetic revisions.
+Full/targeted model analysis, production scanning/customer extraction,
+review/approval/export, and live RHEL installation remain deferred.
+
+```text
+python3 -m pytest -m "not integration" -q
+```
+
+**Post-gate result:** `1029 passed, 1 skipped, 3 deselected, 1 warning in 6.79s`
+on Python 3.12. The warning is the existing third-party Starlette/httpx
+deprecation warning. The optional PostgreSQL integration test was not run
+without `ATO_TEST_DATABASE_URL`.

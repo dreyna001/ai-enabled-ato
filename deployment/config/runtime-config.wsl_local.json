@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "runtime_profile": "dev_local",
-  "STORAGE_DATA_PATH": "/data/ato-storage",
+  "STORAGE_DATA_PATH": "data/ato-storage",
   "DATABASE_DSN_CREDENTIAL_REFERENCE": {
     "source": "systemd_credential",
     "identifier": "database-dsn"

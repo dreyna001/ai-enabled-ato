@@ -22,9 +22,11 @@ DEFAULT_RETRY_AFTER_SECONDS = 30
 KNOWN_ERROR_CODES = frozenset(
     {
         "artifact_digest_mismatch",
+        "analysis_not_eligible",
         "authentication_required",
         "authorization_denied",
         "classified_data_unsupported",
+        "concurrent_run_limit_exceeded",
         "csrf_validation_failed",
         "database_unavailable",
         "duplicate_canonical_id",
@@ -54,9 +56,11 @@ KNOWN_ERROR_CODES = frozenset(
 
 ERROR_TITLES: dict[str, str] = {
     "artifact_digest_mismatch": "Artifact digest mismatch",
+    "analysis_not_eligible": "Analysis not eligible",
     "authentication_required": "Authentication required",
     "authorization_denied": "Authorization denied",
     "classified_data_unsupported": "Classified data unsupported",
+    "concurrent_run_limit_exceeded": "Concurrent run limit exceeded",
     "csrf_validation_failed": "CSRF validation failed",
     "database_unavailable": "Database unavailable",
     "duplicate_canonical_id": "Duplicate canonical id",
@@ -87,10 +91,14 @@ DEFAULT_DETAILS: dict[str, str] = {
     "artifact_digest_mismatch": (
         "Stored artifact bytes do not match the recorded digest."
     ),
+    "analysis_not_eligible": "The package revision is not eligible for analysis.",
     "authentication_required": "An authenticated principal is required.",
     "authorization_denied": "The principal is not authorized for this object.",
     "classified_data_unsupported": (
         "Classified data cannot be sent to the configured model route."
+    ),
+    "concurrent_run_limit_exceeded": (
+        "The configured concurrent analysis run limit has been reached."
     ),
     "csrf_validation_failed": (
         "The CSRF token or Origin validation failed for this mutation."
@@ -152,9 +160,11 @@ DEFAULT_DETAILS: dict[str, str] = {
 
 ERROR_HTTP_METADATA: dict[str, tuple[int, bool]] = {
     "artifact_digest_mismatch": (500, False),
+    "analysis_not_eligible": (422, False),
     "authentication_required": (401, False),
     "authorization_denied": (403, False),
     "classified_data_unsupported": (403, False),
+    "concurrent_run_limit_exceeded": (429, True),
     "csrf_validation_failed": (403, False),
     "database_unavailable": (503, True),
     "duplicate_canonical_id": (422, False),
@@ -507,6 +517,18 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         CsrfValidationError,
     )
     from ato_service.concurrency import EtagMismatchError, IfMatchRequiredError
+    from ato_service.analysis_runs import (
+        AnalysisRunNotFoundError,
+        AnalysisRunPolicyError,
+        AnalysisRunValidationError,
+        ConcurrentRunLimitExceededError,
+    )
+    from ato_service.fact_proposals import (
+        FactProposalNotFoundError,
+        FactProposalReviewConflictError,
+    )
+    from ato_service.oidc_auth import OidcAuthenticationError
+    from ato_service.session_auth import SessionConfigurationError, SessionExpiredError
     from ato_service.idempotency import (
         IdempotencyConflictError,
         IdempotencyValidationError,
@@ -542,6 +564,8 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         AuthenticationRequiredError,
         AuthorizationDeniedError,
         CsrfValidationError,
+        OidcAuthenticationError,
+        SessionExpiredError,
     ):
         _register_domain_problem_handler(app, auth_error_type)
 
@@ -551,8 +575,16 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         PackageRevisionNotFoundError,
         SystemNotFoundError,
         ParentRevisionNotFoundError,
+        FactProposalNotFoundError,
+        AnalysisRunNotFoundError,
     ):
         _register_domain_problem_handler(app, not_found_type)
+
+    _register_domain_problem_handler(
+        app,
+        SessionConfigurationError,
+        error_code="reconciliation_required",
+    )
 
     _register_domain_problem_handler(
         app,
@@ -563,6 +595,9 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
     )
     _register_domain_problem_handler(app, SourceRequestSchemaInvalidError)
     _register_domain_problem_handler(app, PackageRevisionValidationError)
+    _register_domain_problem_handler(app, AnalysisRunValidationError)
+    _register_domain_problem_handler(app, AnalysisRunPolicyError)
+    _register_domain_problem_handler(app, ConcurrentRunLimitExceededError)
     _register_domain_problem_handler(
         app,
         PackageRevisionStorageError,
@@ -645,6 +680,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
 
 def register_problem_handlers(app: FastAPI) -> None:
     """Attach middleware and the ServiceProblem exception handler."""
+    from ato_service.fact_proposals import FactProposalReviewConflictError
     from ato_service.lifecycle_transitions import IllegalStateTransitionError
     from ato_service.matrix_coverage import MatrixCoverageError
     from ato_service.model_gateway import (
@@ -684,6 +720,11 @@ def register_problem_handlers(app: FastAPI) -> None:
     _register_typed_error_handler(
         app,
         IllegalStateTransitionError,
+        status=409,
+    )
+    _register_typed_error_handler(
+        app,
+        FactProposalReviewConflictError,
         status=409,
     )
     for policy_error_type in (

@@ -838,6 +838,7 @@ def _minimal_onprem_runtime_config() -> dict[str, Any]:
         "IDENTITY_PROVIDER_MODE": "oidc",
         "OIDC_ISSUER_URL": "https://idp.example.internal/",
         "OIDC_AUDIENCE": "ato-analyzer",
+        "PORTAL_PUBLIC_ORIGIN": "https://portal.example.internal/",
         "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
             "source": "systemd_credential",
             "identifier": "oidc-client-secret",

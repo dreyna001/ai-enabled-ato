@@ -138,9 +138,14 @@ def test_shell_scripts_pass_bash_syntax_check(script: Path) -> None:
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
 
 
-def test_pyproject_declares_ato_service_entrypoint() -> None:
+def test_pyproject_declares_service_and_worker_entrypoints() -> None:
     text = _read(PYPROJECT)
     assert 'ato-service = "ato_service.main:main"' in text
+    assert 'ato-intake-worker = "ato_service.intake_worker:main"' in text
+    assert (
+        'ato-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"'
+        in text
+    )
 
 
 def test_main_module_defaults_to_loopback(systemd_text: str) -> None:
@@ -214,13 +219,14 @@ def test_systemd_unit_hardens_service_and_declares_writable_storage(
         assert directive in systemd_text
 
 
-def test_systemd_units_include_production_api_and_wsl_local_worker_only() -> None:
+def test_systemd_units_include_production_api_intake_and_wsl_local_assets() -> None:
     systemd_dir = ROOT / "deployment" / "systemd"
     service_names = {path.name for path in systemd_dir.glob("*.service")}
     timer_names = {path.name for path in systemd_dir.glob("*.timer")}
     assert service_names == {
         "ato-api.service",
         "ato-api.wsl-local.service",
+        "ato-intake-worker.service",
         "ato-synthetic-intake-worker.service",
     }
     assert timer_names == {"ato-synthetic-intake-worker.timer"}
@@ -243,7 +249,7 @@ def test_wsl_systemd_unit_uses_dev_local_runtime_config_under_opt() -> None:
 def test_wsl_runtime_config_is_dev_local_with_systemd_credentials() -> None:
     text = _read(WSL_RUNTIME_CONFIG)
     assert '"runtime_profile": "dev_local"' in text
-    assert '"STORAGE_DATA_PATH": "/data/ato-storage"' in text
+    assert '"STORAGE_DATA_PATH": "data/ato-storage"' in text
     assert '"source": "systemd_credential"' in text
     assert '"identifier": "database-dsn"' in text
     assert '"identifier": "audit-hmac-key"' in text
@@ -553,7 +559,8 @@ def test_smoke_script_defaults_to_loopback_api(smoke_text: str) -> None:
 def test_deployment_readme_matches_current_installer_contract(
     deployment_readme_text: str,
 ) -> None:
-    assert "`ato-synthetic-intake-worker`" in deployment_readme_text
+    assert "`ato-intake-worker`" in deployment_readme_text
+    assert "scripts/wsl-local-deploy.sh" in deployment_readme_text
     assert (
         "the installer does not deploy, configure, start, or credential"
         in deployment_readme_text

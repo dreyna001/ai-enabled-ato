@@ -1,0 +1,29 @@
+[Unit]
+Description=ATO Evidence Analysis Intake Worker
+Documentation=https://github.com/example/ato-analyzer
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=ato-api.service
+
+[Service]
+Type=simple
+User=ato
+Group=ato
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=ATO_RUNTIME_CONFIG_PATH=/etc/ato-analyzer/runtime-config.json
+ExecStart=/opt/ato-analyzer/venv/bin/ato-intake-worker
+Restart=on-failure
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ato-intake-worker
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/ato-packages
+LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
+LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+
+[Install]
+WantedBy=multi-user.target

@@ -17,6 +17,17 @@ from ato_service.api_dependencies import (
     get_db_session,
     get_runtime_state,
 )
+from ato_service.analysis_runs import (
+    AnalysisRunNotFoundError,
+    AnalysisRunPolicyError,
+    AnalysisRunValidationError,
+    StartRunInput,
+    cancel_run,
+    get_run,
+    get_run_matrix,
+    list_runs,
+    start_run,
+)
 from ato_service.auth_context import (
     AuthenticatedPrincipal,
     require_authenticated_principal,
@@ -25,6 +36,11 @@ from ato_service.auth_context import (
 from ato_service.blobs import BlobStore
 from ato_service.concurrency import format_package_revision_etag
 from ato_service.domain_mapping import map_system_to_domain
+from ato_service.fact_proposals import (
+    accept_fact_proposal,
+    list_fact_proposals,
+    reject_fact_proposal,
+)
 from ato_service.package_revisions import (
     CreatePackageRevisionInput,
     PackageRevisionMutationResult,
@@ -42,6 +58,7 @@ ProfileId = Literal[
     "fedramp_rev5_transition",
     "fisma_agency_security",
 ]
+RunType = Literal["full", "targeted", "deterministic_only"]
 DataOrigin = Literal[
     "synthetic",
     "redacted_nonproduction",
@@ -98,6 +115,31 @@ class PaginatedSystemsResponse(BaseModel):
     next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
 
 
+class PaginatedFactProposalsResponse(BaseModel):
+    """OpenAPI-aligned fact proposal list envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(max_length=100)
+    next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class AcceptProposalRequest(BaseModel):
+    """OpenAPI-aligned accept/edit proposal payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    edited_value: Any | None
+
+
+class RejectProposalRequest(BaseModel):
+    """OpenAPI-aligned reject proposal payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class PaginatedPackageRevisionsResponse(BaseModel):
     """OpenAPI-aligned package revision list envelope."""
 
@@ -105,6 +147,42 @@ class PaginatedPackageRevisionsResponse(BaseModel):
 
     items: list[dict[str, Any]] = Field(max_length=100)
     next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class StartRunRequest(BaseModel):
+    """OpenAPI-aligned start-run payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_type: RunType
+    parent_run_id: uuid.UUID | None
+    assessment_item_ids: list[str] = Field(max_length=500)
+
+    @field_validator("assessment_item_ids")
+    @classmethod
+    def validate_unique_assessment_item_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("duplicate assessment item id")
+        return value
+
+
+class PaginatedRunsResponse(BaseModel):
+    """OpenAPI-aligned analysis run list envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(max_length=100)
+    next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class PaginatedMatrixRowsResponse(BaseModel):
+    """OpenAPI-aligned matrix row list envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(max_length=100)
+    next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+    total: int = Field(ge=0)
 
 
 IdempotencyKeyHeader = Annotated[
@@ -366,5 +444,181 @@ def create_api_router() -> APIRouter:
             now=_utc_now(),
         )
         return _package_revision_json_response(result)
+
+    @router.get("/package-revisions/{id}/proposals", tags=["Packages"])
+    async def get_package_revision_proposals(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> PaginatedFactProposalsResponse:
+        page = await list_fact_proposals(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            cursor=cursor,
+            limit=limit,
+        )
+        return PaginatedFactProposalsResponse(
+            items=page.items,
+            next_cursor=page.next_cursor,
+        )
+
+    @router.post("/proposals/{id}/accept", tags=["Packages"])
+    async def post_proposal_accept(
+        id: uuid.UUID,
+        body: AcceptProposalRequest,
+        request: Request,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> JSONResponse:
+        if_match = request.headers.get("if-match")
+        result = await accept_fact_proposal(
+            session,
+            principal=principal,
+            fact_proposal_id=id,
+            if_match=if_match,
+            edited_value=body.edited_value,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(
+            content=result.payload,
+            headers={"ETag": result.etag},
+        )
+
+    @router.post("/proposals/{id}/reject", tags=["Packages"])
+    async def post_proposal_reject(
+        id: uuid.UUID,
+        body: RejectProposalRequest,
+        request: Request,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> JSONResponse:
+        if_match = request.headers.get("if-match")
+        result = await reject_fact_proposal(
+            session,
+            principal=principal,
+            fact_proposal_id=id,
+            if_match=if_match,
+            reason=body.reason,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(
+            content=result.payload,
+            headers={"ETag": result.etag},
+        )
+
+    @router.post(
+        "/package-revisions/{id}/runs",
+        status_code=202,
+        tags=["Runs"],
+    )
+    async def post_package_revision_runs(
+        id: uuid.UUID,
+        body: StartRunRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> JSONResponse:
+        result = await start_run(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            request=StartRunInput(
+                run_type=body.run_type,
+                parent_run_id=body.parent_run_id,
+                assessment_item_ids=tuple(body.assessment_item_ids),
+            ),
+            config=runtime_state.config,
+            authority_manifest_id=runtime_state.authority_manifest_id,
+            project_root=runtime_state.snapshot.project_root,
+            idempotency_key=idempotency_key,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(status_code=result.status, content=result.payload)
+
+    @router.get("/package-revisions/{id}/runs", tags=["Runs"])
+    async def get_package_revision_runs(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> PaginatedRunsResponse:
+        page = await list_runs(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            cursor=cursor,
+            limit=limit,
+        )
+        return PaginatedRunsResponse(items=page.items, next_cursor=page.next_cursor)
+
+    @router.get("/runs/{run_id}", tags=["Runs"])
+    async def get_run_by_id(
+        run_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+    ) -> dict[str, Any]:
+        return await get_run(
+            session,
+            principal=principal,
+            run_id=run_id,
+        )
+
+    @router.post("/runs/{run_id}/cancel", status_code=202, tags=["Runs"])
+    async def post_run_cancel(
+        run_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> JSONResponse:
+        result = await cancel_run(
+            session,
+            principal=principal,
+            run_id=run_id,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(status_code=result.status, content=result.payload)
+
+    @router.get("/runs/{run_id}/matrix", tags=["Runs"])
+    async def get_run_matrix_rows(
+        run_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        cursor: str | None = None,
+        limit: int | None = None,
+        status: (
+            Literal[
+                "supported",
+                "partial",
+                "unsupported",
+                "insufficient_evidence",
+            ]
+            | None
+        ) = None,
+    ) -> PaginatedMatrixRowsResponse:
+        page = await get_run_matrix(
+            session,
+            principal=principal,
+            run_id=run_id,
+            cursor=cursor,
+            limit=limit,
+            status=status,
+        )
+        return PaginatedMatrixRowsResponse(
+            items=page.items,
+            next_cursor=page.next_cursor,
+            total=page.total,
+        )
 
     return router

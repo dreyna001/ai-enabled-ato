@@ -61,7 +61,7 @@ def _migration_op_sequence(path: Path, function_name: str) -> list[tuple[str, tu
 def test_alembic_head_is_idempotency_headers_artifact_uniq_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0004"
+    assert script.get_current_head() == "20260711_0006"
 
 
 def test_migration_chains_from_revision_version_migration() -> None:
