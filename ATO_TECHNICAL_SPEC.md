@@ -373,6 +373,8 @@ sensitivity: enum
 effective_data_labels: string[]
 authority_manifest_id: string
 content_manifest_sha256: sha256 | null
+package_content_sha256: sha256 | null
+system_context_snapshot_id: UUID | null
 revision_version: positive integer (initial 1; incremented once per successful artifact addition and once per successful lifecycle transition)
 status: uploading | scanning | extracting | awaiting_confirmation | ready | invalid | quarantined | archived
 created_by: user_id
@@ -381,9 +383,55 @@ created_at: datetime
 
 `revision_version` is the optimistic-concurrency token. The strong ETag is the quoted form `"v{revision_version}"`. `POST /api/v1/package-revisions/{id}/confirm` requires `If-Match`; a missing header returns HTTP 428 `if_match_required` and a stale header returns HTTP 412 `etag_mismatch`.
 
-`content_manifest_sha256` is always present. It is `null` only while a revision is `uploading` or when an `archived` or `invalid` historical row never reached `scanning`. The `uploading -> scanning` transition requires a durable validated content manifest and atomically sets this SHA-256. A `ready` revision always has a non-null digest.
+`content_manifest_sha256` is always present. It is `null` only while a revision is `uploading` or when an `archived` or `invalid` historical row never reached `scanning`. The `uploading -> scanning` transition requires a durable validated content manifest and atomically sets this SHA-256. A `ready` revision always has a non-null upload-manifest digest.
+
+`package_content_sha256` is the canonical sealed package document digest. The field is always present on `PackageRevision` but remains `null` until package-level confirm writes `sealed_package_contents`. It is distinct from `content_manifest_sha256`, which binds uploaded source artifacts only. Ready revisions created through the package-editor draft path have non-null `package_content_sha256` and `system_context_snapshot_id`. Legacy proposal-gated confirm without a draft row may leave both fields null until a later reconciliation migration.
+
+`system_context_snapshot_id` references an immutable versioned system-context row when sealed content exists. It remains `null` until confirm selects or creates the snapshot on the package-editor draft path.
 
 A ready revision is immutable. Any source, canonical fact, profile, label, or link change creates a child revision.
+
+### 13.2.1 SystemContextSnapshot
+
+```text
+system_context_snapshot_id: UUID
+system_id: UUID
+version: positive integer (unique per system)
+content_sha256: sha256
+document: JSON object
+created_by: user_id
+created_at: datetime
+```
+
+System-context snapshots are insert-only. Later edits create a new version; ready package revisions reference the snapshot captured at confirm.
+
+### 13.2.2 PackageRevisionDraft
+
+```text
+package_revision_id: UUID (primary key and foreign key; one draft per revision)
+document_schema_version: semver string
+document: package-draft-document JSON object
+field_provenance: JSON object mapping canonical JSON pointers to source metadata
+updated_by: user_id
+updated_at: datetime
+```
+
+The mutable draft row exists only while a revision is in `awaiting_confirmation` under the package editor workflow. Diff 1 publishes persistence only; intake and draft APIs write this row in later diffs.
+
+### 13.2.3 SealedPackageContent
+
+```text
+package_revision_id: UUID (primary key and foreign key)
+document_schema_version: semver string
+document: package-draft-document JSON object
+field_provenance: JSON object
+content_sha256: sha256
+system_context_snapshot_id: UUID
+sealed_by: user_id
+sealed_at: datetime
+```
+
+Sealed content is immutable. Ready revisions resolve canonical package bytes through this row once package-level confirm seals the current draft.
 
 ### 13.3 SourceArtifact
 
@@ -663,7 +711,7 @@ The System + PackageRevision HTTP slice defines intake boundaries only; it does 
 
 - **Upload** is legal only while the revision is `uploading`. Bytes become durable on disk before any database reference. Each successful upload increments `revision_version` once and initializes `malware_scan_status=pending` and `extraction_status=pending` on the new `SourceArtifact`. P1.1 accepts every published `artifact_kind` enum value but only `application/json` and `text/plain` declared media types pending scan/extract (**HS-005** blocks production extraction).
 - **Finalize** is legal only while the revision is `uploading`. The server writes a durable validated content manifest, atomically sets `content_manifest_sha256`, performs `uploading -> scanning`, and increments `revision_version` once. It does not claim scan or extraction completion.
-- **Confirm** is legal only while the revision is `awaiting_confirmation`, requires current `If-Match` (`"v{revision_version}"`), and succeeds only when every `FactProposal` is non-`pending`. It performs `awaiting_confirmation -> ready` and increments `revision_version` once.
+- **Confirm** is legal only while the revision is `awaiting_confirmation`, requires current `If-Match` (`"v{revision_version}"`), and when a `PackageRevisionDraft` exists seals canonical package bytes into `sealed_package_contents`, binds `package_content_sha256` and `system_context_snapshot_id`, and performs `awaiting_confirmation -> ready` without per-leaf `FactProposal` decisions. When no draft exists, confirm succeeds only when every `FactProposal` is non-`pending` (legacy compatibility). Confirm increments `revision_version` once.
 
 Scanning, extraction, and synthetic processing are separate from the P1.1 HTTP amendment.
 
@@ -1110,6 +1158,8 @@ GET       /api/v1/systems/{system_id}
 POST/GET  /api/v1/systems/{system_id}/package-revisions
 POST      /api/v1/package-revisions/{id}/files
 POST      /api/v1/package-revisions/{id}/finalize
+GET       /api/v1/package-revisions/{id}/draft
+PUT       /api/v1/package-revisions/{id}/draft
 POST      /api/v1/package-revisions/{id}/confirm
 GET       /api/v1/package-revisions/{id}
 GET       /api/v1/package-revisions/{id}/proposals
@@ -1552,7 +1602,7 @@ The plan is implementation-ready only when P-1 has:
 
 When these criteria are met, record the outcome in `docs/P1_GATE_RECORD.md`. P0 core safety work may then proceed. Authority-dependent implementation and release remain blocked while HS-001 is open. Customer-specific hard stops remain scoped to the phases that need them.
 
-Job, attempt, pending-approval expiry, disposition decision, and System + PackageRevision API contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. The implemented portal-first slice now covers OIDC-backed server sessions, systems and revisions, synthetic JSON intake through confirmation, proposal review, and `deterministic_only` analysis runs with durable jobs, exact matrix persistence, artifact manifests, and zero model calls. Alembic head is `20260711_0006`. This remains a `dev_local` synthetic path: it is not production malware scanning or customer extraction and does not close **HS-005**. Full/targeted model runs, review dispositions, approval/export, production scanning/extraction, and full release acceptance remain implementation work.
+Job, attempt, pending-approval expiry, disposition decision, and System + PackageRevision API contracts are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. The implemented portal-first slice now covers OIDC-backed server sessions, systems and revisions, synthetic JSON intake through confirmation, proposal review, and `deterministic_only` analysis runs with durable jobs, exact matrix persistence, artifact manifests, and zero model calls. Component A Diff 1 adds package-editor persistence (`system_context_snapshots`, `package_revision_drafts`, `sealed_package_contents`) and draft/sealed domain contracts without changing confirm behavior. Component A Diff 3 adds intake work lease persistence (`package_revision_intake_work`, `package_revision_intake_attempts`), finalize bootstrap of `malware_scan` work, the `intake_work.py` claim/heartbeat/complete/failure/recovery repository, unified `intake.py` scan/extract orchestration, and `dev_local` worker wiring through `ato-intake-worker` and the WSL `ato-synthetic-intake-worker` alias. Component A Diff 4 adds revision-scoped normalization persistence (`package_normalization_steps`), `normalize-proposal-response` and `normalize-proposal-fact-bundle` contracts, protected normalization artifact storage, and `PackageNormalizationStep` domain mapping without prompts, validation/merge logic, model client wiring, or intake orchestration. Alembic head is `20260714_0009`. This remains a `dev_local` synthetic path: it is not production malware scanning or customer extraction and does not close **HS-005**. Full/targeted model runs, draft APIs, sealed confirm, review dispositions, approval/export, production scanning/extraction, and full release acceptance remain implementation work.
 
 Feature implementation MUST NOT infer missing contracts or bypass open hard stops for authority-dependent, customer-specific, production, or qualification work.
 

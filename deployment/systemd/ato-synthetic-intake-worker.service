@@ -1,5 +1,5 @@
 [Unit]
-Description=ATO synthetic JSON intake worker (WSL local drain)
+Description=ATO unified intake worker drain (WSL local)
 Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
 After=network-online.target postgresql.service ato-api.service
 Wants=network-online.target

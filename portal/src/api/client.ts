@@ -3,6 +3,7 @@ import {
   parseAnalysisRun,
   parseMatrixList,
   parsePackageRevision,
+  parsePackageRevisionDraft,
   parseProposalList,
   parseReadinessResponse,
   parseRevisionList,
@@ -15,11 +16,14 @@ import type {
   AnalysisRun,
   FactProposal,
   MatrixRow,
+  PackageDraftDocument,
   PackageRevision,
+  PackageRevisionDraft,
   ReadinessResponse,
   SessionInfo,
   System,
 } from "../types";
+import type { ArtifactKind } from "@/utils/artifactKinds";
 
 export type ApiErrorKind = "cancelled" | "timeout" | "http" | "invalid_response";
 
@@ -102,6 +106,17 @@ async function readValidatedJson<T>(
     );
   }
   return parsed;
+}
+
+async function readValidatedJsonWithEtag<T>(
+  response: Response,
+  parse: ResponseParser<T>,
+): Promise<{ data: T; etag: string | null }> {
+  const data = await readValidatedJson(response, parse);
+  return {
+    data,
+    etag: response.headers.get("ETag"),
+  };
 }
 
 type ApiFetchOptions = RequestInit & {
@@ -313,15 +328,16 @@ export async function getRevision(
   return readValidatedJson(response, parsePackageRevision);
 }
 
-export async function uploadJsonFile(
+export async function uploadPackageFile(
   session: SessionInfo,
   revisionId: string,
   file: File,
+  artifactKind: ArtifactKind,
   options: ApiFetchOptions = {},
 ): Promise<void> {
   const form = new FormData();
   form.append("file", file);
-  form.append("artifact_kind", "manifest");
+  form.append("artifact_kind", artifactKind);
   const response = await apiFetch(
     `${API_BASE}/package-revisions/${revisionId}/files`,
     {
@@ -338,16 +354,33 @@ export async function uploadJsonFile(
   );
   if (!response.ok) {
     let detail = response.statusText;
+    let errorCode: string | undefined;
     try {
-      const body = (await response.json()) as { detail?: string };
+      const body = (await response.json()) as {
+        detail?: string;
+        error_code?: string;
+      };
+      if (typeof body.error_code === "string") {
+        errorCode = body.error_code;
+      }
       if (body.detail) {
         detail = body.detail;
       }
     } catch {
       // ignore
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, detail, "http", errorCode);
   }
+}
+
+/** @deprecated Use uploadPackageFile with an explicit artifact kind. */
+export async function uploadJsonFile(
+  session: SessionInfo,
+  revisionId: string,
+  file: File,
+  options: ApiFetchOptions = {},
+): Promise<void> {
+  return uploadPackageFile(session, revisionId, file, "manifest", options);
 }
 
 export async function finalizeRevision(
@@ -369,6 +402,53 @@ export async function finalizeRevision(
     },
   );
   return readValidatedJson(response, parsePackageRevision);
+}
+
+export async function getRevisionDraft(
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<{ draft: PackageRevisionDraft; etag: string }> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/draft`, {
+    credentials: "include",
+    ...options,
+  });
+  const { data, etag } = await readValidatedJsonWithEtag(
+    response,
+    parsePackageRevisionDraft,
+  );
+  return {
+    draft: data,
+    etag: etag ?? revisionEtag(data.revision_version),
+  };
+}
+
+export async function saveRevisionDraft(
+  session: SessionInfo,
+  revisionId: string,
+  document: PackageDraftDocument,
+  etag: string,
+  options: ApiFetchOptions = {},
+): Promise<{ draft: PackageRevisionDraft; etag: string }> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/draft`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session, { "If-Match": etag }),
+      ...options.headers,
+    },
+    body: JSON.stringify({ document }),
+    ...options,
+  });
+  const { data, etag: responseEtag } = await readValidatedJsonWithEtag(
+    response,
+    parsePackageRevisionDraft,
+  );
+  return {
+    draft: data,
+    etag: responseEtag ?? revisionEtag(data.revision_version),
+  };
 }
 
 export async function listProposals(

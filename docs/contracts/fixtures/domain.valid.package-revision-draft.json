@@ -1,0 +1,61 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "package_revision_draft",
+  "package_revision_id": "11111111-1111-4111-8111-111111111111",
+  "document_schema_version": "1.0.0",
+  "document": {
+    "package": {
+      "profile_id": "fisma_agency_security",
+      "title": "Synthetic FISMA Agency Security Plan Excerpt",
+      "prepared_for": "Portal demo",
+      "reporting_period": null
+    },
+    "system": {
+      "display_name": "Customer Records Portal",
+      "authorization_boundary": "Single VPC with managed PostgreSQL and object storage",
+      "mission_summary": "Internal web application for agency case management.",
+      "impact_level": "moderate",
+      "authorization_path": "agency"
+    },
+    "contacts": {
+      "system_owner": [],
+      "isso": [],
+      "issm": [],
+      "control_owners": [],
+      "assessors": [],
+      "approvers": []
+    },
+    "control_set": {
+      "source": {},
+      "tailoring": [],
+      "organization_defined_parameters": {},
+      "inheritance": []
+    },
+    "security_controls": {},
+    "evidence": {},
+    "findings": {},
+    "poam_candidates": {},
+    "assessor_inputs": {},
+    "privacy": {
+      "artifacts_present": false,
+      "scope_notice": "Privacy review is external to this product."
+    },
+    "fedramp_20x": null,
+    "fedramp_rev5_transition": null,
+    "fisma_agency_security": {},
+    "extensions": {}
+  },
+  "field_provenance": {
+    "/system/display_name": {
+      "source_artifact_id": "33333333-3333-4333-8333-333333333333",
+      "source_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "source_locator": {
+        "json_pointer": "/system/name"
+      },
+      "extraction_method": "deterministic",
+      "model_step_id": null
+    }
+  },
+  "updated_by": "fixture-author",
+  "updated_at": "2026-07-10T21:00:00Z"
+}

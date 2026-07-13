@@ -117,10 +117,10 @@ def test_revision_version_ddl_has_server_default_and_positive_check() -> None:
     )
 
 
-def test_alembic_head_is_idempotency_headers_artifact_uniq_migration() -> None:
+def test_alembic_head_is_package_editor_persistence_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0006"
+    assert script.get_current_head() == "20260714_0009"
 
 
 def test_revision_version_migration_chains_from_jobs_migration() -> None:

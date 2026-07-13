@@ -1,0 +1,44 @@
+{
+  "package": {
+    "title": "Synthetic FISMA Agency Security Plan Excerpt",
+    "profile_id": "fisma_agency_security",
+    "impact_level": "moderate",
+    "data_origin": "synthetic",
+    "sensitivity": "internal_unclassified",
+    "prepared_for": "Portal demo — not official authorization evidence"
+  },
+  "system": {
+    "name": "Customer Records Portal",
+    "description": "Internal web application for agency case management and customer correspondence.",
+    "owner": "agency_cio",
+    "authorization_boundary": "Single VPC with managed PostgreSQL and object storage",
+    "operating_environment": "AWS GovCloud (synthetic)"
+  },
+  "security_controls": {
+    "AC-1": {
+      "implementation_status": "implemented",
+      "summary": "Access control policy reviewed annually and published on the agency intranet."
+    },
+    "AC-2": {
+      "implementation_status": "partial",
+      "summary": "Account provisioning uses group-based RBAC; quarterly access review cadence is documented."
+    },
+    "IA-5": {
+      "implementation_status": "implemented",
+      "summary": "Authenticator management enforced through the agency IdP with MFA for privileged users."
+    }
+  },
+  "evidence": {
+    "agency_security_plan": {
+      "artifact_id": "agency_security_plan",
+      "document_type": "security_plan_excerpt",
+      "revision_date": "2026-06-01",
+      "approver": "Authorizing Official",
+      "attestation": "Synthetic excerpt for local intake and deterministic analysis only."
+    }
+  },
+  "contacts": {
+    "system_owner": "demo.owner@agency.example",
+    "issm": "demo.issm@agency.example"
+  }
+}

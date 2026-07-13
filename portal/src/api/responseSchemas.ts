@@ -55,6 +55,80 @@ const matrixRowSchema = z.object({
   finding_summary: z.string(),
 });
 
+const fieldProvenanceEntrySchema = z.object({
+  source_artifact_id: z.string().uuid(),
+  source_sha256: z.string().min(64).max(64),
+  source_locator: z.record(z.unknown()),
+  extraction_method: z.enum(["deterministic", "text", "vision", "llm_normalize"]),
+  model_step_id: z.string().uuid().nullable().optional(),
+});
+
+const packageDraftDocumentSchema = z.object({
+  package: z.object({
+    profile_id: z.enum([
+      "fedramp_20x_program",
+      "fedramp_rev5_transition",
+      "fisma_agency_security",
+    ]),
+    title: z.string(),
+    prepared_for: z.string(),
+    reporting_period: z.string().nullable(),
+  }),
+  system: z.object({
+    display_name: z.string(),
+    authorization_boundary: z.string(),
+    mission_summary: z.string(),
+    impact_level: z.string().nullable(),
+    authorization_path: z.string(),
+  }),
+  contacts: z.object({
+    system_owner: z.array(z.record(z.unknown())),
+    isso: z.array(z.record(z.unknown())),
+    issm: z.array(z.record(z.unknown())),
+    control_owners: z.array(z.record(z.unknown())),
+    assessors: z.array(z.record(z.unknown())),
+    approvers: z.array(z.record(z.unknown())),
+  }),
+  control_set: z.object({
+    source: z.record(z.unknown()),
+    tailoring: z.array(z.unknown()),
+    organization_defined_parameters: z.record(z.unknown()),
+    inheritance: z.array(z.unknown()),
+  }),
+  security_controls: z.record(
+    z.object({
+      implementation_status: z.string(),
+      implementation_statement: z.string(),
+      responsible_parties: z.array(z.string()),
+      evidence_links: z.array(z.string()),
+    }),
+  ),
+  evidence: z.record(z.record(z.unknown())),
+  findings: z.record(z.record(z.unknown())),
+  poam_candidates: z.record(z.record(z.unknown())),
+  assessor_inputs: z.record(z.record(z.unknown())),
+  privacy: z.object({
+    artifacts_present: z.boolean(),
+    scope_notice: z.string(),
+  }),
+  fedramp_20x: z.record(z.unknown()).nullable(),
+  fedramp_rev5_transition: z.record(z.unknown()).nullable(),
+  fisma_agency_security: z.record(z.unknown()).nullable(),
+  extensions: z.record(z.unknown()),
+});
+
+const packageRevisionDraftSchema = z.object({
+  schema_version: z.literal("2.0.0"),
+  object_type: z.literal("package_revision_draft"),
+  package_revision_id: z.string().uuid(),
+  document_schema_version: z.string().min(1),
+  document: packageDraftDocumentSchema,
+  field_provenance: z.record(fieldProvenanceEntrySchema),
+  updated_by: z.string().min(1),
+  updated_at: z.string().min(1),
+  revision_version: z.number().int().nonnegative(),
+});
+
 function parseWithSchema<T>(
   schema: z.ZodType<T>,
   value: unknown,
@@ -136,4 +210,8 @@ export function parseReadinessResponse(value: unknown) {
     title: z.string().optional(),
   });
   return parseWithSchema(schema, value);
+}
+
+export function parsePackageRevisionDraft(value: unknown) {
+  return parseWithSchema(packageRevisionDraftSchema, value);
 }

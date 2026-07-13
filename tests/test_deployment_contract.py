@@ -24,6 +24,8 @@ INSTALL_SCRIPT = ROOT / "scripts" / "install.sh"
 WSL_DEPLOY_SCRIPT = ROOT / "scripts" / "wsl-local-deploy.sh"
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke_service_chain.sh"
 WSL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_local.json"
+WSL_PORTAL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_portal.json"
+WSL_PORTAL_ENABLE_SCRIPT = ROOT / "scripts" / "wsl-portal-enable.sh"
 DEPLOYMENT_README = ROOT / "deployment" / "README.md"
 PYPROJECT = ROOT / "pyproject.toml"
 MAIN_MODULE = ROOT / "src" / "ato_service" / "main.py"
@@ -97,6 +99,8 @@ def deployment_readme_text() -> str:
         SYNTHETIC_WORKER_TIMER,
         WSL_DEPLOY_SCRIPT,
         WSL_RUNTIME_CONFIG,
+        WSL_PORTAL_RUNTIME_CONFIG,
+        WSL_PORTAL_ENABLE_SCRIPT,
     ],
 )
 def test_deployment_assets_exist(path: Path) -> None:
@@ -112,6 +116,8 @@ def test_deployment_assets_exist(path: Path) -> None:
         SMOKE_SCRIPT,
         WSL_DEPLOY_SCRIPT,
         WSL_RUNTIME_CONFIG,
+        WSL_PORTAL_RUNTIME_CONFIG,
+        WSL_PORTAL_ENABLE_SCRIPT,
     ],
 )
 def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
@@ -125,7 +131,7 @@ def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 @pytest.mark.parametrize(
     "script",
-    [INSTALL_SCRIPT, SMOKE_SCRIPT, WSL_DEPLOY_SCRIPT],
+    [INSTALL_SCRIPT, SMOKE_SCRIPT, WSL_DEPLOY_SCRIPT, WSL_PORTAL_ENABLE_SCRIPT],
 )
 def test_shell_scripts_pass_bash_syntax_check(script: Path) -> None:
     script_text = _read(script).replace("\r\n", "\n").replace("\r", "\n")
@@ -146,6 +152,30 @@ def test_pyproject_declares_service_and_worker_entrypoints() -> None:
         'ato-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"'
         in text
     )
+
+
+def test_pyproject_declares_approved_extraction_dependencies() -> None:
+    """Approved extraction libraries are pinned per PACKAGE_EDITOR_PLAN Section 5."""
+    text = _read(PYPROJECT)
+    required_pins = (
+        "pypdf==6.14.2",
+        "pypdfium2==5.11.0",
+        "python-docx==1.2.0",
+        "openpyxl==3.1.5",
+        "defusedxml==0.7.1",
+        "lxml==6.0.2",
+        "Pillow==12.2.0",
+    )
+    for pin in required_pins:
+        assert pin in text, f"missing approved extraction dependency pin: {pin}"
+    forbidden = ("pdfminer", "tika")
+    lowered = text.lower()
+    for name in forbidden:
+        assert name not in lowered, f"forbidden extraction dependency present: {name}"
+    assert "stdlib cannot decode PDF" not in text
+    assert "primary PDF text-layer extraction" in text
+    assert "python-docx: mature DOCX" in text
+    assert "defusedxml: hostile-XML" in text
 
 
 def test_main_module_defaults_to_loopback(systemd_text: str) -> None:
@@ -244,16 +274,47 @@ def test_wsl_systemd_unit_uses_dev_local_runtime_config_under_opt() -> None:
     assert f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}" in text
     assert f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
     assert "LoadCredential=oidc-client-secret:" in text
+    assert "EnvironmentFile=-/etc/ato-analyzer/credentials/ato-local.env" in text
     assert f"ReadWritePaths={DATA_DIR} /opt/ato-analyzer/data/ato-storage" in text
 
 
 def test_wsl_runtime_config_is_dev_local_with_systemd_credentials() -> None:
     text = _read(WSL_RUNTIME_CONFIG)
     assert '"runtime_profile": "dev_local"' in text
-    assert '"STORAGE_DATA_PATH": "data/ato-storage"' in text
+    assert '"STORAGE_DATA_PATH": "/data/ato-storage"' in text
     assert '"source": "systemd_credential"' in text
     assert '"identifier": "database-dsn"' in text
     assert '"identifier": "audit-hmac-key"' in text
+
+
+def test_wsl_portal_runtime_config_declares_openai_text_model() -> None:
+    text = _read(WSL_PORTAL_RUNTIME_CONFIG)
+    assert '"TEXT_MODEL_PROVIDER": "openai_compatible"' in text
+    assert '"TEXT_MODEL_NAME": "gpt-4.1"' in text
+    assert '"TEXT_MODEL_ENDPOINT_URL": "https://api.openai.com/v1"' in text
+    assert '"TEXT_MODEL_ENDPOINT_PROFILE": "external_openai"' in text
+    assert '"TEXT_MODEL_TEMPERATURE": 0' in text
+    assert '"TEXT_MODEL_ENDPOINT_POLICY_APPROVED": false' in text
+    assert '"CUI_MODEL_BOUNDARY_APPROVED": false' in text
+    assert '"TEXT_MODEL_CREDENTIAL_REFERENCE"' not in text
+
+
+def test_wsl_portal_openai_example_config_not_shipped() -> None:
+    """OpenAI settings live in runtime-config.wsl_portal.json only."""
+    redundant = (
+        ROOT / "deployment" / "config" / "runtime-config.wsl_portal.openai.example.json"
+    )
+    assert not redundant.is_file(), "use runtime-config.wsl_portal.json instead"
+
+
+def test_wsl_portal_enable_script_installs_local_env_file() -> None:
+    text = _read(WSL_PORTAL_ENABLE_SCRIPT)
+    assert "runtime-config.wsl_portal.json" in text
+    assert "config.local.env" in text
+    assert "ato-local.env" in text
+    assert "install_local_env_file" in text
+    assert "ATO_TEXT_MODEL_API_KEY" in text
+    assert "bind_package_storage" in text
 
 
 def test_wsl_deploy_script_reuses_installer_and_smoke_chain() -> None:

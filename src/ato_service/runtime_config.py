@@ -114,6 +114,13 @@ class RuntimeConfig:
         return _resolve_runtime_limits(self.document)
 
     @property
+    def extraction_limits(self):
+        """Return validated extraction limits with published defaults applied."""
+        from ato_service.extraction.limits import resolve_extraction_limits
+
+        return resolve_extraction_limits(self.document)
+
+    @property
     def vision_model_enabled(self) -> bool:
         """Return whether vision model use is enabled; absent values are false."""
         value = self.document.get("VISION_MODEL_ENABLED")
@@ -415,6 +422,31 @@ def _validate_text_model_credentials(document: dict[str, Any]) -> None:
         )
 
 
+def _text_model_is_configured(document: dict[str, Any]) -> bool:
+    provider = document.get("TEXT_MODEL_PROVIDER", "openai_compatible")
+    if "TEXT_MODEL_NAME" not in document:
+        return False
+    if provider == "aws_bedrock":
+        region = document.get("AWS_REGION")
+        return isinstance(region, str) and bool(region.strip())
+    endpoint_url = document.get("TEXT_MODEL_ENDPOINT_URL")
+    return isinstance(endpoint_url, str) and bool(endpoint_url.strip())
+
+
+def _validate_text_model_endpoint_profile(document: dict[str, Any]) -> None:
+    if not _text_model_is_configured(document):
+        return
+    profile = document.get("TEXT_MODEL_ENDPOINT_PROFILE")
+    if not isinstance(profile, str) or not profile.strip():
+        raise RuntimeConfigValidationError(
+            "TEXT_MODEL_ENDPOINT_PROFILE is required when text model is configured"
+        )
+    if profile == "mock":
+        raise RuntimeConfigValidationError(
+            "TEXT_MODEL_ENDPOINT_PROFILE must not be mock when text model is configured"
+        )
+
+
 def _validate_text_model_provider(document: dict[str, Any]) -> None:
     provider = document.get("TEXT_MODEL_PROVIDER", "openai_compatible")
     if provider not in _TEXT_MODEL_PROVIDERS:
@@ -433,6 +465,7 @@ def _validate_text_model_provider(document: dict[str, Any]) -> None:
 
 def _validate_runtime_semantics(document: dict[str, Any]) -> None:
     _validate_text_model_provider(document)
+    _validate_text_model_endpoint_profile(document)
     _validate_production_endpoint_profiles(document)
     _validate_vision_dependencies(document)
     _validate_text_model_credentials(document)

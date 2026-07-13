@@ -43,6 +43,11 @@ from ato_service.idempotency import (
     replay_etag_from_outcome,
     request_digest_from_payload,
 )
+from ato_service.intake_work import bootstrap_malware_scan_work
+from ato_service.package_revision_drafts import (
+    load_draft_for_confirm,
+    seal_package_revision_draft,
+)
 from ato_service.lifecycle_transitions import (
     IllegalStateTransitionError,
     PackageRevisionStatus,
@@ -732,6 +737,12 @@ async def finalize_package_revision(
     package_revision.status = PackageRevisionStatus.SCANNING.value
     package_revision.content_manifest_sha256 = stored_manifest.sha256
     package_revision.revision_version += 1
+    bootstrap_malware_scan_work(
+        session,
+        package_revision_id=package_revision_id,
+        expected_revision_version=package_revision.revision_version,
+        now=validated_now,
+    )
 
     payload = map_package_revision_to_domain(package_revision)
     await append_audit_event(
@@ -823,11 +834,35 @@ async def confirm_package_revision(
             condition=PackageRevisionTransitionCondition.NORMAL_PROGRESSION.value,
         )
 
-    pending_result = await session.execute(
-        _pending_fact_proposal_exists_statement(package_revision_id)
+    draft = await load_draft_for_confirm(
+        session,
+        package_revision_id=package_revision_id,
     )
-    if pending_result.scalar_one():
-        raise UnconfirmedFactProposalsError()
+    if draft is None:
+        pending_result = await session.execute(
+            _pending_fact_proposal_exists_statement(package_revision_id)
+        )
+        if pending_result.scalar_one():
+            raise UnconfirmedFactProposalsError()
+        confirm_metadata: dict[str, Any] = {
+            "revision_version": package_revision.revision_version + 1,
+            "confirm_path": "legacy_fact_proposals",
+        }
+    else:
+        content_sha256, snapshot_id = await seal_package_revision_draft(
+            session,
+            package_revision=package_revision,
+            system=system,
+            draft=draft,
+            principal=principal,
+            now=validated_now,
+        )
+        confirm_metadata = {
+            "revision_version": package_revision.revision_version + 1,
+            "confirm_path": "package_editor_draft",
+            "package_content_sha256": content_sha256,
+            "system_context_snapshot_id": format_uuid(snapshot_id),
+        }
 
     require_package_revision_transition(
         current_status,
@@ -836,6 +871,7 @@ async def confirm_package_revision(
     )
     package_revision.status = PackageRevisionStatus.READY.value
     package_revision.revision_version += 1
+    confirm_metadata["revision_version"] = package_revision.revision_version
 
     payload = map_package_revision_to_domain(package_revision)
     await append_audit_event(
@@ -848,7 +884,7 @@ async def confirm_package_revision(
         object_id=format_uuid(package_revision_id),
         outcome="succeeded",
         reason_code=None,
-        metadata={"revision_version": package_revision.revision_version},
+        metadata=confirm_metadata,
         occurred_at=validated_now,
     )
     await record_idempotency_outcome(

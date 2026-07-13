@@ -29,6 +29,95 @@ export type FactProposal = {
   review_status: string;
 };
 
+export type ProfileId =
+  | "fedramp_20x_program"
+  | "fedramp_rev5_transition"
+  | "fisma_agency_security";
+
+export type ExtractionMethod =
+  | "deterministic"
+  | "text"
+  | "vision"
+  | "llm_normalize";
+
+export type FieldProvenanceEntry = {
+  source_artifact_id: string;
+  source_sha256: string;
+  source_locator: Record<string, unknown>;
+  extraction_method: ExtractionMethod;
+  model_step_id?: string | null;
+};
+
+export type FieldProvenanceMap = Record<string, FieldProvenanceEntry>;
+
+export type SecurityControlEntry = {
+  implementation_status: string;
+  implementation_statement: string;
+  responsible_parties: string[];
+  evidence_links: string[];
+};
+
+export type PackageDraftDocument = {
+  package: {
+    profile_id: ProfileId;
+    title: string;
+    prepared_for: string;
+    reporting_period: string | null;
+  };
+  system: {
+    display_name: string;
+    authorization_boundary: string;
+    mission_summary: string;
+    impact_level: string | null;
+    authorization_path: string;
+  };
+  contacts: {
+    system_owner: Array<{
+      name: string;
+      role: string;
+      email: string;
+      organization?: string;
+      phone?: string;
+    }>;
+    isso: Array<{ name: string; role: string; email: string }>;
+    issm: Array<{ name: string; role: string; email: string }>;
+    control_owners: Array<{ name: string; role: string; email: string }>;
+    assessors: Array<{ name: string; role: string; email: string }>;
+    approvers: Array<{ name: string; role: string; email: string }>;
+  };
+  control_set: {
+    source: Record<string, unknown>;
+    tailoring: unknown[];
+    organization_defined_parameters: Record<string, unknown>;
+    inheritance: unknown[];
+  };
+  security_controls: Record<string, SecurityControlEntry>;
+  evidence: Record<string, Record<string, unknown>>;
+  findings: Record<string, Record<string, unknown>>;
+  poam_candidates: Record<string, Record<string, unknown>>;
+  assessor_inputs: Record<string, Record<string, unknown>>;
+  privacy: {
+    artifacts_present: boolean;
+    scope_notice: string;
+  };
+  fedramp_20x: Record<string, unknown> | null;
+  fedramp_rev5_transition: Record<string, unknown> | null;
+  fisma_agency_security: Record<string, unknown> | null;
+  extensions: Record<string, unknown>;
+};
+
+export type PackageRevisionDraft = {
+  schema_version: string;
+  object_type: "package_revision_draft";
+  package_revision_id: string;
+  document_schema_version: string;
+  document: PackageDraftDocument;
+  field_provenance: FieldProvenanceMap;
+  updated_by: string;
+  updated_at: string;
+  revision_version: number;
+};
+
 export type AnalysisRun = {
   run_id: string;
   package_revision_id: string;

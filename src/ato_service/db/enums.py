@@ -104,6 +104,26 @@ JOB_ATTEMPT_STATUS_VALUES: tuple[str, ...] = (
     "failed",
 )
 
+INTAKE_WORK_PHASE_VALUES: tuple[str, ...] = (
+    "malware_scan",
+    "deterministic_extract",
+)
+
+INTAKE_WORK_STATUS_VALUES: tuple[str, ...] = JOB_STATUS_VALUES
+
+INTAKE_ATTEMPT_STATUS_VALUES: tuple[str, ...] = JOB_ATTEMPT_STATUS_VALUES
+
+NORMALIZATION_STEP_STATUS_VALUES: tuple[str, ...] = (
+    "reserved",
+    "running",
+    "completed",
+    "policy_blocked",
+    "failed",
+    "reconciliation_required",
+)
+
+NORMALIZATION_STEP_KEY_VALUES: tuple[str, ...] = ("normalize_proposal",)
+
 ASSESSMENT_ITEM_TYPE_VALUES: tuple[str, ...] = (
     "nist_control",
     "fedramp_rule",

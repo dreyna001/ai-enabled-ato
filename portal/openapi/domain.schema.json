@@ -11,6 +11,18 @@
       "$ref": "#/$defs/PackageRevision"
     },
     {
+      "$ref": "#/$defs/SystemContextSnapshot"
+    },
+    {
+      "$ref": "#/$defs/PackageRevisionDraft"
+    },
+    {
+      "$ref": "#/$defs/SealedPackageContent"
+    },
+    {
+      "$ref": "#/$defs/FieldProvenance"
+    },
+    {
       "$ref": "#/$defs/SourceArtifact"
     },
     {
@@ -51,6 +63,15 @@
     },
     {
       "$ref": "#/$defs/JobAttempt"
+    },
+    {
+      "$ref": "#/$defs/PackageRevisionIntakeWork"
+    },
+    {
+      "$ref": "#/$defs/PackageRevisionIntakeAttempt"
+    },
+    {
+      "$ref": "#/$defs/PackageNormalizationStep"
     },
     {
       "$ref": "#/$defs/Problem"
@@ -515,6 +536,8 @@
         "effective_data_labels",
         "authority_manifest_id",
         "content_manifest_sha256",
+        "package_content_sha256",
+        "system_context_snapshot_id",
         "revision_version",
         "status",
         "created_by",
@@ -593,7 +616,22 @@
         },
         "content_manifest_sha256": {
           "$ref": "#/$defs/Sha256OrNull",
-          "$comment": "Required field. Null only during pre-finalization states: uploading, and archived or invalid historical rows that never reached scanning. The uploading -> scanning transition requires a durable validated content manifest and atomically sets this SHA-256. ready always has a non-null digest."
+          "$comment": "Upload inventory digest from finalize. Distinct from package_content_sha256, which binds the sealed canonical package document at confirm."
+        },
+        "package_content_sha256": {
+          "$ref": "#/$defs/Sha256OrNull",
+          "$comment": "Canonical package document digest sealed at confirm. Required keys are always present; values remain null until Diff 5 confirm writes sealed content. A staged invariant (not yet DB-enforced) will require non-null values for ready revisions once confirm is wired."
+        },
+        "system_context_snapshot_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "$comment": "Immutable system-context snapshot referenced by the sealed package. Null until confirm selects or creates the snapshot in Diff 5."
         },
         "revision_version": {
           "type": "integer",
@@ -723,6 +761,318 @@
           }
         }
       ]
+    },
+    "FieldProvenanceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_artifact_id",
+        "source_sha256",
+        "source_locator",
+        "extraction_method"
+      ],
+      "properties": {
+        "source_artifact_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "source_locator": {
+          "type": "object",
+          "maxProperties": 32
+        },
+        "extraction_method": {
+          "enum": [
+            "deterministic",
+            "text",
+            "vision",
+            "llm_normalize"
+          ]
+        },
+        "model_step_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "FieldProvenanceMap": {
+      "type": "object",
+      "maxProperties": 5000,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^(/([^~/]|~[01])*)*$",
+        "maxLength": 2000
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/FieldProvenanceEntry"
+      }
+    },
+    "FieldProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "package_revision_id",
+        "provenance"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "field_provenance"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "provenance": {
+          "$ref": "#/$defs/FieldProvenanceMap"
+        }
+      }
+    },
+    "SystemContextDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display_name",
+        "external_system_id",
+        "mission_summary",
+        "authorization_boundary",
+        "environments",
+        "hosting_locations",
+        "major_components",
+        "external_dependencies",
+        "information_types",
+        "fips_199_rationale",
+        "impact_level",
+        "authorization_path",
+        "approved_control_set_reference"
+      ],
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "external_system_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 255
+        },
+        "mission_summary": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "authorization_boundary": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "environments": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "hosting_locations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "major_components": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "external_dependencies": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "information_types": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "fips_199_rationale": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "impact_level": {
+          "enum": [
+            "low",
+            "moderate",
+            "high"
+          ]
+        },
+        "authorization_path": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "approved_control_set_reference": {
+          "type": "object",
+          "maxProperties": 64
+        }
+      }
+    },
+    "SystemContextSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "system_context_snapshot_id",
+        "system_id",
+        "version",
+        "content_sha256",
+        "document",
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "system_context_snapshot"
+        },
+        "system_context_snapshot_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "system_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "document": {
+          "$ref": "#/$defs/SystemContextDocument"
+        },
+        "created_by": {
+          "$ref": "#/$defs/UserId"
+        },
+        "created_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
+    },
+    "PackageRevisionDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "package_revision_id",
+        "document_schema_version",
+        "document",
+        "field_provenance",
+        "updated_by",
+        "updated_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "package_revision_draft"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_schema_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "maxLength": 32
+        },
+        "document": {
+          "$ref": "https://ato.local/schemas/package-draft-document.schema.json"
+        },
+        "field_provenance": {
+          "$ref": "#/$defs/FieldProvenanceMap"
+        },
+        "updated_by": {
+          "$ref": "#/$defs/UserId"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
+    },
+    "SealedPackageContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "package_revision_id",
+        "document_schema_version",
+        "document",
+        "field_provenance",
+        "content_sha256",
+        "system_context_snapshot_id",
+        "sealed_by",
+        "sealed_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "sealed_package_content"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_schema_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "maxLength": 32
+        },
+        "document": {
+          "$ref": "https://ato.local/schemas/package-draft-document.schema.json"
+        },
+        "field_provenance": {
+          "$ref": "#/$defs/FieldProvenanceMap"
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "system_context_snapshot_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "sealed_by": {
+          "$ref": "#/$defs/UserId"
+        },
+        "sealed_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
     },
     "SourceArtifact": {
       "type": "object",
@@ -2271,6 +2621,341 @@
         }
       ]
     },
+    "PackageRevisionIntakeWork": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "Semantic validation MUST enforce at most one intake work row per (package_revision_id, work_phase) and legal intake-work status transitions.",
+      "required": [
+        "schema_version",
+        "object_type",
+        "package_revision_id",
+        "work_phase",
+        "status",
+        "attempt_count",
+        "available_at",
+        "lease_owner",
+        "lease_expires_at",
+        "heartbeat_at",
+        "fence_token",
+        "expected_revision_version",
+        "last_error_code"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "package_revision_intake_work"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "work_phase": {
+          "enum": [
+            "malware_scan",
+            "deterministic_extract"
+          ]
+        },
+        "status": {
+          "enum": [
+            "available",
+            "leased",
+            "completed",
+            "failed",
+            "reconciliation_required"
+          ]
+        },
+        "attempt_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "available_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        },
+        "lease_owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "lease_expires_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "heartbeat_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fence_token": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expected_revision_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "last_error_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "leased"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lease_owner": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "lease_expires_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              },
+              "heartbeat_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              },
+              "fence_token": {
+                "$ref": "#/$defs/Uuid"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "available",
+                  "completed",
+                  "failed",
+                  "reconciliation_required"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lease_owner": {
+                "type": "null"
+              },
+              "lease_expires_at": {
+                "type": "null"
+              },
+              "heartbeat_at": {
+                "type": "null"
+              },
+              "fence_token": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PackageRevisionIntakeAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "Semantic validation MUST enforce at most one PackageRevisionIntakeAttempt per (package_revision_id, work_phase, attempt_number) and at most one active attempt per work row.",
+      "required": [
+        "schema_version",
+        "object_type",
+        "attempt_id",
+        "package_revision_id",
+        "work_phase",
+        "attempt_number",
+        "status",
+        "lease_owner",
+        "fence_token",
+        "expected_revision_version",
+        "started_at",
+        "completed_at",
+        "error_code",
+        "error_retryable"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "package_revision_intake_attempt"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "work_phase": {
+          "enum": [
+            "malware_scan",
+            "deterministic_extract"
+          ]
+        },
+        "attempt_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "active",
+            "succeeded",
+            "failed"
+          ]
+        },
+        "lease_owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "fence_token": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "expected_revision_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "started_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "error_retryable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "active"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "completed_at": {
+                "type": "null"
+              },
+              "error_code": {
+                "type": "null"
+              },
+              "error_retryable": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "completed_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              },
+              "error_code": {
+                "type": "null"
+              },
+              "error_retryable": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "completed_at": {
+                "$ref": "#/$defs/UtcDateTime"
+              },
+              "error_code": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,127}$"
+              },
+              "error_retryable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      ]
+    },
     "Problem": {
       "type": "object",
       "additionalProperties": false,
@@ -2347,6 +3032,588 @@
           "type": "boolean"
         }
       }
+    },
+    "PackageNormalizationStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "Revision-scoped durable record for one normalize_proposal v1 step. input_digest is the SHA-256 of canonical reservation inputs; fact_bundle_sha256 is the SHA-256 of canonical normalize-proposal-fact-bundle bytes and may differ. Semantic validation MUST enforce at most one row per (package_revision_id, step_key), legal status transitions, and repair_attempted implies llm_call_count=2.",
+      "required": [
+        "schema_version",
+        "object_type",
+        "step_id",
+        "package_revision_id",
+        "step_key",
+        "status",
+        "input_digest",
+        "fact_bundle_sha256",
+        "schema_id",
+        "prompt_version",
+        "prompt_sha256",
+        "prompt_storage_key",
+        "fact_bundle_storage_key",
+        "response_storage_key",
+        "endpoint_profile",
+        "endpoint_host",
+        "model_requested",
+        "model_reported",
+        "temperature",
+        "input_limit",
+        "output_limit",
+        "timeout_seconds",
+        "attempt",
+        "provider_request_id",
+        "input_tokens",
+        "output_tokens",
+        "latency_ms",
+        "response_sha256",
+        "validation_outcome",
+        "llm_call_count",
+        "repair_attempted",
+        "error_code",
+        "error_retryable",
+        "created_at",
+        "started_at",
+        "completed_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "package_normalization_step"
+        },
+        "step_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "step_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "status": {
+          "enum": [
+            "reserved",
+            "running",
+            "completed",
+            "policy_blocked",
+            "failed",
+            "reconciliation_required"
+          ]
+        },
+        "input_digest": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "fact_bundle_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt_storage_key": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^revisions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/normalization/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/(prompt|fact-bundle|response)\\.json$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fact_bundle_storage_key": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^revisions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/normalization/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/(prompt|fact-bundle|response)\\.json$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "response_storage_key": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^revisions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/normalization/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/(prompt|fact-bundle|response)\\.json$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endpoint_profile": {
+          "anyOf": [
+            {
+              "enum": [
+                "mock",
+                "external_openai",
+                "internal_openai_compatible"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endpoint_host": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model_requested": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model_reported": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_limit": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_limit": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout_seconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attempt": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider_request_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "response_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validation_outcome": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{1,63}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "llm_call_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "repair_attempted": {
+          "type": "boolean"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{2,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_retryable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UtcDateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "reserved"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "llm_call_count": {
+                "const": 0
+              },
+              "repair_attempted": {
+                "const": false
+              },
+              "started_at": {
+                "type": "null"
+              },
+              "completed_at": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "running"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "started_at",
+              "schema_id",
+              "prompt_version",
+              "prompt_sha256",
+              "fact_bundle_sha256",
+              "prompt_storage_key",
+              "fact_bundle_storage_key"
+            ],
+            "properties": {
+              "completed_at": {
+                "type": "null"
+              },
+              "llm_call_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "started_at",
+              "completed_at",
+              "schema_id",
+              "prompt_version",
+              "prompt_sha256",
+              "fact_bundle_sha256",
+              "prompt_storage_key",
+              "fact_bundle_storage_key",
+              "response_storage_key",
+              "response_sha256",
+              "endpoint_profile",
+              "endpoint_host",
+              "model_requested",
+              "temperature",
+              "input_limit",
+              "output_limit",
+              "timeout_seconds",
+              "latency_ms",
+              "validation_outcome"
+            ],
+            "properties": {
+              "llm_call_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "policy_blocked"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "completed_at",
+              "validation_outcome",
+              "error_code",
+              "error_retryable"
+            ],
+            "properties": {
+              "started_at": {
+                "type": "null"
+              },
+              "llm_call_count": {
+                "const": 0
+              },
+              "repair_attempted": {
+                "const": false
+              },
+              "error_retryable": {
+                "const": false
+              },
+              "response_sha256": {
+                "type": "null"
+              },
+              "response_storage_key": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "completed_at",
+              "error_code",
+              "error_retryable",
+              "validation_outcome"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "reconciliation_required"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "completed_at",
+              "error_code",
+              "error_retryable"
+            ],
+            "properties": {
+              "error_retryable": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "repair_attempted": {
+                "const": true
+              }
+            },
+            "required": [
+              "repair_attempted"
+            ]
+          },
+          "then": {
+            "properties": {
+              "llm_call_count": {
+                "const": 2
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

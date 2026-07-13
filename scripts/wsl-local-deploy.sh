@@ -174,7 +174,9 @@ SQL
 }
 
 bind_package_storage() {
-    mkdir -p "$STORAGE_BIND_TARGET"
+    mkdir -p "$DATA_DIR/_tmp" "$STORAGE_BIND_TARGET"
+    chown -R ato:ato "$DATA_DIR"
+    chmod 750 "$DATA_DIR" "$DATA_DIR/_tmp"
     chown ato:ato "$STORAGE_BIND_TARGET"
     chmod 750 "$STORAGE_BIND_TARGET"
     if mountpoint -q "$STORAGE_BIND_TARGET"; then

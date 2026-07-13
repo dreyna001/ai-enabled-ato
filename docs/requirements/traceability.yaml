@@ -98,10 +98,21 @@
         "migrations/versions/20260711_0003_package_revision_version.py",
         "migrations/versions/20260711_0004_idempotency_headers_artifact_uniq.py",
         "migrations/versions/20260711_0006_matrix_rows.py",
+        "migrations/versions/20260713_0007_package_editor_persistence.py",
+        "migrations/versions/20260714_0008_package_revision_intake_work.py",
+        "migrations/versions/20260714_0009_package_normalization_steps.py",
+        "docs/contracts/normalize-proposal-response.schema.json",
+        "docs/contracts/normalize-proposal-fact-bundle.schema.json",
+        "src/ato_service/normalization_artifacts.py",
+        "src/ato_service/normalization_service.py",
+        "docs/contracts/package-draft-document.schema.json",
         "src/ato_service/analysis_runs.py",
         "src/ato_service/artifact_manifests.py",
         "src/ato_service/deterministic_analyzer.py",
         "src/ato_service/deterministic_analyzer_worker.py",
+        "src/ato_service/intake_work.py",
+        "src/ato_service/intake.py",
+        "src/ato_service/intake_worker.py",
         "src/ato_service/package_revisions.py",
         "src/ato_service/source_artifacts.py",
         "src/ato_service/synthetic_intake.py",
@@ -113,7 +124,7 @@
         "tests/ato_service/test_blobs.py",
         "tests/ato_service/test_content_manifests.py::test_orders_artifacts_deterministically_and_replays_idempotently",
         "tests/ato_service/test_session_and_storage_reconciliation.py",
-        "tests/ato_service/test_db.py::test_alembic_head_is_matrix_rows_migration",
+        "tests/ato_service/test_db.py::test_alembic_head_is_package_normalization_steps_migration",
         "tests/ato_service/test_analysis_runs.py",
         "tests/ato_service/test_deterministic_analyzer_worker.py",
         "tests/ato_service/test_matrix_rows_persistence.py",
@@ -124,9 +135,21 @@
         "tests/ato_service/test_lifecycle_transitions.py",
         "tests/ato_service/test_synthetic_intake.py",
         "tests/ato_service/test_synthetic_intake_worker.py",
-        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically"
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically",
+        "tests/ato_service/test_package_editor_persistence.py",
+        "tests/ato_service/test_intake_work.py",
+        "tests/ato_service/test_intake_work_persistence.py",
+        "tests/ato_service/test_normalization_persistence.py",
+        "tests/ato_service/test_normalization_artifacts.py",
+        "tests/ato_service/test_normalization_domain_mapping.py",
+        "tests/ato_service/test_normalization_integration.py",
+        "tests/ato_service/test_normalization_terminal_mappings.py",
+        "tests/ato_service/test_normalize_proposal.py",
+        "tests/ato_service/test_intake.py",
+        "tests/ato_service/test_intake_worker.py",
+        "tests/ato_service/test_package_revisions.py::test_finalize_writes_manifest_before_db_mutation"
       ],
-      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, expired-lease recovery, transaction-per-transition synthetic intake, and bounded dev_local deterministic_only analysis runs with matrix_rows persistence, artifact manifests, and analyzer worker loop; full/targeted model runs, proposal review persistence, and full EP-02 gate remain planned/partial",
+      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, expired-lease recovery, unified intake orchestration over intake work leases, legacy synthetic intake compatibility tests, and bounded dev_local deterministic_only analysis runs with matrix_rows persistence, artifact manifests, and analyzer worker loop; full/targeted model runs, proposal review persistence, and full EP-02 gate remain planned/partial",
       "status": "partial"
     },
     {
@@ -136,15 +159,33 @@
       "epic": "EP-02-package-foundation",
       "implementation_files": [
         "src/ato_service/db/models.py",
+        "src/ato_service/domain_mapping.py",
+        "src/ato_service/draft_builder.py",
+        "src/ato_service/intake.py",
+        "src/ato_service/package_revision_drafts.py",
+        "src/ato_service/package_revisions.py",
+        "src/ato_service/api_router.py",
         "src/ato_service/source_artifacts.py",
-        "src/ato_service/synthetic_intake.py"
+        "src/ato_service/synthetic_intake.py",
+        "docs/contracts/package-draft-document.schema.json",
+        "docs/contracts/openapi.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "migrations/versions/20260713_0007_package_editor_persistence.py"
       ],
       "test_ids": [
+        "tests/ato_service/test_draft_builder.py::test_maps_synthetic_agency_security_plan_excerpt_to_canonical_draft",
+        "tests/ato_service/test_draft_builder.py::test_duplicate_draft_pointer_conflict_from_two_manifests",
+        "tests/ato_service/test_draft_builder.py::test_assembled_document_validates_against_package_draft_schema",
         "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_deterministic_pending_proposals_with_provenance",
         "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_proposals",
-        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically"
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically",
+        "tests/ato_service/test_package_editor_persistence.py::test_domain_mappings_validate_against_schema",
+        "tests/ato_service/test_package_editor_persistence.py::test_package_draft_document_fixtures_follow_schema",
+        "tests/ato_service/test_package_revision_drafts.py::test_save_draft_persists_document_and_increments_revision_version",
+        "tests/ato_service/test_package_revision_drafts.py::test_confirm_with_draft_seals_content_without_fact_proposal_check",
+        "tests/ato_service/test_package_revision_drafts.py::test_confirm_without_draft_still_requires_non_pending_proposals"
       ],
-      "verification_type": "P1.2 deterministic synthetic JSON extraction creates pending FactProposal rows with source SHA-256 and matching RFC 6901 target/source pointers; proposal review, confirmation, and sealed canonical-fact persistence remain planned",
+      "verification_type": "Component A Diff 5 adds authenticated GET/PUT draft APIs with schema validation and ETag/idempotency semantics; package-level confirm seals PackageRevisionDraft into SealedPackageContent, binds package_content_sha256 and system_context_snapshot_id, and transitions awaiting_confirmation -> ready without per-leaf FactProposal decisions when a draft exists; legacy proposal-gated confirm remains for revisions without a draft row",
       "status": "partial"
     },
     {
@@ -281,24 +322,45 @@
       "epic": "EP-04-secure-intake",
       "implementation_files": [
         "src/ato_service/blobs.py",
+        "src/ato_service/draft_builder.py",
+        "src/ato_service/extraction/",
+        "src/ato_service/malware_scan.py",
+        "pyproject.toml",
         "src/ato_service/runtime_config.py",
         "src/ato_service/source_artifacts.py",
+        "src/ato_service/intake_work.py",
+        "src/ato_service/intake.py",
+        "src/ato_service/intake_worker.py",
+        "src/ato_service/package_revisions.py",
         "src/ato_service/synthetic_intake.py",
         "src/ato_service/synthetic_intake_worker.py"
       ],
       "test_ids": [
+        "tests/ato_service/test_draft_builder.py",
+        "tests/ato_service/test_extraction.py",
+        "tests/ato_service/test_intake.py",
+        "tests/ato_service/test_intake_worker.py",
+        "tests/ato_service/test_intake_work.py",
+        "tests/ato_service/test_intake_work_persistence.py",
+        "tests/ato_service/test_malware_scan.py",
         "tests/ato_service/test_source_artifacts.py::test_accepts_all_contract_artifact_kinds",
         "tests/ato_service/test_source_artifacts.py::test_rejects_unsupported_declared_media_type",
         "tests/ato_service/test_source_artifacts.py::test_rejects_single_file_size_limit",
+        "tests/ato_service/test_source_artifacts.py::test_upload_accepts_markdown_and_pdf",
+        "tests/ato_service/test_source_artifacts.py::test_upload_accepts_docx_when_magic_bytes_and_filename_match",
+        "tests/ato_service/test_source_artifacts.py::test_rejects_pdf_declared_as_json",
+        "tests/ato_service/test_source_artifacts.py::test_rejects_generic_zip_upload",
         "tests/ato_service/test_synthetic_intake.py::test_claim_query_is_skip_locked_synthetic_and_json_only",
         "tests/ato_service/test_synthetic_intake.py::test_invalid_json_transitions_to_invalid_without_partial_proposals",
         "tests/ato_service/test_synthetic_intake.py::test_corrupt_blob_transitions_to_invalid_as_source_type_mismatch",
         "tests/ato_service/test_synthetic_intake.py::test_missing_blob_fails_visibly_without_changing_extraction_state",
         "tests/ato_service/test_synthetic_intake.py::test_defense_in_depth_rejects_non_synthetic_claim_without_mutation",
         "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local",
-        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically"
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically",
+        "tests/ato_service/test_intake.py::test_intake_persists_draft_and_audit_atomically",
+        "tests/test_deployment_contract.py::test_pyproject_declares_approved_extraction_dependencies"
       ],
-      "verification_type": "P1.1 upload enforces MIME and configured limits; P1.2 adds only a dev_local, data_origin=synthetic, all-JSON deterministic path with durable blob re-verification and no external scanner/model call. Production malware scanning, customer extraction, archive/XML/Office/SVG controls, and HS-005 closure remain planned/partial",
+      "verification_type": "P1.1 upload enforces Diff2-supported MIME types via detect_format with mismatch rejection; Component A Diff 3 adds draft_builder, HS-005 dev-local scan integrity substitute, production fail-closed scanner resolution, intake work lease persistence, and unified intake orchestration in dev_local; approved extraction libraries are pinned in pyproject.toml with deployment-contract coverage; production scanner adapter and inactive production worker activation remain Diff 7",
       "status": "partial"
     },
     {
@@ -385,6 +447,7 @@
         "docs/contracts/runtime-config.schema.json",
         "pyproject.toml",
         "src/ato_service/runtime_config.py",
+        "src/ato_service/intake_worker.py",
         "src/ato_service/synthetic_intake_worker.py",
         "deployment/config/runtime-config.onprem.example.json",
         "docs/CONFIGURATION.md",
@@ -398,14 +461,16 @@
       "test_ids": [
         "tests/ato_service/test_runtime_config.py::test_load_onprem_config_from_external_path_without_base_dir",
         "tests/ato_service/test_runtime_config.py::test_rejects_remote_http_model_endpoint_despite_loopback_opt_in",
-        "tests/ato_service/test_synthetic_intake.py::test_runtime_gate_accepts_only_dev_local",
-        "tests/ato_service/test_synthetic_intake_worker.py::test_drain_uses_one_transaction_per_transition_and_stops_when_idle",
+        "tests/ato_service/test_intake.py::test_runtime_gate_accepts_dev_local",
+        "tests/ato_service/test_intake.py::test_runtime_gate_fails_closed_for_production",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_drain_delegates_to_unified_intake",
         "tests/ato_service/test_synthetic_intake_worker.py::test_worker_resolves_dependencies_and_disposes_engine",
         "tests/ato_service/test_synthetic_intake_worker.py::test_worker_rejects_production_before_creating_engine",
         "tests/ato_service/test_synthetic_intake_worker.py::test_worker_requires_audit_credential_before_creating_engine",
         "tests/test_deployment_contract.py::test_systemd_unit_points_to_canonical_runtime_config",
         "tests/test_deployment_contract.py::test_install_script_is_idempotent_and_explicit_about_side_effects",
-        "tests/test_deployment_contract.py::test_deployment_readme_matches_current_installer_contract"
+        "tests/test_deployment_contract.py::test_deployment_readme_matches_current_installer_contract",
+        "tests/test_deployment_contract.py::test_pyproject_declares_approved_extraction_dependencies"
       ],
       "verification_type": "Current API deployment and bounded dev_local synthetic-intake process are contract-tested; the worker consumes the same validated JSON plus process-required DSN/audit credentials, refuses production, and intentionally ships no systemd asset. Requirement remains cross-cutting as production capabilities and processes are added",
       "status": "partial"
@@ -451,17 +516,21 @@
       "epic": "EP-01-core-safety",
       "implementation_files": [
         "src/ato_service/runtime_config.py",
+        "src/ato_service/extraction/",
+        "pyproject.toml",
         "src/ato_service/blobs.py",
         "src/ato_service/content_manifests.py",
         "src/ato_service/model_gateway.py"
       ],
       "test_ids": [
+        "tests/ato_service/test_extraction.py",
         "tests/ato_service/test_runtime_config.py",
         "tests/ato_service/test_limit_enforcement.py",
         "tests/ato_service/test_content_manifests.py",
-        "tests/ato_service/test_model_gateway.py::test_call_limit_exceeded_makes_zero_extra_calls"
+        "tests/ato_service/test_model_gateway.py::test_call_limit_exceeded_makes_zero_extra_calls",
+        "tests/test_deployment_contract.py::test_pyproject_declares_approved_extraction_dependencies"
       ],
-      "verification_type": "Deterministic configured-limit enforcement across runtime config, blobs, content manifests, and model-gateway budgets; malicious archive, XML, Office, and SVG intake remains planned for P3",
+      "verification_type": "Deterministic configured-limit enforcement across runtime config, extraction safety controls, blobs, content manifests, and model-gateway budgets; hostile archive, XML, Office, SVG, and PDF fixtures covered by Component A Diff 2 extractors; approved extraction libraries pinned in pyproject.toml",
       "status": "partial"
     },
     {

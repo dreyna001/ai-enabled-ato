@@ -49,6 +49,8 @@ class _PackageRevisionRow:
     effective_data_labels: list[str]
     authority_manifest_id: str
     content_manifest_sha256: str | None
+    package_content_sha256: str | None
+    system_context_snapshot_id: UUID | None
     revision_version: int
     status: str
     created_by: str
@@ -139,6 +141,8 @@ def test_map_package_revision_to_domain_matches_fixture_and_schema() -> None:
         effective_data_labels=fixture["effective_data_labels"],
         authority_manifest_id=fixture["authority_manifest_id"],
         content_manifest_sha256=fixture["content_manifest_sha256"],
+        package_content_sha256=fixture["package_content_sha256"],
+        system_context_snapshot_id=None,
         revision_version=fixture["revision_version"],
         status=fixture["status"],
         created_by=fixture["created_by"],

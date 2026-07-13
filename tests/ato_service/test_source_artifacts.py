@@ -20,8 +20,16 @@ from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.blobs import BlobStore, BlobStoreError
 from ato_service.db import enums as ev
-from ato_service.db.models import IdempotencyRecord, PackageRevision, SourceArtifact, System
-from ato_service.idempotency import IdempotencyConflictError, request_digest_from_payload
+from ato_service.db.models import (
+    IdempotencyRecord,
+    PackageRevision,
+    SourceArtifact,
+    System,
+)
+from ato_service.idempotency import (
+    IdempotencyConflictError,
+    request_digest_from_payload,
+)
 from ato_service.lifecycle_transitions import IllegalStateTransitionError
 from ato_service.runtime_config import RuntimeLimits
 from ato_service.source_artifacts import (
@@ -217,11 +225,15 @@ def test_upload_json_artifact_persists_durable_bytes_and_increments_version(
     assert len(artifacts) == 1
     artifact = artifacts[0]
     prefix, digest = artifact.storage_key.split("/", 1)
-    blob_path = require_storage_regular_file(store.storage_root, "blobs", prefix, digest)
+    blob_path = require_storage_regular_file(
+        store.storage_root, "blobs", prefix, digest
+    )
     assert json.loads(blob_path.read_text(encoding="utf-8")) == payload
     assert artifact.uploaded_at == NOW
 
-    idempotency_rows = [obj for obj in session.added if isinstance(obj, IdempotencyRecord)]
+    idempotency_rows = [
+        obj for obj in session.added if isinstance(obj, IdempotencyRecord)
+    ]
     assert len(idempotency_rows) == 1
     assert idempotency_rows[0].response_body["sha256"] == artifact.sha256
     assert idempotency_rows[0].response_headers == {"ETag": '"v2"'}
@@ -254,7 +266,7 @@ def test_rejects_unsupported_declared_media_type(tmp_path: Path) -> None:
             session,
             store,
             source=io.BytesIO(b"{}"),
-            declared_media_type="application/pdf",
+            declared_media_type="application/zip",
         )
 
     assert exc_info.value.error_code == "unsupported_media_type"
@@ -360,7 +372,9 @@ def test_rejects_revision_aggregate_byte_limit(tmp_path: Path) -> None:
     assert exc_info.value.error_code == "package_limit_exceeded"
 
 
-def test_rejects_duplicate_sha256_with_different_idempotency_key(tmp_path: Path) -> None:
+def test_rejects_duplicate_sha256_with_different_idempotency_key(
+    tmp_path: Path,
+) -> None:
     store = BlobStore(tmp_path)
     session = _UploadSession(
         revision=_revision(),
@@ -376,7 +390,9 @@ def test_rejects_duplicate_sha256_with_different_idempotency_key(tmp_path: Path)
     assert session.revision.revision_version == 1
 
 
-def test_replay_returns_stored_etag_without_blob_store_or_mutation(tmp_path: Path) -> None:
+def test_replay_returns_stored_etag_without_blob_store_or_mutation(
+    tmp_path: Path,
+) -> None:
     store = BlobStore(tmp_path)
     source = io.BytesIO(b"{}")
     stored = store.store_stream(io.BytesIO(b"{}"), max_bytes=1024)
@@ -435,7 +451,9 @@ def test_replay_returns_stored_etag_without_blob_store_or_mutation(tmp_path: Pat
 
     result = _upload(session, store, source=source)
     added_artifacts = [obj for obj in session.added if isinstance(obj, SourceArtifact)]
-    added_idempotency = [obj for obj in session.added if isinstance(obj, IdempotencyRecord)]
+    added_idempotency = [
+        obj for obj in session.added if isinstance(obj, IdempotencyRecord)
+    ]
 
     assert result.replayed is True
     assert result.status == 201
@@ -510,7 +528,9 @@ def test_request_digest_includes_revision_metadata_and_sha256(tmp_path: Path) ->
             sha256=stored.sha256,
         )
     )
-    idempotency_row = next(obj for obj in session.added if isinstance(obj, IdempotencyRecord))
+    idempotency_row = next(
+        obj for obj in session.added if isinstance(obj, IdempotencyRecord)
+    )
     assert idempotency_row.request_digest == expected
     assert result.payload["source_date"] == "2026-07-09"
 
@@ -647,7 +667,9 @@ def test_rejects_unsupported_artifact_kind(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("artifact_kind", ev.ARTIFACT_KIND_VALUES)
-def test_accepts_all_contract_artifact_kinds(tmp_path: Path, artifact_kind: str) -> None:
+def test_accepts_all_contract_artifact_kinds(
+    tmp_path: Path, artifact_kind: str
+) -> None:
     store = BlobStore(tmp_path)
     session = _UploadSession(revision=_revision(), system=_system())
 
@@ -765,3 +787,128 @@ def test_rejects_malformed_or_unsupported_content_type_parameters(
 
     assert exc_info.value.error_code == "unsupported_media_type"
     assert session.execute_calls == []
+
+
+def _build_zip(members: dict[str, bytes]) -> bytes:
+    import zipfile
+    from io import BytesIO
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for path, data in members.items():
+            archive.writestr(path, data)
+    return buffer.getvalue()
+
+
+def _build_docx(*paragraphs: str) -> bytes:
+    body = "".join(
+        f'<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:r><w:t>{text}</w:t></w:r></w:p>"
+        for text in paragraphs
+    )
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    ).encode("utf-8")
+    return _build_zip(
+        {
+            "[Content_Types].xml": b"<Types/>",
+            "word/document.xml": document_xml,
+            "word/_rels/document.xml.rels": (
+                b'<?xml version="1.0"?>'
+                b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                b'<Relationship Id="rId1" Type="internal" Target="document.xml"/>'
+                b"</Relationships>"
+            ),
+        }
+    )
+
+
+def test_upload_accepts_markdown_and_pdf(tmp_path: Path) -> None:
+    store = BlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+
+    markdown_result = _upload(
+        session,
+        store,
+        source=io.BytesIO(b"# Evidence note\n"),
+        display_filename="note.md",
+        declared_media_type="text/markdown",
+        artifact_kind="evidence_document",
+    )
+    assert markdown_result.payload["detected_media_type"] == "text/markdown"
+
+    session.revision.revision_version = 2
+    pdf_result = _upload(
+        session,
+        store,
+        source=io.BytesIO(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n"),
+        display_filename="scan.pdf",
+        declared_media_type="application/pdf",
+        artifact_kind="evidence_document",
+    )
+    assert pdf_result.payload["detected_media_type"] == "application/pdf"
+
+
+def test_upload_accepts_docx_when_magic_bytes_and_filename_match(
+    tmp_path: Path,
+) -> None:
+    store = BlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+
+    result = _upload(
+        session,
+        store,
+        source=io.BytesIO(_build_docx("Deterministic paragraph")),
+        display_filename="evidence.docx",
+        declared_media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        artifact_kind="evidence_document",
+    )
+
+    assert result.payload["detected_media_type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
+def test_rejects_pdf_declared_as_json(tmp_path: Path) -> None:
+    store = BlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+
+    with pytest.raises(SourceTypeMismatchError) as exc_info:
+        _upload(
+            session,
+            store,
+            source=io.BytesIO(b"%PDF-1.4\n"),
+            declared_media_type="application/json",
+        )
+
+    assert exc_info.value.error_code == "source_type_mismatch"
+
+
+def test_rejects_generic_zip_upload(tmp_path: Path) -> None:
+    store = BlobStore(tmp_path)
+    session = _UploadSession(revision=_revision(), system=_system())
+    zip_bytes = _build_zip({"payload.txt": b"hello"})
+
+    with pytest.raises(UnsupportedMediaTypeError):
+        _upload(
+            session,
+            store,
+            source=io.BytesIO(zip_bytes),
+            display_filename="archive.zip",
+            declared_media_type="application/zip",
+        )
+
+    with pytest.raises(SourceTypeMismatchError) as exc_info:
+        _upload(
+            session,
+            store,
+            source=io.BytesIO(zip_bytes),
+            display_filename="archive.bin",
+            declared_media_type="application/json",
+        )
+
+    assert exc_info.value.error_code == "source_type_mismatch"

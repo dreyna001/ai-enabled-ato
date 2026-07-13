@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "status": "partial",
+  "detected_format": "json",
+  "detected_media_type": "application/json",
+  "page_count": null,
+  "total_text_characters": 12,
+  "vision_status": "not_needed",
+  "segments": []
+}

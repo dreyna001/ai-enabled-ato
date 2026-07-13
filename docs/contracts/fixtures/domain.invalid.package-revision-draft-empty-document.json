@@ -1,0 +1,10 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "package_revision_draft",
+  "package_revision_id": "11111111-1111-4111-8111-111111111111",
+  "document_schema_version": "1.0.0",
+  "document": {},
+  "field_provenance": {},
+  "updated_by": "fixture-author",
+  "updated_at": "2026-07-10T21:00:00Z"
+}

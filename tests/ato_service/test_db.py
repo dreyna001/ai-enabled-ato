@@ -33,9 +33,12 @@ from ato_service.db.models import (
     Job,
     JobAttempt,
     PackageRevision,
+    PackageRevisionDraft,
     RunStep,
+    SealedPackageContent,
     SourceArtifact,
     System,
+    SystemContextSnapshot,
 )
 from ato_service.db.dsn import (
     CREDENTIALS_DIRECTORY_ENV_VAR,
@@ -78,9 +81,22 @@ INITIAL_MIGRATION_TABLES = frozenset(
 )
 
 EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
-    {"jobs", "job_attempts", "auth_sessions", "oidc_login_states", "matrix_rows"}
+    {
+        "jobs",
+        "job_attempts",
+        "auth_sessions",
+        "oidc_login_states",
+        "matrix_rows",
+        "system_context_snapshots",
+        "package_revision_drafts",
+        "sealed_package_contents",
+        "package_revision_intake_work",
+        "package_revision_intake_attempts",
+        "package_normalization_steps",
+    }
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states"})
+COMPOSITE_PRIMARY_KEY_TABLES = frozenset({"package_revision_intake_work"})
 
 FK_SAFE_UPGRADE_TABLE_ORDER = (
     "systems",
@@ -196,11 +212,21 @@ def test_model_classes_map_to_expected_tables() -> None:
     assert AuditEvent.__tablename__ == "audit_events"
     assert Job.__tablename__ == "jobs"
     assert JobAttempt.__tablename__ == "job_attempts"
+    assert SystemContextSnapshot.__tablename__ == "system_context_snapshots"
+    assert PackageRevisionDraft.__tablename__ == "package_revision_drafts"
+    assert SealedPackageContent.__tablename__ == "sealed_package_contents"
 
 
 def test_primary_keys_use_uuid_columns() -> None:
     for table_name in EXPECTED_TABLES:
         pk_columns = _table(table_name).primary_key.columns
+        if table_name in COMPOSITE_PRIMARY_KEY_TABLES:
+            assert [column.name for column in pk_columns] == [
+                "package_revision_id",
+                "work_phase",
+            ]
+            assert isinstance(pk_columns[0].type, UuidType)
+            continue
         assert len(pk_columns) == 1
         if table_name in NON_UUID_PRIMARY_KEY_TABLES:
             continue
@@ -221,6 +247,8 @@ def test_package_revision_columns_match_contract() -> None:
         "effective_data_labels",
         "authority_manifest_id",
         "content_manifest_sha256",
+        "package_content_sha256",
+        "system_context_snapshot_id",
         "revision_version",
         "status",
         "created_by",
@@ -299,6 +327,31 @@ def test_foreign_keys_cover_expected_relationships() -> None:
         "fact_proposals",
         "model_step_id",
         "run_steps.step_id",
+    ) in foreign_keys
+    assert (
+        "package_revisions",
+        "system_context_snapshot_id",
+        "system_context_snapshots.system_context_snapshot_id",
+    ) in foreign_keys
+    assert (
+        "package_revision_drafts",
+        "package_revision_id",
+        "package_revisions.package_revision_id",
+    ) in foreign_keys
+    assert (
+        "sealed_package_contents",
+        "package_revision_id",
+        "package_revisions.package_revision_id",
+    ) in foreign_keys
+    assert (
+        "sealed_package_contents",
+        "system_context_snapshot_id",
+        "system_context_snapshots.system_context_snapshot_id",
+    ) in foreign_keys
+    assert (
+        "system_context_snapshots",
+        "system_id",
+        "systems.system_id",
     ) in foreign_keys
 
 
@@ -439,7 +492,7 @@ def test_package_revision_content_manifest_digest_nullable_with_ready_guard() ->
 
 def test_sha256_check_constraints_present_on_hash_columns() -> None:
     hash_tables = {
-        "package_revisions": {"content_manifest_sha256"},
+        "package_revisions": {"content_manifest_sha256", "package_content_sha256"},
         "source_artifacts": {"sha256"},
         "analysis_runs": {
             "analysis_profile_sha256",
@@ -500,10 +553,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_matrix_rows_migration() -> None:
+def test_alembic_head_is_package_normalization_steps_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0006"
+    assert script.get_current_head() == "20260714_0009"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

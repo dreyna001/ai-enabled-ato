@@ -14,6 +14,10 @@ from urllib.parse import urljoin
 import httpx
 
 from ato_service.db.dsn import CREDENTIALS_DIRECTORY_ENV_VAR
+from ato_service.local_env import (
+    TEXT_MODEL_API_KEY_ENV_VAR,
+    load_local_env_file,
+)
 from ato_service.runtime_config import RuntimeConfig, RuntimeConfigError
 
 logger = logging.getLogger(__name__)
@@ -57,6 +61,7 @@ class TextModelSettings:
     max_output_tokens: int
     timeout_seconds: int
     max_retries: int
+    temperature: float
     endpoint_url: str | None = None
     aws_region: str | None = None
 
@@ -89,6 +94,7 @@ def resolve_text_model_settings(config: RuntimeConfig) -> TextModelSettings:
     max_output_tokens = _positive_int(document, "TEXT_MODEL_MAX_OUTPUT_TOKENS", default=1024)
     timeout_seconds = _positive_int(document, "TEXT_MODEL_TIMEOUT_SECONDS", default=30)
     max_retries = _non_negative_int(document, "TEXT_MODEL_MAX_RETRIES", default=2)
+    temperature = _temperature(document)
 
     if provider == "aws_bedrock":
         return TextModelSettings(
@@ -97,6 +103,7 @@ def resolve_text_model_settings(config: RuntimeConfig) -> TextModelSettings:
             max_output_tokens=max_output_tokens,
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,
+            temperature=temperature,
             aws_region=_required_string(document, "AWS_REGION"),
         )
 
@@ -106,6 +113,7 @@ def resolve_text_model_settings(config: RuntimeConfig) -> TextModelSettings:
         max_output_tokens=max_output_tokens,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
+        temperature=temperature,
         endpoint_url=_required_string(document, "TEXT_MODEL_ENDPOINT_URL"),
     )
 
@@ -120,6 +128,7 @@ def build_text_model_client(config: RuntimeConfig) -> TextModelClient:
             max_output_tokens=settings.max_output_tokens,
             timeout_seconds=settings.timeout_seconds,
             max_retries=settings.max_retries,
+            temperature=settings.temperature,
         )
     return OpenAICompatibleTextClient(
         endpoint_url=settings.endpoint_url or "",
@@ -128,6 +137,7 @@ def build_text_model_client(config: RuntimeConfig) -> TextModelClient:
         max_output_tokens=settings.max_output_tokens,
         timeout_seconds=settings.timeout_seconds,
         max_retries=settings.max_retries,
+        temperature=settings.temperature,
     )
 
 
@@ -152,18 +162,37 @@ def _non_negative_int(document: Mapping[str, Any], key: str, *, default: int) ->
     return raw
 
 
+def _temperature(document: Mapping[str, Any]) -> float:
+    raw = document.get("TEXT_MODEL_TEMPERATURE", 0.0)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise TextModelConfigurationError("TEXT_MODEL_TEMPERATURE must be a number")
+    value = float(raw)
+    if value < 0.0 or value > 2.0:
+        raise TextModelConfigurationError(
+            "TEXT_MODEL_TEMPERATURE must be between 0 and 2 inclusive"
+        )
+    return value
+
+
 def _resolve_openai_api_key(config: RuntimeConfig) -> str:
     reference = config.document.get("TEXT_MODEL_CREDENTIAL_REFERENCE")
     if isinstance(reference, dict):
         return _read_secret_from_credential_reference(reference)
+
+    load_local_env_file()
+
+    api_key = os.environ.get(TEXT_MODEL_API_KEY_ENV_VAR)
+    if api_key and api_key.strip():
+        return api_key.strip()
 
     env_path = os.environ.get(TEXT_MODEL_API_KEY_FILE_ENV_VAR)
     if env_path and env_path.strip():
         return _read_secret_file(Path(env_path.strip()))
 
     raise TextModelConfigurationError(
-        "OpenAI-compatible text model requires TEXT_MODEL_CREDENTIAL_REFERENCE "
-        f"or {TEXT_MODEL_API_KEY_FILE_ENV_VAR}"
+        "OpenAI-compatible text model requires TEXT_MODEL_CREDENTIAL_REFERENCE, "
+        f"{TEXT_MODEL_API_KEY_ENV_VAR} in config.local.env, or "
+        f"{TEXT_MODEL_API_KEY_FILE_ENV_VAR}"
     )
 
 
@@ -226,6 +255,7 @@ class OpenAICompatibleTextClient:
     max_output_tokens: int
     timeout_seconds: int
     max_retries: int
+    temperature: float = 0.0
     provider: str = "openai_compatible"
 
     def complete(
@@ -244,6 +274,7 @@ class OpenAICompatibleTextClient:
             "model": self.model_name,
             "messages": payload_messages,
             "max_tokens": self.max_output_tokens,
+            "temperature": self.temperature,
         }
 
         last_error: Exception | None = None
@@ -275,6 +306,7 @@ class BedrockTextClient:
     max_output_tokens: int
     timeout_seconds: int
     max_retries: int
+    temperature: float = 0.0
     provider: str = "aws_bedrock"
 
     def complete(
@@ -312,7 +344,10 @@ class BedrockTextClient:
                 for message in messages
                 if message.role in {"user", "assistant"}
             ],
-            "inferenceConfig": {"maxTokens": self.max_output_tokens},
+            "inferenceConfig": {
+                "maxTokens": self.max_output_tokens,
+                "temperature": self.temperature,
+            },
         }
         if system:
             request["system"] = [{"text": system}]

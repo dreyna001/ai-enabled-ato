@@ -1,0 +1,38 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "system_context_snapshot",
+  "system_context_snapshot_id": "44444444-4444-4444-8444-444444444444",
+  "system_id": "22222222-2222-4222-8222-222222222222",
+  "version": 1,
+  "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "document": {
+    "display_name": "Customer Records Portal",
+    "external_system_id": "ext-demo-1",
+    "mission_summary": "Internal web application for agency case management.",
+    "authorization_boundary": "Single VPC with managed PostgreSQL and object storage",
+    "environments": [
+      "production"
+    ],
+    "hosting_locations": [
+      "AWS GovCloud (synthetic)"
+    ],
+    "major_components": [
+      "Web tier",
+      "PostgreSQL"
+    ],
+    "external_dependencies": [
+      "Agency IdP"
+    ],
+    "information_types": [
+      "PII"
+    ],
+    "fips_199_rationale": "Moderate impact based on confidentiality and integrity requirements.",
+    "impact_level": "moderate",
+    "authorization_path": "agency",
+    "approved_control_set_reference": {
+      "catalog": "nist.sp.800-53r5"
+    }
+  },
+  "created_by": "fixture-author",
+  "created_at": "2026-07-10T20:00:00Z"
+}

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/extracted-segment.schema.json",
+  "title": "Extraction Outcome",
+  "$comment": "Pure extractor output contract for Component A Diff 2. Locators match domain.schema.json SourceLocator variants.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "detected_format",
+    "detected_media_type",
+    "page_count",
+    "total_text_characters",
+    "vision_status",
+    "segments"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "evidence_only",
+        "vision_deferred"
+      ]
+    },
+    "detected_format": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "detected_media_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "page_count": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "total_text_characters": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "vision_status": {
+      "enum": [
+        "not_needed",
+        "deferred",
+        "unavailable",
+        "blocked",
+        "evidence_only"
+      ]
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExtractedSegment"
+      }
+    }
+  },
+  "$defs": {
+    "ExtractedSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segment_index",
+        "text",
+        "locator",
+        "extraction_method"
+      ],
+      "properties": {
+        "segment_index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "locator": {
+          "$ref": "https://ato.local/schemas/domain.schema.json#/$defs/SourceLocator"
+        },
+        "extraction_method": {
+          "enum": [
+            "deterministic",
+            "text",
+            "vision"
+          ]
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {"type": "string"},
+                  {"type": "integer"},
+                  {"type": "number"},
+                  {"type": "boolean"}
+                ]
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+---
+description: Do not create Cursor canvas files unless the user explicitly asks
+alwaysApply: true
+---
+
+# No Canvas Without Explicit Request
+
+Do not create, edit, or open Cursor canvas files (`.canvas.tsx`) unless the user explicitly asks for a canvas.
+
+## Forbidden unless requested
+
+- Creating new `.canvas.tsx` files
+- Editing existing canvas files to present analysis, audits, plans, tables, or reports
+- Using canvas as the default format for summaries, architecture reviews, or data-heavy answers
+- Reading the canvas skill to produce a canvas "because the content is visual"
+
+## Use instead
+
+- Markdown in chat for summaries, audits, plans, and tables
+- Code citations and plain prose for architecture reviews
+- Existing repo docs when a durable artifact is needed
+
+## Allowed only when the user clearly asks
+
+Examples of explicit requests:
+
+- "Make a canvas for this"
+- "Put this in a canvas"
+- "Create a canvas showing ..."
+- Editing or debugging an existing canvas the user pointed to
+
+If unsure, ask once or answer in markdown. Default to no canvas.

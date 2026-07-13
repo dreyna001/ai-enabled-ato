@@ -1,4 +1,4 @@
-"""Long-running background worker for synthetic JSON intake transitions."""
+"""Long-running background worker for unified package revision intake."""
 
 from __future__ import annotations
 
@@ -16,20 +16,26 @@ from ato_service.blobs import BlobStore
 from ato_service.db.session import (
     create_async_engine_from_url,
     create_session_factory,
-    session_scope,
+)
+from ato_service.intake import (
+    INTAKE_LEASE_SECONDS,
+    INTAKE_MAX_ATTEMPTS,
+    IntakeResult,
+    build_intake_lease_owner,
+    drain_intake,
+    require_intake_runtime,
+)
+from ato_service.normalization_service import (
+    NormalizationDependencies,
+    default_text_client_factory,
 )
 from ato_service.main import RUNTIME_CONFIG_PATH_ENV_VAR, resolve_database_dsn
+from ato_service.malware_scan import MalwareScanner, resolve_malware_scanner
 from ato_service.runtime_config import (
     RuntimeConfig,
     load_runtime_config,
     resolve_runtime_audit_hmac_key,
 )
-from ato_service.synthetic_intake import (
-    SyntheticIntakeResult,
-    process_next_synthetic_intake,
-    require_synthetic_intake_runtime,
-)
-from ato_service.synthetic_intake_worker import drain_synthetic_intake
 
 DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 
@@ -40,16 +46,24 @@ ShutdownPredicate = Callable[[], bool]
 async def run_intake_cycle(
     session_factory: async_sessionmaker[AsyncSession],
     *,
+    config: RuntimeConfig,
     blob_store: BlobStore,
     hmac_key: bytes,
+    scanner: MalwareScanner,
+    lease_owner: str,
     now_factory: UtcNowFactory | None = None,
-) -> tuple[SyntheticIntakeResult, ...]:
-    """Process all currently eligible intake transitions once."""
-    return await drain_synthetic_intake(
+    normalization_deps: NormalizationDependencies | None = None,
+) -> tuple[IntakeResult, ...]:
+    """Process all currently eligible intake operations once."""
+    return await drain_intake(
         session_factory,
+        config=config,
         blob_store=blob_store,
         hmac_key=hmac_key,
+        scanner=scanner,
+        lease_owner=lease_owner,
         now_factory=now_factory,
+        normalization_deps=normalization_deps,
     )
 
 
@@ -61,14 +75,22 @@ async def run_intake_worker_loop(
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     should_stop: ShutdownPredicate | None = None,
     now_factory: UtcNowFactory | None = None,
+    lease_owner: str | None = None,
 ) -> None:
-    """Run synthetic intake continuously until shutdown is requested."""
-    require_synthetic_intake_runtime(config)
+    """Run unified intake continuously until shutdown is requested."""
+    require_intake_runtime(config)
+    scanner = resolve_malware_scanner(config)
     resolved_dsn = dsn if dsn is not None else resolve_database_dsn(config)
     resolved_audit_hmac_key = (
         audit_hmac_key
         if audit_hmac_key is not None
         else resolve_runtime_audit_hmac_key(config)
+    )
+    resolved_lease_owner = lease_owner or build_intake_lease_owner()
+    normalization_deps = NormalizationDependencies(
+        config=config,
+        storage_root=config.storage_data_path,
+        text_client_factory=default_text_client_factory,
     )
     stop_requested = should_stop or (lambda: False)
     engine = create_async_engine_from_url(resolved_dsn)
@@ -78,9 +100,13 @@ async def run_intake_worker_loop(
         while not stop_requested():
             await run_intake_cycle(
                 session_factory,
+                config=config,
                 blob_store=blob_store,
                 hmac_key=resolved_audit_hmac_key,
+                scanner=scanner,
+                lease_owner=resolved_lease_owner,
                 now_factory=now_factory,
+                normalization_deps=normalization_deps,
             )
             await asyncio.sleep(poll_interval_seconds)
     finally:
@@ -91,8 +117,8 @@ def main(argv: list[str] | None = None) -> None:
     """Run the long-lived intake worker until interrupted."""
     parser = argparse.ArgumentParser(
         description=(
-            "Continuously process dev_local synthetic JSON package revisions "
-            "through scanning, extracting, and awaiting_confirmation"
+            "Continuously process package revision intake work through "
+            "malware scan and deterministic extraction"
         )
     )
     parser.add_argument(
@@ -139,6 +165,9 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "DEFAULT_POLL_INTERVAL_SECONDS",
+    "INTAKE_LEASE_SECONDS",
+    "INTAKE_MAX_ATTEMPTS",
     "main",
     "run_intake_cycle",
     "run_intake_worker_loop",

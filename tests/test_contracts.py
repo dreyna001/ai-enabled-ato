@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from jsonschema import FormatChecker, validators
+from referencing import Registry, Resource
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,12 +43,16 @@ FIXTURE_SCHEMA_PATHS = {
     contract: CONTRACTS_DIR / f"{contract}.schema.json"
     for contract in (
         "domain",
+        "package-draft-document",
         "analysis-profile",
         "content-manifest",
         "artifact-manifest",
         "export-manifest",
         "preflight",
         "runtime-config",
+        "extracted-segment",
+        "normalize-proposal-response",
+        "normalize-proposal-fact-bundle",
     )
 }
 FIXTURE_NAME = re.compile(
@@ -63,6 +68,8 @@ REQUIRED_API_METHODS = {
     ("get", "/systems/{system_id}/package-revisions"),
     ("post", "/package-revisions/{id}/files"),
     ("post", "/package-revisions/{id}/finalize"),
+    ("get", "/package-revisions/{id}/draft"),
+    ("put", "/package-revisions/{id}/draft"),
     ("post", "/package-revisions/{id}/confirm"),
     ("get", "/package-revisions/{id}"),
     ("get", "/package-revisions/{id}/proposals"),
@@ -95,6 +102,7 @@ IDEMPOTENCY_KEY_OPERATIONS = {
     ("post", "/systems/{system_id}/package-revisions"),
     ("post", "/package-revisions/{id}/files"),
     ("post", "/package-revisions/{id}/finalize"),
+    ("put", "/package-revisions/{id}/draft"),
     ("post", "/package-revisions/{id}/confirm"),
     ("post", "/package-revisions/{id}/runs"),
     ("post", "/review-revisions/{id}/submit"),
@@ -109,11 +117,13 @@ P11_IDEMPOTENCY_KEY_OPERATIONS = {
     ("post", "/systems/{system_id}/package-revisions"),
     ("post", "/package-revisions/{id}/files"),
     ("post", "/package-revisions/{id}/finalize"),
+    ("put", "/package-revisions/{id}/draft"),
     ("post", "/package-revisions/{id}/confirm"),
 }
 
 IF_MATCH_OPERATIONS = {
     ("post", "/package-revisions/{id}/confirm"),
+    ("put", "/package-revisions/{id}/draft"),
     ("post", "/proposals/{id}/accept"),
     ("post", "/proposals/{id}/reject"),
     ("post", "/review-revisions/{id}/submit"),
@@ -170,6 +180,17 @@ def _json_paths() -> tuple[Path, ...]:
     )
 
 
+@cache
+def _schema_registry() -> Registry:
+    resources: list[tuple[str, Resource]] = []
+    for schema_path in INTERNAL_SCHEMA_PATHS:
+        schema = _load_json(schema_path)
+        schema_id = schema.get("$id")
+        if isinstance(schema_id, str) and schema_id:
+            resources.append((schema_id, Resource.from_contents(schema)))
+    return Registry().with_resources(resources)
+
+
 def _validator_for(schema_path: Path):
     schema = _load_json(schema_path)
     validator_class = validators.validator_for(schema, default=None)
@@ -178,7 +199,11 @@ def _validator_for(schema_path: Path):
         f"{schema.get('$schema')!r}"
     )
     validator_class.check_schema(schema)
-    return validator_class(schema, format_checker=FORMAT_CHECKER)
+    return validator_class(
+        schema,
+        registry=_schema_registry(),
+        format_checker=FORMAT_CHECKER,
+    )
 
 
 def _resolve_json_pointer(document: Any, fragment: str, ref: str) -> Any:
@@ -813,6 +838,13 @@ def _minimal_onprem_runtime_config() -> dict[str, Any]:
         "MAX_EVIDENCE_ITEMS": 2000,
         "MAX_PDF_PAGES_PER_FILE": 200,
         "MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE": 2000000,
+        "MAX_ZIP_MEMBERS_PER_ARCHIVE": 500,
+        "MAX_ZIP_UNCOMPRESSED_BYTES_PER_ARCHIVE": 104857600,
+        "MAX_ZIP_DECOMPRESSION_RATIO": 100,
+        "MAX_XML_DEPTH": 64,
+        "MAX_XML_ELEMENTS": 100000,
+        "MAX_XML_ATTRIBUTES_PER_ELEMENT": 128,
+        "MAX_XML_TEXT_NODE_CHARACTERS": 1048576,
         "MAX_CONCURRENT_ANALYSIS_RUNS": 2,
         "MAX_ACTIVE_ANALYZER_WORKERS": 2,
         "JOB_HEARTBEAT_SECONDS": 30,
@@ -1251,7 +1283,8 @@ def test_p11_system_package_revision_api_contract() -> None:
         "extraction_status=pending",
         "uploading -> scanning",
         "awaiting_confirmation -> ready",
-        "non-`pending`",
+        "package_content_sha256",
+        "sealed_package_contents",
         "HS-005",
         "24 hours",
         "idempotency outcome record",

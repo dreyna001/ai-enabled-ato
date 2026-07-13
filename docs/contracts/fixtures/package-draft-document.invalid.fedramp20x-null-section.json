@@ -1,0 +1,42 @@
+{
+  "package": {
+    "profile_id": "fedramp_20x_program",
+    "title": "Missing profile section",
+    "prepared_for": "Fixture",
+    "reporting_period": null
+  },
+  "system": {
+    "display_name": "Example",
+    "authorization_boundary": "Boundary",
+    "mission_summary": "Mission",
+    "impact_level": "moderate",
+    "authorization_path": "fedramp"
+  },
+  "contacts": {
+    "system_owner": [],
+    "isso": [],
+    "issm": [],
+    "control_owners": [],
+    "assessors": [],
+    "approvers": []
+  },
+  "control_set": {
+    "source": {},
+    "tailoring": [],
+    "organization_defined_parameters": {},
+    "inheritance": []
+  },
+  "security_controls": {},
+  "evidence": {},
+  "findings": {},
+  "poam_candidates": {},
+  "assessor_inputs": {},
+  "privacy": {
+    "artifacts_present": false,
+    "scope_notice": "Privacy review is external to this product."
+  },
+  "fedramp_20x": null,
+  "fedramp_rev5_transition": null,
+  "fisma_agency_security": {},
+  "extensions": {}
+}

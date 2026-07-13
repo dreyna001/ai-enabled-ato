@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/normalize-proposal-response.schema.json",
+  "title": "Normalize Proposal Model Response",
+  "$comment": "Closed structured output for normalize_proposal v1. Dynamic target allowlists are enforced by Python validators. Omitted targets are represented by absence from proposals, not by omitting target_pointer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposals"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/NormalizationProposal"
+      }
+    }
+  },
+  "$defs": {
+    "NormalizationProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_pointer",
+        "proposed_value",
+        "source_artifact_id",
+        "segment_index",
+        "confidence"
+      ],
+      "properties": {
+        "target_pointer": {
+          "type": "string",
+          "pattern": "^(/([^~/]|~[01])*)*$",
+          "maxLength": 2000
+        },
+        "proposed_value": true,
+        "source_artifact_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "segment_index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -11,10 +11,10 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_PATH = ROOT / "migrations/versions/20260711_0006_matrix_rows.py"
 
 
-def test_alembic_head_is_matrix_rows_migration() -> None:
+def test_alembic_head_is_package_editor_persistence_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260711_0006"
+    assert script.get_current_head() == "20260714_0009"
 
 
 def test_matrix_rows_migration_declares_table_and_constraints() -> None:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import builtins
 import json
 from pathlib import Path
-import sys
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -24,6 +23,7 @@ from ato_service.text_llm import (
     resolve_text_model_settings,
     text_model_is_configured,
 )
+from ato_service.local_env import TEXT_MODEL_API_KEY_ENV_VAR
 
 ROOT = Path(__file__).resolve().parents[2]
 OPENAI_EXAMPLE = ROOT / "deployment" / "config" / "runtime-config.dev_local.openai.example.json"
@@ -48,6 +48,23 @@ def test_example_openai_config_is_recognized_as_configured() -> None:
 def test_example_bedrock_config_is_recognized_as_configured() -> None:
     document = json.loads(BEDROCK_EXAMPLE.read_text(encoding="utf-8"))
     assert text_model_is_configured(document) is True
+
+
+def test_openai_example_loads_and_builds_client_with_api_key_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(TEXT_MODEL_API_KEY_ENV_VAR, "test-openai-key")
+    monkeypatch.delenv(TEXT_MODEL_API_KEY_FILE_ENV_VAR, raising=False)
+
+    config = load_runtime_config_from_dict(
+        json.loads(OPENAI_EXAMPLE.read_text(encoding="utf-8")),
+        base_dir=tmp_path,
+    )
+    client = build_text_model_client(config)
+
+    assert isinstance(client, OpenAICompatibleTextClient)
+    assert client.api_key == "test-openai-key"
 
 
 def test_openai_example_loads_and_builds_client_with_api_key_file(
@@ -86,14 +103,17 @@ def test_build_text_model_client_requires_openai_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(TEXT_MODEL_API_KEY_FILE_ENV_VAR, raising=False)
+    monkeypatch.delenv(TEXT_MODEL_API_KEY_ENV_VAR, raising=False)
     config = _dev_config(
         TEXT_MODEL_PROVIDER="openai_compatible",
         TEXT_MODEL_ENDPOINT_URL="https://api.openai.com/v1",
         TEXT_MODEL_NAME="gpt-4o-mini",
+        TEXT_MODEL_ENDPOINT_PROFILE="external_openai",
     )
 
-    with pytest.raises(TextModelConfigurationError, match="TEXT_MODEL_CREDENTIAL_REFERENCE"):
-        build_text_model_client(config)
+    with patch("ato_service.text_llm.load_local_env_file"):
+        with pytest.raises(TextModelConfigurationError, match="ATO_TEXT_MODEL_API_KEY"):
+            build_text_model_client(config)
 
 
 def test_openai_client_posts_chat_completion(tmp_path: Path) -> None:

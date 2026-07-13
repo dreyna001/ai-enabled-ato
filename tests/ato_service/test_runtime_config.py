@@ -500,13 +500,38 @@ def test_load_loopback_development_fixture_passes_semantic_validation(
     assert config.document["ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS"] is True
 
 
-def test_dev_local_accepts_mock_endpoint_profile(tmp_path: Path) -> None:
+def test_dev_local_accepts_mock_endpoint_profile_when_text_model_unconfigured(
+    tmp_path: Path,
+) -> None:
     config = load_runtime_config_from_dict(
         _minimal_dev_document(TEXT_MODEL_ENDPOINT_PROFILE="mock"),
         base_dir=tmp_path,
     )
 
     assert config.document["TEXT_MODEL_ENDPOINT_PROFILE"] == "mock"
+
+
+def test_configured_text_model_requires_explicit_endpoint_profile(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="TEXT_MODEL_ENDPOINT_PROFILE"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                TEXT_MODEL_ENDPOINT_URL="https://api.openai.com/v1",
+                TEXT_MODEL_NAME="gpt-4o-mini",
+            ),
+            base_dir=tmp_path,
+        )
+
+
+def test_configured_text_model_rejects_mock_endpoint_profile(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="mock"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                TEXT_MODEL_ENDPOINT_URL="https://api.openai.com/v1",
+                TEXT_MODEL_NAME="gpt-4o-mini",
+                TEXT_MODEL_ENDPOINT_PROFILE="mock",
+            ),
+            base_dir=tmp_path,
+        )
 
 
 def test_onprem_rejects_mock_text_endpoint_profile() -> None:
@@ -777,6 +802,7 @@ def test_bedrock_provider_skips_text_endpoint_allowlist_validation(
             TEXT_MODEL_NAME="anthropic.claude-3-haiku-20240307-v1:0",
             TEXT_MODEL_MAX_OUTPUT_TOKENS=256,
             TEXT_MODEL_TIMEOUT_SECONDS=30,
+            TEXT_MODEL_ENDPOINT_PROFILE="internal_openai_compatible",
         ),
         base_dir=tmp_path,
     )

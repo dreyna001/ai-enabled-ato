@@ -73,6 +73,16 @@ def map_package_revision_to_domain(package_revision: Any) -> dict[str, Any]:
         "effective_data_labels": list(package_revision.effective_data_labels),
         "authority_manifest_id": package_revision.authority_manifest_id,
         "content_manifest_sha256": package_revision.content_manifest_sha256,
+        "package_content_sha256": getattr(
+            package_revision,
+            "package_content_sha256",
+            None,
+        ),
+        "system_context_snapshot_id": (
+            None
+            if getattr(package_revision, "system_context_snapshot_id", None) is None
+            else format_uuid(package_revision.system_context_snapshot_id)
+        ),
         "revision_version": package_revision.revision_version,
         "status": package_revision.status,
         "created_by": package_revision.created_by,
@@ -184,4 +194,99 @@ def map_matrix_row_to_domain(matrix_row: Any) -> dict[str, Any]:
         "context_complete": matrix_row.context_complete,
         "producing_run_id": format_uuid(matrix_row.producing_run_id),
         "source_run_id": format_uuid(matrix_row.source_run_id),
+    }
+
+
+def map_system_context_snapshot_to_domain(snapshot: Any) -> dict[str, Any]:
+    """Map a duck-typed SystemContextSnapshot row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "system_context_snapshot",
+        "system_context_snapshot_id": format_uuid(snapshot.system_context_snapshot_id),
+        "system_id": format_uuid(snapshot.system_id),
+        "version": snapshot.version,
+        "content_sha256": snapshot.content_sha256,
+        "document": dict(snapshot.document),
+        "created_by": snapshot.created_by,
+        "created_at": format_utc_datetime(snapshot.created_at),
+    }
+
+
+def map_package_revision_draft_to_domain(draft: Any) -> dict[str, Any]:
+    """Map a duck-typed PackageRevisionDraft row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "package_revision_draft",
+        "package_revision_id": format_uuid(draft.package_revision_id),
+        "document_schema_version": draft.document_schema_version,
+        "document": dict(draft.document),
+        "field_provenance": dict(draft.field_provenance),
+        "updated_by": draft.updated_by,
+        "updated_at": format_utc_datetime(draft.updated_at),
+    }
+
+
+def map_sealed_package_content_to_domain(sealed: Any) -> dict[str, Any]:
+    """Map a duck-typed SealedPackageContent row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "sealed_package_content",
+        "package_revision_id": format_uuid(sealed.package_revision_id),
+        "document_schema_version": sealed.document_schema_version,
+        "document": dict(sealed.document),
+        "field_provenance": dict(sealed.field_provenance),
+        "content_sha256": sealed.content_sha256,
+        "system_context_snapshot_id": format_uuid(sealed.system_context_snapshot_id),
+        "sealed_by": sealed.sealed_by,
+        "sealed_at": format_utc_datetime(sealed.sealed_at),
+    }
+
+
+def map_package_normalization_step_to_domain(step: Any) -> dict[str, Any]:
+    """Map a duck-typed PackageNormalizationStep row to domain JSON."""
+    return {
+        "schema_version": DOMAIN_SCHEMA_VERSION,
+        "object_type": "package_normalization_step",
+        "step_id": format_uuid(step.step_id),
+        "package_revision_id": format_uuid(step.package_revision_id),
+        "step_key": step.step_key,
+        "status": step.status,
+        "input_digest": step.input_digest,
+        "fact_bundle_sha256": step.fact_bundle_sha256,
+        "schema_id": step.schema_id,
+        "prompt_version": step.prompt_version,
+        "prompt_sha256": step.prompt_sha256,
+        "prompt_storage_key": step.prompt_storage_key,
+        "fact_bundle_storage_key": step.fact_bundle_storage_key,
+        "response_storage_key": step.response_storage_key,
+        "endpoint_profile": step.endpoint_profile,
+        "endpoint_host": step.endpoint_host,
+        "model_requested": step.model_requested,
+        "model_reported": step.model_reported,
+        "temperature": float(step.temperature) if step.temperature is not None else None,
+        "input_limit": step.input_limit,
+        "output_limit": step.output_limit,
+        "timeout_seconds": (
+            float(step.timeout_seconds) if step.timeout_seconds is not None else None
+        ),
+        "attempt": step.attempt,
+        "provider_request_id": step.provider_request_id,
+        "input_tokens": step.input_tokens,
+        "output_tokens": step.output_tokens,
+        "latency_ms": step.latency_ms,
+        "response_sha256": step.response_sha256,
+        "validation_outcome": step.validation_outcome,
+        "llm_call_count": step.llm_call_count,
+        "repair_attempted": step.repair_attempted,
+        "error_code": step.error_code,
+        "error_retryable": step.error_retryable,
+        "created_at": format_utc_datetime(step.created_at),
+        "started_at": (
+            format_utc_datetime(step.started_at) if step.started_at is not None else None
+        ),
+        "completed_at": (
+            format_utc_datetime(step.completed_at)
+            if step.completed_at is not None
+            else None
+        ),
     }

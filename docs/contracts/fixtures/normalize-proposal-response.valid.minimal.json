@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "proposals": [
+    {
+      "target_pointer": "/system/display_name",
+      "proposed_value": "Example System",
+      "source_artifact_id": "f47ac10b-58cc-4372-a567-0e02b2c3d480",
+      "segment_index": 1,
+      "confidence": "high"
+    }
+  ]
+}

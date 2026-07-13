@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0.0",
+  "object_type": "package_revision_intake_work",
+  "package_revision_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "work_phase": "malware_scan",
+  "status": "available",
+  "attempt_count": 0,
+  "available_at": "2026-07-14T20:00:00Z",
+  "lease_owner": null,
+  "lease_expires_at": null,
+  "heartbeat_at": null,
+  "fence_token": null,
+  "expected_revision_version": 2,
+  "last_error_code": null
+}

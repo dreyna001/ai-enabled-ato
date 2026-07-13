@@ -5,6 +5,7 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | File | Purpose | Freeze status |
 | --- | --- | --- |
 | `domain.schema.json` | Internal object, enum, and state shapes | Published P-1 contract |
+| `package-draft-document.schema.json` | Canonical editable/sealed package document for all profiles | Published Component A Diff 1 contract |
 | `analysis-profile.schema.json` | Deterministic authority/applicability catalog | Published P-1 contract |
 | `authority-manifest.schema.json` | Pinned source metadata and digest rules | Published P-1 contract |
 | `authority-manifest.json` | Exact source pins used for qualification | Bytes verified; HS-001 review remains open |
@@ -13,6 +14,9 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `export-manifest.schema.json` | Hash-bound approved ZIP inventory | Published P-1 contract |
 | `preflight.schema.json` | Deterministic analysis/export eligibility result | Published P-1 contract |
 | `runtime-config.schema.json` | Validated non-secret runtime and endpoint settings | Published P-1 contract |
+| `extracted-segment.schema.json` | Pure extractor outcome and segment contract | Published Component A Diff 2 contract |
+| `normalize-proposal-response.schema.json` | Closed structured output for `normalize_proposal` v1 | Published Component A Diff 4 contract |
+| `normalize-proposal-fact-bundle.schema.json` | Canonical `FactBundle.prompt_payload` user prompt for `normalize_proposal` v1 | Published Component A Diff 4 contract |
 | `openapi.json` | OpenAPI 3.1 API surface and shared HTTP contracts | Published P-1 contract (`info.version` 1.0.0) |
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
@@ -48,9 +52,10 @@ OpenAPI-linked contracts without adding a runtime dependency.
 
 Contract fixtures live in `docs/contracts/fixtures` and use
 `<contract>.<outcome>.<case>.json`. Covered contracts are `domain`,
-`analysis-profile`, `content-manifest`, `artifact-manifest`, `export-manifest`,
-`preflight`, and `runtime-config`; each has at least one valid and one invalid
-fixture.
+`package-draft-document`, `extracted-segment`, `normalize-proposal-response`,
+`normalize-proposal-fact-bundle`, `analysis-profile`, `content-manifest`,
+`artifact-manifest`, `export-manifest`, `preflight`, and `runtime-config`; each
+has at least one valid and one invalid fixture.
 
 The suite parses repository contract, fixture, and vendored-reference JSON;
 validates each internal schema against its declared metaschema; verifies the

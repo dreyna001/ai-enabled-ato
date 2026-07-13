@@ -41,6 +41,12 @@ from ato_service.fact_proposals import (
     list_fact_proposals,
     reject_fact_proposal,
 )
+from ato_service.package_revision_drafts import (
+    PackageRevisionDraftViewResult,
+    SavePackageRevisionDraftResult,
+    get_package_revision_draft,
+    save_package_revision_draft,
+)
 from ato_service.package_revisions import (
     CreatePackageRevisionInput,
     PackageRevisionMutationResult,
@@ -140,6 +146,14 @@ class RejectProposalRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class PutPackageRevisionDraftRequest(BaseModel):
+    """OpenAPI-aligned save-draft payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document: dict[str, Any]
+
+
 class PaginatedPackageRevisionsResponse(BaseModel):
     """OpenAPI-aligned package revision list envelope."""
 
@@ -215,6 +229,22 @@ def _utc_now() -> datetime:
 
 
 def _package_revision_json_response(result: PackageRevisionMutationResult) -> JSONResponse:
+    return JSONResponse(
+        status_code=result.status,
+        content=result.payload,
+        headers={"ETag": result.etag},
+    )
+
+
+def _draft_json_response(result: PackageRevisionDraftViewResult) -> JSONResponse:
+    return JSONResponse(
+        status_code=200,
+        content=result.payload,
+        headers={"ETag": result.etag},
+    )
+
+
+def _save_draft_json_response(result: SavePackageRevisionDraftResult) -> JSONResponse:
     return JSONResponse(
         status_code=result.status,
         content=result.payload,
@@ -420,6 +450,42 @@ def create_api_router() -> APIRouter:
             now=_utc_now(),
         )
         return _package_revision_json_response(result)
+
+    @router.get("/package-revisions/{id}/draft", tags=["Packages"])
+    async def get_package_revision_draft_route(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+    ) -> JSONResponse:
+        result = await get_package_revision_draft(
+            session,
+            principal=principal,
+            package_revision_id=id,
+        )
+        return _draft_json_response(result)
+
+    @router.put("/package-revisions/{id}/draft", tags=["Packages"])
+    async def put_package_revision_draft_route(
+        id: uuid.UUID,
+        body: PutPackageRevisionDraftRequest,
+        request: Request,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> JSONResponse:
+        if_match = request.headers.get("if-match")
+        result = await save_package_revision_draft(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            document=body.document,
+            if_match=if_match,
+            idempotency_key=idempotency_key,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return _save_draft_json_response(result)
 
     @router.post(
         "/package-revisions/{id}/confirm",

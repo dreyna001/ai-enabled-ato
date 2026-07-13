@@ -67,6 +67,23 @@
     "TEXT_MODEL_CREDENTIAL_REFERENCE": {
       "$ref": "#/$defs/credentialReference"
     },
+    "TEXT_MODEL_TEMPERATURE": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "default": 0,
+      "$comment": "Sampling temperature for text-model completion requests. Default 0 for deterministic normalization."
+    },
+    "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": {
+      "type": "boolean",
+      "default": false,
+      "$comment": "Explicit operator approval for the configured text-model endpoint profile. Selecting an endpoint alone does not approve redacted or customer routes."
+    },
+    "CUI_MODEL_BOUNDARY_APPROVED": {
+      "type": "boolean",
+      "default": false,
+      "$comment": "Explicit operator approval for sending CUI-labeled package revisions to the configured text-model endpoint."
+    },
     "VISION_MODEL_ENABLED": {
       "type": "boolean"
     },
@@ -163,6 +180,62 @@
         }
       ],
       "default": 2000000
+    },
+    "MAX_ZIP_MEMBERS_PER_ARCHIVE": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 500
+    },
+    "MAX_ZIP_UNCOMPRESSED_BYTES_PER_ARCHIVE": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 104857600
+    },
+    "MAX_ZIP_DECOMPRESSION_RATIO": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 100
+    },
+    "MAX_XML_DEPTH": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 64
+    },
+    "MAX_XML_ELEMENTS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 100000
+    },
+    "MAX_XML_ATTRIBUTES_PER_ELEMENT": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 128
+    },
+    "MAX_XML_TEXT_NODE_CHARACTERS": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      ],
+      "default": 1048576
     },
     "MAX_CONCURRENT_ANALYSIS_RUNS": {
       "type": "integer",
@@ -389,6 +462,13 @@
           "MAX_EVIDENCE_ITEMS",
           "MAX_PDF_PAGES_PER_FILE",
           "MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE",
+          "MAX_ZIP_MEMBERS_PER_ARCHIVE",
+          "MAX_ZIP_UNCOMPRESSED_BYTES_PER_ARCHIVE",
+          "MAX_ZIP_DECOMPRESSION_RATIO",
+          "MAX_XML_DEPTH",
+          "MAX_XML_ELEMENTS",
+          "MAX_XML_ATTRIBUTES_PER_ELEMENT",
+          "MAX_XML_TEXT_NODE_CHARACTERS",
           "MAX_CONCURRENT_ANALYSIS_RUNS",
           "MAX_ACTIVE_ANALYZER_WORKERS",
           "JOB_HEARTBEAT_SECONDS",
@@ -547,6 +627,70 @@
           },
           "TEXT_MODEL_ENDPOINT_PROFILE": {
             "const": "internal_openai_compatible"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "TEXT_MODEL_NAME",
+          "TEXT_MODEL_ENDPOINT_URL"
+        ],
+        "properties": {
+          "TEXT_MODEL_NAME": {
+            "type": "string",
+            "minLength": 1
+          },
+          "TEXT_MODEL_ENDPOINT_URL": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "TEXT_MODEL_ENDPOINT_PROFILE"
+        ],
+        "properties": {
+          "TEXT_MODEL_ENDPOINT_PROFILE": {
+            "not": {
+              "const": "mock"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "TEXT_MODEL_NAME",
+          "TEXT_MODEL_PROVIDER",
+          "AWS_REGION"
+        ],
+        "properties": {
+          "TEXT_MODEL_PROVIDER": {
+            "const": "aws_bedrock"
+          },
+          "TEXT_MODEL_NAME": {
+            "type": "string",
+            "minLength": 1
+          },
+          "AWS_REGION": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "TEXT_MODEL_ENDPOINT_PROFILE"
+        ],
+        "properties": {
+          "TEXT_MODEL_ENDPOINT_PROFILE": {
+            "not": {
+              "const": "mock"
+            }
           }
         }
       }

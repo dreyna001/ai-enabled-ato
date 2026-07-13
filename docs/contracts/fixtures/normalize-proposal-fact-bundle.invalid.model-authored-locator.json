@@ -1,0 +1,38 @@
+{
+  "profile_id": "fisma_agency_security",
+  "empty_targets": [
+    "/system/mission_summary"
+  ],
+  "target_catalog": [
+    {
+      "pointer": "/system/mission_summary",
+      "description": "System mission or business purpose summary",
+      "value_kind": "string",
+      "max_length": 8000
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "33333333-3333-4333-8333-333333333333",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "filename": "narrative.txt",
+      "detected_format": "text",
+      "segments": [
+        {
+          "segment_index": 1,
+          "text": "Mission: Internal web application for agency case management.",
+          "locator_kind": "text_offsets",
+          "extraction_method": "text",
+          "text_truncated": false,
+          "source_locator": {
+            "kind": "text_offsets",
+            "start_byte": 0,
+            "end_byte": 10
+          }
+        }
+      ]
+    }
+  ],
+  "omitted_segment_ids": [],
+  "context_complete": true
+}

@@ -15,6 +15,8 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
+from ato_service.db.models import PackageRevisionIntakeWork
+from ato_service.intake_work import IntakeWorkPhase, IntakeWorkStatus
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.concurrency import EtagMismatchError, IfMatchRequiredError
 from ato_service.content_manifests import StoredContentManifest
@@ -555,6 +557,13 @@ def test_finalize_writes_manifest_before_db_mutation(
     assert revision.revision_version == 2
     assert result.status == 202
     assert result.etag == '"v2"'
+    assert len(session.added) == 1
+    intake_work = session.added[0]
+    assert isinstance(intake_work, PackageRevisionIntakeWork)
+    assert intake_work.work_phase == IntakeWorkPhase.MALWARE_SCAN.value
+    assert intake_work.status == IntakeWorkStatus.AVAILABLE.value
+    assert intake_work.expected_revision_version == 2
+    assert intake_work.attempt_count == 0
 
 
 @patch("ato_service.package_revisions.record_idempotency_outcome", new_callable=AsyncMock)
@@ -932,6 +941,7 @@ def test_confirm_rejects_pending_fact_proposals(mock_load: AsyncMock) -> None:
         [
             _scalar_result(revision),
             _scalar_one_result(_system()),
+            _scalar_result(None),
             _scalar_one_result(True),
         ]
     )
@@ -969,6 +979,7 @@ def test_confirm_transitions_and_increments_version_once(
         [
             _scalar_result(revision),
             _scalar_one_result(_system()),
+            _scalar_result(None),
             _scalar_one_result(False),
         ]
     )

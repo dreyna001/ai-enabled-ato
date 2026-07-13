@@ -533,6 +533,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         IdempotencyConflictError,
         IdempotencyValidationError,
     )
+    from ato_service.package_revision_drafts import PackageRevisionDraftNotFoundError
     from ato_service.package_revisions import (
         PackageRevisionNotFoundError,
         PackageRevisionStorageError,
@@ -573,6 +574,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         SystemResourceNotFoundError,
         SourceResourceNotFoundError,
         PackageRevisionNotFoundError,
+        PackageRevisionDraftNotFoundError,
         SystemNotFoundError,
         ParentRevisionNotFoundError,
         FactProposalNotFoundError,

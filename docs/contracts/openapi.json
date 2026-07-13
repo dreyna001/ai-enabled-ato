@@ -455,6 +455,95 @@
         }
       }
     },
+    "/package-revisions/{id}/draft": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "getPackageRevisionDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionDraftResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "savePackageRevisionDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutPackageRevisionDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionDraftResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "428": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
     "/package-revisions/{id}/confirm": {
       "post": {
         "tags": [
@@ -1764,6 +1853,21 @@
           }
         }
       },
+      "PackageRevisionDraftResponse": {
+        "description": "Package revision draft",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/ETag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PackageRevisionDraftView"
+            }
+          }
+        }
+      },
       "RunResponse": {
         "description": "Analysis run",
         "content": {
@@ -2010,6 +2114,65 @@
             }
           }
         ]
+      },
+      "PutPackageRevisionDraftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document"
+        ],
+        "properties": {
+          "document": {
+            "$ref": "./package-draft-document.schema.json"
+          }
+        }
+      },
+      "PackageRevisionDraftView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "object_type",
+          "package_revision_id",
+          "document_schema_version",
+          "document",
+          "field_provenance",
+          "updated_by",
+          "updated_at",
+          "revision_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": "2.0.0"
+          },
+          "object_type": {
+            "const": "package_revision_draft"
+          },
+          "package_revision_id": {
+            "$ref": "./domain.schema.json#/$defs/Uuid"
+          },
+          "document_schema_version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+            "maxLength": 32
+          },
+          "document": {
+            "$ref": "./package-draft-document.schema.json"
+          },
+          "field_provenance": {
+            "$ref": "./domain.schema.json#/$defs/FieldProvenanceMap"
+          },
+          "updated_by": {
+            "$ref": "./domain.schema.json#/$defs/UserId"
+          },
+          "updated_at": {
+            "$ref": "./domain.schema.json#/$defs/UtcDateTime"
+          },
+          "revision_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
       },
       "AcceptProposalRequest": {
         "type": "object",

@@ -50,6 +50,7 @@ from ato_service.lifecycle_transitions import (
     PackageRevisionStatus,
 )
 from ato_service.runtime_config import RuntimeLimits
+from ato_service.extraction.detect import detect_format, media_type_for_format
 from ato_service.storage_reconciliation import (
     StoragePathError,
     require_storage_regular_file,
@@ -62,12 +63,24 @@ _HASH_BLOCK_SIZE = 1024 * 1024
 _ALLOWED_DECLARED_MEDIA_TYPES: frozenset[str] = frozenset(
     {
         "application/json",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/xml",
+        "image/jpeg",
+        "image/png",
+        "image/svg+xml",
+        "image/webp",
+        "text/markdown",
         "text/plain",
     }
 )
 
-_MEDIA_JSON = "application/json"
-_MEDIA_TEXT = "text/plain"
+_MIME_TO_DECLARED_FORMAT: dict[str, str] = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/markdown": "markdown",
+}
 
 _STORAGE_KEY_PATTERN = re.compile(ck.STORAGE_KEY_REGEX)
 _FILENAME_SEPARATOR_PATTERN = re.compile(r"[/\\]")
@@ -240,7 +253,12 @@ async def upload_source_artifact(
             "stored blob digest or size does not match prehashed upload bytes"
         )
 
-    detected_media_type = _detect_media_type(blob_store, stored_blob)
+    detected_media_type = _detect_media_type(
+        blob_store,
+        stored_blob,
+        display_filename=validated_filename,
+        declared_media_type=normalized_declared_media_type,
+    )
     if detected_media_type != normalized_declared_media_type:
         raise SourceTypeMismatchError(
             "declared media type does not match detected content"
@@ -574,23 +592,56 @@ def _upload_request_digest_payload(
     }
 
 
-def _detect_media_type(blob_store: BlobStore, stored_blob: StoredBlob) -> str:
+def _declared_format_for_media_type(media_type: str) -> str | None:
+    return _MIME_TO_DECLARED_FORMAT.get(media_type)
+
+
+def _detect_media_type(
+    blob_store: BlobStore,
+    stored_blob: StoredBlob,
+    *,
+    display_filename: str,
+    declared_media_type: str,
+) -> str:
     blob_bytes = _read_stored_blob_bytes(blob_store, stored_blob)
     try:
-        text = blob_bytes.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise SourceTypeMismatchError("source bytes are not valid UTF-8") from exc
+        detected_format = detect_format(
+            blob_bytes,
+            declared_media_type=declared_media_type,
+            declared_format=_declared_format_for_media_type(declared_media_type),
+            filename=display_filename,
+        )
+    except ValueError as exc:
+        raise SourceTypeMismatchError("declared media type does not match detected content") from exc
 
-    try:
-        json.loads(text)
-    except json.JSONDecodeError:
+    if detected_format == "zip":
+        raise SourceTypeMismatchError(
+            "generic ZIP uploads are not accepted at upload boundary"
+        )
+
+    detected_media_type = media_type_for_format(detected_format)
+    if detected_media_type not in _ALLOWED_DECLARED_MEDIA_TYPES:
+        raise SourceTypeMismatchError("declared media type does not match detected content")
+
+    if detected_format in {"text", "markdown"}:
+        try:
+            text = blob_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise SourceTypeMismatchError("source bytes are not valid UTF-8") from exc
         if _TEXT_DISALLOWED_CONTROL_PATTERN.search(text) is not None:
             raise SourceTypeMismatchError(
-                "text/plain source contains disallowed control characters"
+                "text source contains disallowed control characters"
             )
-        return _MEDIA_TEXT
 
-    return _MEDIA_JSON
+    if declared_media_type == "application/json":
+        try:
+            json.loads(blob_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise SourceTypeMismatchError(
+                "declared media type does not match detected content"
+            ) from exc
+
+    return detected_media_type
 
 
 def _read_stored_blob_bytes(

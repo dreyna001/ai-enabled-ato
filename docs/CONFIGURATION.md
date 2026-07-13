@@ -31,7 +31,21 @@ Schema validation uses Draft 2020-12 with closed production profiles. See [`docs
 
 **`dev_local`** — minimal JSON for local API verification and the only profile accepted by the bounded synthetic JSON intake worker. Only `schema_version`, `runtime_profile`, and `STORAGE_DATA_PATH` are required for schema validity. The worker additionally fails closed unless `AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE` resolves because every lifecycle transition requires an atomic audit append. Optional model, identity, and backup fields are absent unless you add them. `VISION_MODEL_ENABLED` defaults to effective `false` when absent.
 
-**`onprem_production`** — full non-secret contract. Schema requires text-model settings, explicit `VISION_MODEL_ENABLED`, identity, storage limits, audit references, malware-scanner declarations, and backup declarations. Secret values stay in credential files, not in JSON.
+**`onprem_production`** — full non-secret contract. Schema requires text-model settings, explicit `VISION_MODEL_ENABLED`, identity, storage limits, audit references, malware-scanner declarations, backup declarations, and extraction safety limits (`MAX_PDF_PAGES_PER_FILE`, `MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE`, `MAX_ZIP_*`, `MAX_XML_*`). Secret values stay in credential files, not in JSON.
+
+The pure extractor library (`ato_service.extraction`) reads these limits through `RuntimeConfig.extraction_limits`. Limit failures are explicit; content is never silently truncated.
+
+| Extraction limit | Default |
+| --- | ---: |
+| `MAX_PDF_PAGES_PER_FILE` | 200 |
+| `MAX_EXTRACTED_TEXT_CHARACTERS_PER_FILE` | 2,000,000 |
+| `MAX_ZIP_MEMBERS_PER_ARCHIVE` | 500 |
+| `MAX_ZIP_UNCOMPRESSED_BYTES_PER_ARCHIVE` | 104,857,600 (100 MiB; never above the default single-file limit) |
+| `MAX_ZIP_DECOMPRESSION_RATIO` | 100 |
+| `MAX_XML_DEPTH` | 64 |
+| `MAX_XML_ELEMENTS` | 100,000 |
+| `MAX_XML_ATTRIBUTES_PER_ELEMENT` | 128 |
+| `MAX_XML_TEXT_NODE_CHARACTERS` | 1,048,576 |
 
 Copy `deployment/config/runtime-config.onprem.example.json` to `/etc/ato-analyzer/runtime-config.json`, redact customer placeholders, and tighten values with the customer authority. The installer never overwrites an existing live config.
 
@@ -44,10 +58,13 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | Key | Role | Notes |
 | --- | --- | --- |
 | `VISION_MODEL_ENABLED` | **Optional capability** | Only current optional model capability. Defaults to off when absent in `dev_local`. Required boolean in `onprem_production`. When `true`, schema requires vision endpoint URL, name, context tokens, and profile; production further restricts profile to qualified external/internal OpenAI-compatible values and may require `VISION_MODEL_CREDENTIAL_REFERENCE` and allowlist entries. |
-| `TEXT_MODEL_PROVIDER` | **Text LLM backend** | `openai_compatible` (default) uses `TEXT_MODEL_ENDPOINT_URL` plus `TEXT_MODEL_CREDENTIAL_REFERENCE` or dev-only `ATO_TEXT_MODEL_API_KEY_FILE`. `aws_bedrock` uses `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, and the standard AWS credential chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or instance role). Install Bedrock support with `pip install -e ".[bedrock]"`. |
+| `TEXT_MODEL_PROVIDER` | **Text LLM backend** | `openai_compatible` (default) uses `TEXT_MODEL_ENDPOINT_URL` plus `TEXT_MODEL_CREDENTIAL_REFERENCE` or dev-only `ATO_TEXT_MODEL_API_KEY` / `ATO_TEXT_MODEL_API_KEY_FILE`. `aws_bedrock` uses `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, and the standard AWS credential chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or instance role). Install Bedrock support with `pip install -e ".[bedrock]"`. |
+| `TEXT_MODEL_TEMPERATURE` | **Text LLM sampling** | Optional number `0..2`, default `0`. Applied to OpenAI-compatible and Bedrock text clients. |
+| `TEXT_MODEL_ENDPOINT_POLICY_APPROVED` | **Routing approval** | Optional boolean, default `false`. Explicit operator approval for the configured text-model endpoint profile on redacted/customer routes. Selecting an endpoint alone does not approve the route. |
+| `CUI_MODEL_BOUNDARY_APPROVED` | **CUI routing approval** | Optional boolean, default `false`. Explicit operator approval before CUI-labeled revisions may use the configured text-model endpoint. |
 | `ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS` | **Safety exception** | Not a capability. Permits HTTP (not HTTPS) only for literal loopback IP endpoints (`127.0.0.1`, `::1`) on approved internal model profiles. Does not relax host allowlists for non-loopback hosts. |
 | `LOCAL_PASSWORD_AUTH_ENABLED` | **Hard stop** | Must remain `false`. Declares that local password auth is forbidden; it is not a feature switch. |
-| `MALWARE_SCANNER_*` | **Future production contract** | Declarations in JSON do not implement scanner integration or authorize customer extraction. The P1.2 worker assigns a deterministic clean result only after enforcing `dev_local` + `data_origin=synthetic` + all-JSON gates; it neither reads nor satisfies these production declarations. |
+| `MALWARE_SCANNER_*` | **Future production contract** | Declarations in JSON do not implement scanner integration or authorize customer extraction. Component A Diff 3 adds `ato_service.malware_scan.resolve_malware_scanner`: `dev_local` uses an **HS-005** integrity-only substitute (re-verifies stored SHA-256/size; no malware detection, no networking); `onprem_production` fails closed until Diff 7. Component A Diff 3 also adds `ato_service.intake` unified scan/extract orchestration and wires `dev_local` workers (`ato-intake-worker`, `ato-synthetic-intake-worker` alias) through intake work leases. The legacy P1.2 `synthetic_intake.py` path remains for compatibility tests only. |
 | `BACKUP_*`, `AUDIT_*` backup fields | **Future production contract** | Declarations document intended recovery posture; they do not enable backup jobs, WAL archiving, or restore automation today. |
 
 Text-model endpoints are required for `onprem_production` schema validity but full model-call pipelines remain out of scope for this API-only slice.
@@ -60,7 +77,7 @@ Text-model endpoints are required for `onprem_production` schema validity but fu
 - **Package API authentication:** when `IDENTITY_PROVIDER_MODE=oidc` is configured with `PORTAL_PUBLIC_ORIGIN`, the API loads Postgres-backed sessions from the portal cookie and injects `authenticated_principal` on `/api/v1` routes. Mutations still require CSRF + Origin. Without identity configuration, routes remain fail-closed HTTP `401` (**HS-003** / **EP-06** partial).
 - Each future process receives only the credential mappings and config projection it consumes; declaring a reference in the shared schema does not authorize loading it into every service.
 - Dev DSN: set `ATO_DATABASE_DSN_FILE` to a protected UTF-8 file containing only the SQLAlchemy PostgreSQL URL. Never commit or log DSN contents.
-- Dev OpenAI API key: set `ATO_TEXT_MODEL_API_KEY_FILE` to a protected UTF-8 file containing only the API key when `TEXT_MODEL_PROVIDER` is `openai_compatible`.
+- Dev OpenAI API key: copy `config.local.env.example` to `config.local.env` and set `ATO_TEXT_MODEL_API_KEY` when `TEXT_MODEL_PROVIDER` is `openai_compatible`.
 - Bedrock: do not put AWS keys in runtime JSON. Use the normal AWS credential chain and set `AWS_REGION` in runtime JSON.
 
 ## Bounded synthetic intake worker (P1.2)
@@ -93,6 +110,15 @@ external scanner call, and has no customer extraction path. **HS-005** remains
 open. Synthetic `text/plain` revisions are intentionally not claimed and
 remain `scanning` for a later supported worker or explicit operator action.
 
+P1.1 upload now accepts Diff 2-supported MIME types (JSON, XML, PDF, DOCX,
+XLSX, SVG, PNG, JPEG, WebP, markdown, text) using `extraction.detect_format`
+with declared-type and filename hints; generic ZIP uploads are rejected.
+Component A Diff 3 adds `draft_builder` (deterministic draft + provenance),
+`malware_scan` (dev-local integrity substitute; production fail-closed), and
+`intake` (unified scan/extract orchestration over intake work leases) as library
+boundaries consumed by `ato-intake-worker` and the WSL `ato-synthetic-intake-worker`
+alias in `dev_local`.
+
 ## Deterministic analyzer worker
 
 `ato-analyzer-worker` is the long-running worker for the implemented
@@ -122,7 +148,7 @@ Set `TEXT_MODEL_PROVIDER` in runtime JSON:
 
 | Value | Backend | Required settings | Secrets |
 | --- | --- | --- | --- |
-| `openai_compatible` | OpenAI-compatible HTTP API | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME`, timeout/retry limits | `ATO_TEXT_MODEL_API_KEY_FILE` for local dev, or `TEXT_MODEL_CREDENTIAL_REFERENCE` in production |
+| `openai_compatible` | OpenAI-compatible HTTP API | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME`, timeout/retry limits | `config.local.env` (`ATO_TEXT_MODEL_API_KEY`) for local dev, or `TEXT_MODEL_CREDENTIAL_REFERENCE` in production |
 | `aws_bedrock` | AWS Bedrock Converse API | `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, timeout/retry limits | AWS credential chain only (`AWS_PROFILE`, standard AWS env vars, or instance role) |
 
 Install Bedrock support when needed:
@@ -148,10 +174,11 @@ $env:ATO_RUNTIME_CONFIG_PATH = 'deployment\config\runtime-config.dev_local.json'
 ### OpenAI-compatible setup
 
 ```powershell
-$env:ATO_TEXT_MODEL_API_KEY_FILE = 'C:\secure\openai-api-key.txt'
+Copy-Item config.local.env.example config.local.env
+# Edit config.local.env and set ATO_TEXT_MODEL_API_KEY=your-key
 ```
 
-The API key file must contain only the key bytes. Never commit or log it.
+The service loads `config.local.env` at startup for dev-only secrets. Never commit or log the key.
 
 ### Bedrock setup
 

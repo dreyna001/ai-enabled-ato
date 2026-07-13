@@ -1,11 +1,10 @@
-"""Runtime tests for the bounded synthetic intake worker process."""
+"""Runtime tests for the bounded synthetic intake worker alias."""
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator, Coroutine
-from contextlib import asynccontextmanager
+from collections.abc import Coroutine
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,13 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ato_service.blobs import BlobStore
+from ato_service.intake import IntakeOutcomeKind, IntakeResult
+from ato_service.malware_scan import MalwareScannerUnavailableError
 from ato_service.runtime_config import (
     RuntimeConfigError,
     load_runtime_config_from_dict,
-)
-from ato_service.synthetic_intake import (
-    SyntheticIntakeConfigurationError,
-    SyntheticIntakeResult,
 )
 from ato_service.synthetic_intake_worker import (
     drain_synthetic_intake,
@@ -30,7 +27,6 @@ from ato_service.synthetic_intake_worker import (
 
 NOW = datetime(2026, 7, 11, 17, 0, 0, tzinfo=timezone.utc)
 REVISION_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
-
 
 def _run(awaitable: Coroutine[Any, Any, Any]) -> Any:
     return asyncio.run(awaitable)
@@ -47,56 +43,81 @@ def _config(tmp_path: Path) -> Any:
     )
 
 
-def _transition(status: str) -> SyntheticIntakeResult:
-    return SyntheticIntakeResult(
+def _result(*, work_phase: str, revision_status: str, revision_version: int) -> IntakeResult:
+    return IntakeResult(
         package_revision_id=REVISION_ID,
-        previous_status=(
-            "scanning" if status == "extracting" else "extracting"
+        work_phase=work_phase,
+        outcome=IntakeOutcomeKind.COMPLETED,
+        previous_revision_status=(
+            "scanning" if revision_status == "extracting" else "extracting"
         ),
-        status=status,
-        revision_version=3 if status == "extracting" else 4,
+        revision_status=revision_status,
+        revision_version=revision_version,
         artifact_count=1,
-        proposal_count=0 if status == "extracting" else 2,
+        draft_inserted=revision_status == "awaiting_confirmation",
     )
 
 
 @patch(
-    "ato_service.synthetic_intake_worker.process_next_synthetic_intake",
+    "ato_service.synthetic_intake_worker.drain_intake",
     new_callable=AsyncMock,
 )
-def test_drain_uses_one_transaction_per_transition_and_stops_when_idle(
-    mock_process: AsyncMock,
+def test_drain_delegates_to_unified_intake(
+    mock_drain: AsyncMock,
     tmp_path: Path,
 ) -> None:
-    scan = _transition("extracting")
-    extraction = _transition("awaiting_confirmation")
-    mock_process.side_effect = [scan, extraction, None]
-    sessions = [MagicMock(name=f"session-{index}") for index in range(3)]
-    scope_calls: list[Any] = []
+    config = _config(tmp_path)
+    scan = _result(
+        work_phase="malware_scan",
+        revision_status="extracting",
+        revision_version=3,
+    )
+    extraction = _result(
+        work_phase="deterministic_extract",
+        revision_status="awaiting_confirmation",
+        revision_version=4,
+    )
+    mock_drain.return_value = (scan, extraction)
 
-    @asynccontextmanager
-    async def fake_session_scope(_session_factory: Any) -> AsyncIterator[Any]:
-        session = sessions[len(scope_calls)]
-        scope_calls.append(session)
-        yield session
-
-    with patch(
-        "ato_service.synthetic_intake_worker.session_scope",
-        side_effect=fake_session_scope,
-    ):
-        results = _run(
-            drain_synthetic_intake(
-                MagicMock(),
-                blob_store=BlobStore(tmp_path),
-                hmac_key=b"x" * 32,
-                now_factory=lambda: NOW,
-            )
+    results = _run(
+        drain_synthetic_intake(
+            MagicMock(),
+            blob_store=BlobStore(tmp_path),
+            hmac_key=b"x" * 32,
+            config=config,
+            now_factory=lambda: NOW,
         )
+    )
 
     assert results == (scan, extraction)
-    assert scope_calls == sessions
-    assert [call.args[0] for call in mock_process.await_args_list] == sessions
-    assert all(call.kwargs["now"] == NOW for call in mock_process.await_args_list)
+    mock_drain.assert_awaited_once()
+    assert mock_drain.await_args.kwargs["config"] == config
+
+
+@patch(
+    "ato_service.synthetic_intake_worker.drain_intake",
+    new_callable=AsyncMock,
+)
+def test_drain_synthetic_intake_uses_oneshot_lease_owner(
+    mock_drain: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    mock_drain.return_value = ()
+
+    _run(
+        drain_synthetic_intake(
+            MagicMock(),
+            blob_store=BlobStore(tmp_path),
+            hmac_key=b"x" * 32,
+            config=config,
+            now_factory=lambda: NOW,
+        )
+    )
+
+    lease_owner = mock_drain.await_args.kwargs["lease_owner"]
+    assert lease_owner.startswith("intake-")
+    assert "oneshot" in lease_owner
 
 
 @patch(
@@ -117,7 +138,13 @@ def test_worker_resolves_dependencies_and_disposes_engine(
     mock_engine_factory.return_value = engine
     sessions = MagicMock()
     mock_session_factory.return_value = sessions
-    expected = (_transition("extracting"),)
+    expected = (
+        _result(
+            work_phase="malware_scan",
+            revision_status="extracting",
+            revision_version=3,
+        ),
+    )
     mock_drain.return_value = expected
 
     result = _run(
@@ -147,7 +174,7 @@ def test_worker_rejects_production_before_creating_engine(
     mock_engine_factory: MagicMock,
 ) -> None:
     config = MagicMock(runtime_profile="onprem_production")
-    with pytest.raises(SyntheticIntakeConfigurationError):
+    with pytest.raises(MalwareScannerUnavailableError):
         _run(
             run_synthetic_intake_worker(
                 config,

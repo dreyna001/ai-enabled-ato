@@ -151,14 +151,31 @@ processing. Customer extraction remains blocked while **HS-005** is open.
   assignment and `revision_version` increment.
 - No scan or extraction work is claimed complete by this operation.
 
+**Draft read/save** (`GET` / `PUT /api/v1/package-revisions/{id}/draft`):
+
+- `GET` is legal for owner and viewer groups while a draft row exists.
+- `PUT` is legal only while the revision is `awaiting_confirmation`, a draft
+  row exists, and the caller is in the owner group.
+- `PUT` requires current `If-Match`, `Idempotency-Key`, CSRF validation, and
+  a schema-valid full `document` payload. Successful save increments
+  `revision_version` once and returns the draft view with a new ETag.
+- Missing draft returns HTTP 404 `resource_not_found`. Stale `If-Match`
+  returns HTTP 412. Illegal parent state returns HTTP 409.
+
 **Confirm** (`POST /api/v1/package-revisions/{id}/confirm`):
 
 - Legal only while the revision is `awaiting_confirmation`.
 - Requires current `If-Match`, `Idempotency-Key`, authenticated principal,
   owner-group authorization, and validated CSRF context.
-- Succeeds only when every `FactProposal` for the revision is non-`pending`.
-- Performs `awaiting_confirmation -> ready` atomically with
-  `revision_version` increment and seals canonical facts.
+- When a `PackageRevisionDraft` row exists, validates the draft document,
+  seals immutable `sealed_package_contents`, binds `package_content_sha256`
+  and `system_context_snapshot_id`, and performs
+  `awaiting_confirmation -> ready` atomically with `revision_version`
+  increment. Package-level confirm does not require per-leaf `FactProposal`
+  decisions on the draft path.
+- When no draft row exists, succeeds only when every `FactProposal` for the
+  revision is non-`pending` (legacy compatibility path) and performs
+  `awaiting_confirmation -> ready` without sealed package content.
 
 #### 2.1.3 Authentication and object authorization (pre-EP-06)
 
@@ -176,11 +193,11 @@ server-side Origin validation). No insecure development bypass and no
 
 Object authorization for this slice is default-deny:
 
-- **Reads** (`GET` system, list revisions, get revision, list proposals):
+- **Reads** (`GET` system, list revisions, get revision, get draft, list proposals):
   principal must be a member of `System.owner_group` or one of
   `System.viewer_groups`.
-- **Mutations** (create system, create revision, upload, finalize, confirm,
-  proposal accept/reject): principal must be a member of `System.owner_group`.
+- **Mutations** (create system, create revision, upload, finalize, save draft,
+  confirm, proposal accept/reject): principal must be a member of `System.owner_group`.
 
 Unauthorized access returns HTTP 403 `authorization_denied` without leaking
 sensitive object existence or field details beyond what the route contract
@@ -196,6 +213,7 @@ requires.
 | Create revision | `POST /api/v1/systems/{system_id}/package-revisions` |
 | Upload artifact | `POST /api/v1/package-revisions/{id}/files` |
 | Finalize upload | `POST /api/v1/package-revisions/{id}/finalize` |
+| Save package draft | `PUT /api/v1/package-revisions/{id}/draft` |
 | Confirm revision | `POST /api/v1/package-revisions/{id}/confirm` |
 
 Replay semantics:
@@ -262,6 +280,18 @@ Invalid UTF-8/JSON or duplicate canonical pointers produces the legal
 external scanner call is permitted in this path.
 
 The stable service audit actions are:
+
+| Transition | Audit action |
+| --- | --- |
+| `scanning -> extracting` | `package_revision.intake_scan_completed` |
+| `scanning -> quarantined` | `package_revision.intake_scan_quarantined` |
+| `scanning -> invalid` | `package_revision.intake_scan_invalidated` |
+| `extracting -> awaiting_confirmation` | `package_revision.intake_extraction_completed` |
+| `extracting -> invalid` | `package_revision.intake_extraction_invalidated` |
+| transport retry scheduled | `package_revision.intake_retry_scheduled` |
+
+The legacy P1.2 synthetic-only worker audit actions remain documented for
+historical revisions processed before unified intake wiring:
 
 | Transition | Audit action |
 | --- | --- |
@@ -436,6 +466,80 @@ The following attempts are denied without changing either object:
 Self-approval returns `self_approval_denied` with HTTP 403. A stale
 hash/ETag precondition returns HTTP 412. An otherwise current request that is
 in an illegal lifecycle state returns HTTP 409.
+
+### 2.8 Package revision intake work, leases, and attempts
+
+Package revision intake work rows are durable Postgres queue rows for one
+`(package_revision_id, work_phase)` execution unit. Phases are `malware_scan`
+and `deterministic_extract`. `PackageRevisionIntakeAttempt` rows are child
+records of a work row. Intake work is worker-internal and is not exposed in the
+public OpenAPI surface.
+
+Closed intake-work `status` enum mirrors analyzer jobs (`available`, `leased`,
+`completed`, `failed`, `reconciliation_required`). `leased` rows MUST carry
+`lease_owner`, `lease_expires_at`, `heartbeat_at`, and `fence_token`.
+Non-leased rows MUST clear all lease fields and `fence_token`.
+
+`expected_revision_version` captures the `PackageRevision.revision_version`
+observed at claim (or finalize bootstrap). Completion, failure recording, and
+`assert_intake_claim_live` MUST reject stale `fence_token` or revision-version
+mismatch with visible `intake_lease_lost` semantics.
+
+Finalize (`uploading -> scanning`) atomically inserts one `malware_scan` work row
+in `available` status with `expected_revision_version` equal to the post-finalize
+revision version. Idempotent finalize replay MUST NOT insert duplicate work.
+
+Claim uses `SELECT ... FOR UPDATE OF package_revision_intake_work SKIP LOCKED`
+on the work row only, inserts a new `PackageRevisionIntakeAttempt`, increments
+`attempt_count`, assigns a new `fence_token`, and transitions to `leased`.
+Expired-lease recovery requeues when transport budget remains; otherwise the work
+row becomes `failed`. Recovery with no active attempt becomes
+`reconciliation_required`.
+
+### 2.9 Package revision normalization steps
+
+`PackageNormalizationStep` rows are revision-scoped durable records for one
+`normalize_proposal` v1 model step per `(package_revision_id, step_key)`. They
+are worker-internal and are not exposed in the public OpenAPI surface. This table
+is distinct from analyzer `RunStep` rows and does not create `FactProposal`
+rows.
+
+Closed normalization-step `status` enum:
+
+| Status | Meaning |
+| --- | --- |
+| `reserved` | Pre-call reservation with pinned schema/prompt metadata and `input_digest`; `llm_call_count=0`. |
+| `running` | Model call in progress after routing policy passes; `started_at` set. |
+| `completed` | Structured response validated and persisted with Section 18.3 metadata. |
+| `policy_blocked` | Routing policy denied the call before any model invocation; `llm_call_count=0`. |
+| `failed` | Terminal step failure with `error_code` and `error_retryable`. |
+| `reconciliation_required` | Operator recovery required; automatic retry is forbidden. |
+
+`input_digest` is the SHA-256 of canonical reservation inputs. `fact_bundle_sha256`
+is the SHA-256 of the bounded fact-bundle artifact bytes and may differ when
+canonicalization semantics differ. Protected prompt, fact-bundle, and raw-response
+artifacts live under `revisions/{package_revision_id}/normalization/{step_id}/`
+with traversal-safe, bounded, create-new writes. Raw prompt and response bytes
+are protected artifacts, not operational log content.
+
+#### 2.9.1 Normalization-step status transition graph
+
+| From | To | Required condition |
+| --- | --- | --- |
+| _(none)_ | `reserved` | Insert one row per `(package_revision_id, step_key)` with pinned `schema_id`, `prompt_version`, and `input_digest`; `llm_call_count=0`. |
+| `reserved` | `policy_blocked` | Routing policy denies the call before any model invocation; `started_at` remains null, `validation_outcome` and stable `error_code` recorded, `error_retryable=false`. |
+| `reserved` | `running` | Routing policy passes; protected prompt and fact-bundle artifacts are written; `started_at` set and `llm_call_count` becomes 1 or 2 before the external call. |
+| `running` | `completed` | Response validated; Section 18.3 metadata and protected response artifact persisted. `model_reported`, `provider_request_id`, and token counts remain optional. |
+| `running` | `failed` | Non-retryable provider, validation, or transport failure; `validation_outcome` and `error_code` required. |
+| `running` | `reconciliation_required` | Atomicity or ambiguous crash after logical invocation requires operator recovery. |
+| `reserved` | `failed` | Deterministic reservation or artifact preparation failure before model invocation. |
+
+`policy_blocked`, `completed`, `failed`, and `reconciliation_required` are
+terminal unless operator recovery explicitly documents a later transition.
+`llm_call_count` MUST remain `0` for `reserved` and `policy_blocked`.
+`repair_attempted=true` MUST imply `llm_call_count=2`.
+Completed steps MUST record `response_sha256`, `validation_outcome`, all three
+protected storage keys, and configured endpoint/limit metadata.
 
 ### 2.7 Analyzer jobs, leases, and attempts
 

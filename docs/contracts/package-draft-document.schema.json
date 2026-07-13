@@ -1,0 +1,613 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/package-draft-document.schema.json",
+  "title": "Package Draft Document",
+  "$comment": "Versioned canonical package core with explicit profile sections. Customer-specific FISMA required fields remain optional until HS-002 template packs are qualified.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "package",
+    "system",
+    "contacts",
+    "control_set",
+    "security_controls",
+    "evidence",
+    "findings",
+    "poam_candidates",
+    "assessor_inputs",
+    "privacy",
+    "fedramp_20x",
+    "fedramp_rev5_transition",
+    "fisma_agency_security",
+    "extensions"
+  ],
+  "properties": {
+    "package": {
+      "$ref": "#/$defs/PackageMetadata"
+    },
+    "system": {
+      "$ref": "#/$defs/SystemSection"
+    },
+    "contacts": {
+      "$ref": "#/$defs/ContactsSection"
+    },
+    "control_set": {
+      "$ref": "#/$defs/ControlSetSection"
+    },
+    "security_controls": {
+      "$ref": "#/$defs/SecurityControlsSection"
+    },
+    "evidence": {
+      "$ref": "#/$defs/StringKeyedObjectSection"
+    },
+    "findings": {
+      "$ref": "#/$defs/StringKeyedObjectSection"
+    },
+    "poam_candidates": {
+      "$ref": "#/$defs/StringKeyedObjectSection"
+    },
+    "assessor_inputs": {
+      "$ref": "#/$defs/StringKeyedObjectSection"
+    },
+    "privacy": {
+      "$ref": "#/$defs/PrivacySection"
+    },
+    "fedramp_20x": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Fedramp20xSection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fedramp_rev5_transition": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FedrampRev5TransitionSection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fisma_agency_security": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FismaAgencySecuritySection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extensions": {
+      "$ref": "#/$defs/ExtensionsSection"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "package": {
+            "properties": {
+              "profile_id": {
+                "const": "fedramp_20x_program"
+              }
+            },
+            "required": [
+              "profile_id"
+            ]
+          }
+        },
+        "required": [
+          "package"
+        ]
+      },
+      "then": {
+        "properties": {
+          "fedramp_20x": {
+            "$ref": "#/$defs/Fedramp20xSection"
+          },
+          "fedramp_rev5_transition": {
+            "type": "null"
+          },
+          "fisma_agency_security": {
+            "type": "null"
+          },
+          "system": {
+            "properties": {
+              "impact_level": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "package": {
+            "properties": {
+              "profile_id": {
+                "const": "fedramp_rev5_transition"
+              }
+            },
+            "required": [
+              "profile_id"
+            ]
+          }
+        },
+        "required": [
+          "package"
+        ]
+      },
+      "then": {
+        "properties": {
+          "fedramp_rev5_transition": {
+            "$ref": "#/$defs/FedrampRev5TransitionSection"
+          },
+          "fedramp_20x": {
+            "type": "null"
+          },
+          "fisma_agency_security": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "package": {
+            "properties": {
+              "profile_id": {
+                "const": "fisma_agency_security"
+              }
+            },
+            "required": [
+              "profile_id"
+            ]
+          }
+        },
+        "required": [
+          "package"
+        ]
+      },
+      "then": {
+        "properties": {
+          "fedramp_20x": {
+            "type": "null"
+          },
+          "fedramp_rev5_transition": {
+            "type": "null"
+          },
+          "fisma_agency_security": {
+            "$ref": "#/$defs/FismaAgencySecuritySection"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ControlId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9()._-]{1,127}$"
+    },
+    "BoundedString": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "ShortString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "PackageMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "title",
+        "prepared_for",
+        "reporting_period"
+      ],
+      "properties": {
+        "profile_id": {
+          "enum": [
+            "fedramp_20x_program",
+            "fedramp_rev5_transition",
+            "fisma_agency_security"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "prepared_for": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "reporting_period": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SystemSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display_name",
+        "authorization_boundary",
+        "mission_summary",
+        "impact_level",
+        "authorization_path"
+      ],
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "authorization_boundary": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "mission_summary": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "impact_level": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "low",
+            "moderate",
+            "high",
+            null
+          ]
+        },
+        "authorization_path": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "ContactEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "role",
+        "email"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ShortString"
+        },
+        "role": {
+          "$ref": "#/$defs/ShortString"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "organization": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "ContactsSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_owner",
+        "isso",
+        "issm",
+        "control_owners",
+        "assessors",
+        "approvers"
+      ],
+      "properties": {
+        "system_owner": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/ContactEntry"
+          }
+        },
+        "isso": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/ContactEntry"
+          }
+        },
+        "issm": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/ContactEntry"
+          }
+        },
+        "control_owners": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/ContactEntry"
+          }
+        },
+        "assessors": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ContactEntry"
+          }
+        },
+        "approvers": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ContactEntry"
+          }
+        }
+      }
+    },
+    "ControlSetSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "tailoring",
+        "organization_defined_parameters",
+        "inheritance"
+      ],
+      "properties": {
+        "source": {
+          "type": "object",
+          "maxProperties": 64
+        },
+        "tailoring": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "object",
+            "maxProperties": 32
+          }
+        },
+        "organization_defined_parameters": {
+          "type": "object",
+          "maxProperties": 512
+        },
+        "inheritance": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "maxProperties": 32
+          }
+        }
+      }
+    },
+    "SecurityControlEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implementation_status",
+        "implementation_statement",
+        "responsible_parties",
+        "evidence_links"
+      ],
+      "properties": {
+        "implementation_status": {
+          "enum": [
+            "implemented",
+            "partial",
+            "planned",
+            "not_applicable",
+            "not_implemented"
+          ]
+        },
+        "implementation_statement": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "responsible_parties": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ShortString"
+          }
+        },
+        "evidence_links": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      }
+    },
+    "SecurityControlsSection": {
+      "type": "object",
+      "maxProperties": 2000,
+      "propertyNames": {
+        "$ref": "#/$defs/ControlId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/SecurityControlEntry"
+      }
+    },
+    "StringKeyedObjectSection": {
+      "type": "object",
+      "maxProperties": 2000,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "type": "object",
+        "maxProperties": 64
+      }
+    },
+    "PrivacySection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifacts_present",
+        "scope_notice"
+      ],
+      "properties": {
+        "artifacts_present": {
+          "type": "boolean"
+        },
+        "scope_notice": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "Fedramp20xSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpo",
+        "sdr",
+        "ocr",
+        "scg",
+        "ksi_methods",
+        "metric_history",
+        "independent_assessment"
+      ],
+      "properties": {
+        "cpo": {
+          "type": "object",
+          "maxProperties": 128
+        },
+        "sdr": {
+          "type": "object",
+          "maxProperties": 128
+        },
+        "ocr": {
+          "type": "object",
+          "maxProperties": 128
+        },
+        "scg": {
+          "type": "object",
+          "maxProperties": 128
+        },
+        "ksi_methods": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "maxProperties": 32
+          }
+        },
+        "metric_history": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "maxProperties": 32
+          }
+        },
+        "independent_assessment": {
+          "type": "object",
+          "maxProperties": 64,
+          "$comment": "Assessor-owned import-only fields; product MUST NOT generate conclusions."
+        }
+      }
+    },
+    "FedrampRev5TransitionSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ssp",
+        "sap",
+        "sar",
+        "poam",
+        "oscal"
+      ],
+      "properties": {
+        "ssp": {
+          "type": "object",
+          "maxProperties": 256
+        },
+        "sap": {
+          "type": "object",
+          "maxProperties": 128
+        },
+        "sar": {
+          "type": "object",
+          "maxProperties": 128,
+          "$comment": "Assessor-owned import-only fields."
+        },
+        "poam": {
+          "type": "object",
+          "maxProperties": 128
+        },
+        "oscal": {
+          "type": "object",
+          "maxProperties": 256
+        }
+      }
+    },
+    "FismaAgencySecuritySection": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [],
+      "properties": {
+        "agency_template_pack_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128,
+          "$comment": "Optional until HS-002 customer template pack is qualified."
+        },
+        "security_plan_sections": {
+          "type": "object",
+          "maxProperties": 256
+        },
+        "customer_defined_fields": {
+          "type": "object",
+          "maxProperties": 512,
+          "$comment": "Optional agency-specific fields preserved without HS-002 parity claims."
+        }
+      },
+      "maxProperties": 512
+    },
+    "ExtensionsSection": {
+      "type": "object",
+      "maxProperties": 2000,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "additionalProperties": true,
+      "$comment": "Preserves unmapped source material with original locators in field_provenance."
+    }
+  }
+}

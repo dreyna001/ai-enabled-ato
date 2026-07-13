@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "status": "succeeded",
+  "detected_format": "json",
+  "detected_media_type": "application/json",
+  "page_count": null,
+  "total_text_characters": 12,
+  "vision_status": "not_needed",
+  "segments": [
+    {
+      "segment_index": 1,
+      "text": "demo-system",
+      "locator": {
+        "kind": "json_pointer",
+        "json_pointer": "/system/name"
+      },
+      "extraction_method": "deterministic",
+      "metadata": null
+    }
+  ]
+}

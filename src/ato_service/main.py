@@ -29,6 +29,7 @@ from ato_service.db.session import (
     create_session_factory,
     require_postgresql_url,
 )
+from ato_service.local_env import load_local_env_file
 from ato_service.health import (
     HEALTH_PATH_SERVER_OVERRIDE,
     ReadinessProbe,
@@ -293,6 +294,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Bind port",
     )
     args = parser.parse_args(argv)
+    load_local_env_file()
 
     if not args.config or not str(args.config).strip():
         raise SystemExit(
