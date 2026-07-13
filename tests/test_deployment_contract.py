@@ -243,6 +243,7 @@ def test_wsl_systemd_unit_uses_dev_local_runtime_config_under_opt() -> None:
     )
     assert f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}" in text
     assert f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
+    assert "LoadCredential=oidc-client-secret:" in text
     assert f"ReadWritePaths={DATA_DIR} /opt/ato-analyzer/data/ato-storage" in text
 
 

@@ -20,6 +20,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 
 LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
 LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+LoadCredential=oidc-client-secret:/etc/ato-analyzer/credentials/oidc-client-secret
 
 ExecStart=/opt/ato-analyzer/venv/bin/ato-service
 
