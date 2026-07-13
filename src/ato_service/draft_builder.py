@@ -82,9 +82,16 @@ def build_initial_draft(
     segment_count = 0
     extension_segments: list[dict[str, Any]] = []
     evidence_only_artifacts: list[dict[str, Any]] = []
+    from ato_service.structured_ingest import ingest_structured_artifact
 
     for artifact, outcome in artifact_outcomes:
         segment_count += len(outcome.segments)
+        if ingest_structured_artifact(
+            artifact=artifact,
+            outcome=outcome,
+            pending_writes=field_values,
+        ):
+            continue
         if outcome.status == "evidence_only":
             evidence_only_artifacts.append(
                 _evidence_only_record(artifact=artifact, outcome=outcome)
