@@ -165,6 +165,7 @@ def test_pyproject_declares_approved_extraction_dependencies() -> None:
         "defusedxml==0.7.1",
         "lxml==6.0.2",
         "Pillow==12.2.0",
+        "authlib==1.6.1",
     )
     for pin in required_pins:
         assert pin in text, f"missing approved extraction dependency pin: {pin}"

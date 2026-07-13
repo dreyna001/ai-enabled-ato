@@ -269,3 +269,4 @@ Internal consolidation only (no new deps): route remaining secret reads in
 | Date | Change |
 | --- | --- |
 | 2026-07-13 | Initial plan approved (Authlib, jsonpointer spike, ClamAV Diff 7, keep list). |
+| 2026-07-13 | Authlib production id_token validation implemented (`oidc_jwt.py`); TM-002 unit matrix landed; HS-003 remains customer IdP drill. |

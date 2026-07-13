@@ -32,6 +32,8 @@ dependencies = [
     "python-multipart",
     "sqlalchemy[asyncio]>=2",
     "uvicorn[standard]",
+    # authlib: production OIDC id_token signature and claim validation (TM-002).
+    "authlib==1.6.1",
 ]
 
 [project.scripts]

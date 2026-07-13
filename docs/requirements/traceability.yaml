@@ -257,10 +257,16 @@
       "spec_section": "32",
       "requirement_text": "Portal and API access use OIDC and default-deny object-level authorization.",
       "epic": "EP-06-review-portal",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned OIDC and role-by-object API authorization tests; production deployment also depends on HS-003",
-      "status": "planned"
+      "implementation_files": [
+        "src/ato_service/oidc_auth.py",
+        "src/ato_service/oidc_jwt.py",
+        "docs/THREAT_MODEL.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_oidc_auth.py"
+      ],
+      "verification_type": "Authlib JWT validation matrix (signature, iss, aud, exp, iat skew, nonce, kid rotation, jwk-header rejection); production deployment also depends on HS-003 live IdP drill",
+      "status": "partial"
     },
     {
       "requirement_id": "R-015",

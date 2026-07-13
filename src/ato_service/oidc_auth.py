@@ -136,6 +136,8 @@ async def exchange_code_for_identity(
     """Exchange an authorization code and validate returned identity claims."""
     if is_embedded_dev_oidc_issuer(config, settings):
         return OidcIdentity(actor_id=DEV_OIDC_ACTOR_ID, groups=DEV_OIDC_GROUPS)
+    if settings.oidc_issuer_url.rstrip("/").endswith(DEV_OIDC_PATH_PREFIX):
+        raise OidcAuthenticationError()
 
     redirect_uri = build_oidc_redirect_uri(settings)
     token_url = urljoin(settings.oidc_issuer_url.rstrip("/") + "/", "token")
@@ -162,16 +164,13 @@ async def exchange_code_for_identity(
     if not isinstance(id_token, str) or not id_token:
         raise OidcAuthenticationError()
 
-    claims = _decode_jwt_payload(id_token)
-    token_nonce = claims.get("nonce")
-    if token_nonce != nonce:
-        raise OidcAuthenticationError()
-    audience = claims.get("aud")
-    if isinstance(audience, list):
-        if settings.oidc_audience not in audience:
-            raise OidcAuthenticationError()
-    elif audience != settings.oidc_audience:
-        raise OidcAuthenticationError()
+    from ato_service.oidc_jwt import validate_production_id_token
+
+    claims = await validate_production_id_token(
+        id_token=id_token,
+        settings=settings,
+        nonce=nonce,
+    )
 
     actor_id = claims.get("sub")
     if not isinstance(actor_id, str) or not actor_id.strip():
