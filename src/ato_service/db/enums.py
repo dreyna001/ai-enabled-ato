@@ -40,6 +40,7 @@ ARTIFACT_KIND_VALUES: tuple[str, ...] = (
     "architecture",
     "attestation",
     "reference_catalog",
+    "privacy_artifact",
 )
 
 MALWARE_SCAN_STATUS_VALUES: tuple[str, ...] = (
@@ -138,3 +139,34 @@ MATRIX_STATUS_VALUES: tuple[str, ...] = (
 )
 
 MATRIX_ROW_STATUS_VALUES: tuple[str, ...] = MATRIX_STATUS_VALUES
+
+REVIEW_REVISION_STATUS_VALUES: tuple[str, ...] = (
+    "draft",
+    "submitted",
+    "superseded",
+)
+
+DISPOSITION_DECISION_VALUES: tuple[str, ...] = (
+    "pending",
+    "accepted",
+    "edited",
+    "rejected",
+    "evidence_requested",
+    "weakness_confirmed",
+)
+
+EXPORT_DRAFT_STATUS_VALUES: tuple[str, ...] = (
+    "draft",
+    "pending_approval",
+    "approved",
+    "rejected",
+    "expired",
+    "superseded",
+    "exported",
+)
+
+APPROVAL_DECISION_VALUES: tuple[str, ...] = (
+    "pending",
+    "approved",
+    "rejected",
+)

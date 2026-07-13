@@ -1,0 +1,11 @@
+{
+  "summary": "Synthetic assessor SAR excerpt for qualification import-only tests.",
+  "findings": [
+    {
+      "id": "finding-1",
+      "control_id": "AC-2",
+      "status": "satisfied",
+      "statement": "Account management procedures reviewed by assessor."
+    }
+  ]
+}

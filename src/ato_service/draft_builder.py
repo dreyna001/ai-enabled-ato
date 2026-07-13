@@ -82,10 +82,24 @@ def build_initial_draft(
     segment_count = 0
     extension_segments: list[dict[str, Any]] = []
     evidence_only_artifacts: list[dict[str, Any]] = []
+    from ato_service.assessor_import import ingest_assessor_artifact
+    from ato_service.privacy_ingest import ingest_privacy_artifact
     from ato_service.structured_ingest import ingest_structured_artifact
 
     for artifact, outcome in artifact_outcomes:
         segment_count += len(outcome.segments)
+        if ingest_privacy_artifact(
+            artifact=artifact,
+            outcome=outcome,
+            pending_writes=field_values,
+        ):
+            continue
+        if ingest_assessor_artifact(
+            artifact=artifact,
+            outcome=outcome,
+            pending_writes=field_values,
+        ):
+            continue
         if ingest_structured_artifact(
             artifact=artifact,
             outcome=outcome,
@@ -135,7 +149,14 @@ def build_initial_draft(
     for draft_pointer in sorted(field_values):
         write = field_values[draft_pointer]
         if isinstance(write, _ProvenanceWrite):
-            _commit_field(document=document, provenance=provenance, write=write)
+            if write.draft_pointer.startswith("/assessor_inputs/"):
+                _commit_assessor_import_field(
+                    document=document,
+                    provenance=provenance,
+                    write=write,
+                )
+            else:
+                _commit_field(document=document, provenance=provenance, write=write)
 
     if extension_segments:
         document.setdefault("extensions", {})
@@ -173,6 +194,45 @@ def validate_package_draft_document(document: dict[str, Any]) -> None:
             _format_validation_error(errors[0]),
             error_code="draft_schema_invalid",
         )
+
+
+def _commit_assessor_import_field(
+    *,
+    document: dict[str, Any],
+    provenance: dict[str, Any],
+    write: _ProvenanceWrite,
+) -> None:
+    """Commit import-only assessor_inputs entries from attestation uploads."""
+    if not write.draft_pointer.startswith("/assessor_inputs/"):
+        raise DraftBuildError(
+            "assessor import may only populate assessor_inputs",
+            error_code="draft_schema_invalid",
+        )
+    value = write.value
+    if not isinstance(value, dict) or value.get("owner") != "assessor" or value.get("import_only") is not True:
+        raise DraftBuildError(
+            "assessor import entries must be owner-tagged and import-only",
+            error_code="draft_schema_invalid",
+        )
+    _require_valid_json_pointer(write.draft_pointer)
+    if write.draft_pointer in provenance:
+        existing_value = _value_at_json_pointer(document, write.draft_pointer)
+        if existing_value == write.value:
+            return
+        raise DraftBuildError(
+            "conflicting values map to the same canonical draft pointer",
+            error_code="duplicate_canonical_id",
+        )
+    _set_json_pointer(document, write.draft_pointer, write.value)
+    provenance[write.draft_pointer] = {
+        "source_artifact_id": str(write.source_artifact_id).lower(),
+        "source_sha256": write.source_sha256,
+        "source_locator": write.source_locator,
+        "extraction_method": write.extraction_method,
+        "model_step_id": None,
+        "owner": "assessor",
+        "import_only": True,
+    }
 
 
 def _commit_field(
