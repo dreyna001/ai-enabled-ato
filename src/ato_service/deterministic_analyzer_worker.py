@@ -14,7 +14,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ato_service.db.models import AnalysisRun, PackageRevision
+from ato_service.db.models import AnalysisRun, PackageRevision, SealedPackageContent
 from ato_service.db.session import (
     create_async_engine_from_url,
     create_session_factory,
@@ -25,6 +25,11 @@ from ato_service.deterministic_analyzer import (
     DeterministicAnalysisResult,
     process_next_deterministic_analysis,
     require_deterministic_analyzer_runtime,
+)
+from ato_service.model_assisted_analyzer import (
+    ModelAssistedAnalysisProcessingError,
+    ModelAssistedAnalysisResult,
+    process_next_model_assisted_analysis,
 )
 from ato_service.jobs import (
     claim_next_eligible_job,
@@ -111,6 +116,30 @@ async def process_next_deterministic_analysis_job(
         return None
 
     try:
+        if analysis_run.run_type == "targeted":
+            sealed_result = await session.execute(
+                select(SealedPackageContent).where(
+                    SealedPackageContent.package_revision_id
+                    == package_revision.package_revision_id
+                )
+            )
+            sealed = sealed_result.scalar_one_or_none()
+            if sealed is None:
+                raise ModelAssistedAnalysisProcessingError(
+                    "sealed package content is required for targeted analysis",
+                    error_code="analysis_not_eligible",
+                )
+            return await process_next_model_assisted_analysis(
+                session,
+                claimed=claimed,
+                package_revision=package_revision,
+                analysis_run=analysis_run,
+                sealed=sealed,
+                storage_root=storage_root,
+                project_root=project_root,
+                hmac_key=hmac_key,
+                now=now,
+            )
         return await process_next_deterministic_analysis(
             session,
             claimed=claimed,
@@ -121,7 +150,7 @@ async def process_next_deterministic_analysis_job(
             hmac_key=hmac_key,
             now=now,
         )
-    except DeterministicAnalysisProcessingError as exc:
+    except (DeterministicAnalysisProcessingError, ModelAssistedAnalysisProcessingError) as exc:
         await record_job_failure(
             session,
             job_id=claimed.job.job_id,

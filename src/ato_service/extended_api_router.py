@@ -7,14 +7,14 @@ from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.api_dependencies import get_audit_hmac_key, get_db_session, get_runtime_state
 from ato_service.api_router import get_mutation_principal, get_read_principal
-from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.authorization_decisions import (
     AttachAuthorizationDecisionInput,
     attach_authorization_decision,
@@ -22,9 +22,12 @@ from ato_service.authorization_decisions import (
 )
 from ato_service.change_analysis import build_change_analysis
 from ato_service.export_service import (
+    ExportNotFoundError,
+    ExportValidationError,
     SelfApprovalDeniedError,
     approve_export,
     create_export_draft,
+    deliver_export_download,
     submit_export_draft,
 )
 from ato_service.package_chat import chat_with_package
@@ -412,5 +415,48 @@ def build_extended_router() -> APIRouter:
         except SelfApprovalDeniedError:
             return JSONResponse(status_code=403, content={"error": "self_approval_denied"})
         return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
+
+    @router.get("/exports/{id}/download", tags=["Exports"])
+    async def get_export_download(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> Response:
+        try:
+            result = await deliver_export_download(
+                session,
+                principal=principal,
+                export_id=id,
+                storage_root=runtime_state.snapshot.storage_root,
+                project_root=runtime_state.snapshot.project_root,
+                authority_manifest_id=runtime_state.authority_manifest_id,
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except ExportNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ExportValidationError as exc:
+            status = 410 if exc.error_code == "export_expired" else 422
+            if exc.error_code == "approval_payload_mismatch":
+                status = 412
+            if exc.error_code == "authorization_denied":
+                status = 403
+            return JSONResponse(status_code=status, content={"error": exc.error_code})
+        except AuthorizationDeniedError:
+            return JSONResponse(status_code=403, content={"error": "authorization_denied"})
+        return Response(
+            content=result.zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{result.filename}"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, no-store",
+            },
+            status_code=result.status,
+        )
 
     return router

@@ -196,6 +196,8 @@
       "implementation_files": [
         "src/ato_service/matrix_coverage.py",
         "src/ato_service/deterministic_analyzer.py",
+        "src/ato_service/model_assisted_analyzer.py",
+        "src/ato_service/deterministic_analyzer_worker.py",
         "src/ato_service/analysis_runs.py",
         "migrations/versions/20260711_0006_matrix_rows.py"
       ],
@@ -207,7 +209,7 @@
         "tests/ato_service/test_deterministic_analyzer.py::test_build_matrix_rows_covers_all_profile_items_with_zero_llm_status",
         "tests/ato_service/test_analysis_run_api_routes.py::test_get_matrix_returns_envelope"
       ],
-      "verification_type": "Deterministic matrix-coverage validator plus deterministic_only analyzer worker persists exact-coverage matrix rows with llm_call_count=0 for ready dev_local synthetic revisions; model-assisted runs remain planned",
+      "verification_type": "Deterministic and targeted sealed-content analyzer workers persist exact-coverage matrix rows; production customer model calls remain blocked by HS-004",
       "status": "partial"
     },
     {
@@ -215,10 +217,16 @@
       "spec_section": "32",
       "requirement_text": "Citations are bound to source hashes and stable offsets and remain valid across processing.",
       "epic": "EP-01-core-safety",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned verbatim-excerpt, hash, and offset validation tests",
-      "status": "planned"
+      "implementation_files": [
+        "src/ato_service/citation_validation.py",
+        "src/ato_service/model_assisted_analyzer.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_citation_validation.py::test_validate_evidence_citation_accepts_matching_offsets",
+        "tests/ato_service/test_citation_validation.py::test_validate_evidence_citation_rejects_out_of_bounds_offsets"
+      ],
+      "verification_type": "Sealed-source citation hash and offset validation on model-assisted matrix rows; production customer model calls remain blocked by HS-004",
+      "status": "partial"
     },
     {
       "requirement_id": "R-011",
@@ -287,11 +295,16 @@
       "epic": "EP-06-review-portal",
       "implementation_files": [
         "src/ato_service/export_service.py",
+        "src/ato_service/export_assembly.py",
         "src/ato_service/review_revisions.py",
+        "src/ato_service/extended_api_router.py",
         "docs/contracts/export-manifest.schema.json"
       ],
-      "test_ids": [],
-      "verification_type": "Hash-bound export draft and approval service with self-approval denial; download ZIP assembly and live approval drills remain partial",
+      "test_ids": [
+        "tests/ato_service/test_export_assembly.py::test_assemble_export_bundle_reproduces_approved_manifest_hash",
+        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied"
+      ],
+      "verification_type": "Hash-bound export draft, approval, sanitized ZIP assembly, and download route with audit/idempotency; live customer approval drills remain partial under HS-003",
       "status": "partial"
     },
     {
@@ -626,10 +639,20 @@
       "spec_section": "28.1",
       "requirement_text": "The authorization test matrix covers RBAC, object-level authorization, CSRF, and self-approval denial.",
       "epic": "EP-06-review-portal",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned role-by-object, CSRF, and self-approval security tests",
-      "status": "planned"
+      "implementation_files": [
+        "src/ato_service/package_rbac.py",
+        "src/ato_service/auth_context.py",
+        "src/ato_service/export_service.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_denies_viewer_mutation_roles",
+        "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_allows_owner_as_reviewer",
+        "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_allows_dedicated_approver_group",
+        "tests/ato_service/test_ep06_security_matrix.py::test_mutation_context_requires_csrf_and_origin",
+        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied"
+      ],
+      "verification_type": "RBAC role matrix, CSRF/origin mutation gate, and self-approval denial unit coverage; live OIDC object-level drills remain partial under HS-003",
+      "status": "partial"
     },
     {
       "requirement_id": "P0-008",

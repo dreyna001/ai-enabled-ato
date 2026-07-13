@@ -1,11 +1,16 @@
 import {
   INVALID_RESPONSE_MESSAGE,
   parseAnalysisRun,
+  parseApproval,
+  parseDisposition,
+  parseExportDraft,
   parseMatrixList,
   parsePackageRevision,
   parsePackageRevisionDraft,
+  parsePreflight,
   parseProposalList,
   parseReadinessResponse,
+  parseReviewRevision,
   parseRevisionList,
   parseRunList,
   parseSessionInfo,
@@ -14,11 +19,16 @@ import {
 } from "./responseSchemas";
 import type {
   AnalysisRun,
+  Approval,
+  Disposition,
+  ExportDraft,
   FactProposal,
   MatrixRow,
   PackageDraftDocument,
   PackageRevision,
   PackageRevisionDraft,
+  PreflightResult,
+  ReviewRevision,
   ReadinessResponse,
   SessionInfo,
   System,
@@ -613,4 +623,181 @@ export async function listMatrixRows(
   });
   const parsed = await readValidatedJson(response, parseMatrixList);
   return parsed;
+}
+
+export async function getPreflight(
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<PreflightResult> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/preflight`, {
+    credentials: "include",
+    ...options,
+  });
+  return readValidatedJson(response, parsePreflight);
+}
+
+export async function createReviewRevision(
+  session: SessionInfo,
+  runId: string,
+  options: ApiFetchOptions = {},
+): Promise<ReviewRevision> {
+  const response = await apiFetch(`${API_BASE}/runs/${runId}/review-revisions`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session),
+      ...options.headers,
+    },
+    ...options,
+  });
+  return readValidatedJson(response, parseReviewRevision);
+}
+
+export async function submitReviewRevision(
+  session: SessionInfo,
+  reviewRevisionId: string,
+  etag: string,
+  options: ApiFetchOptions = {},
+): Promise<ReviewRevision> {
+  const response = await apiFetch(`${API_BASE}/review-revisions/${reviewRevisionId}/submit`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session, { "If-Match": etag }),
+      ...options.headers,
+    },
+    ...options,
+  });
+  return readValidatedJson(response, parseReviewRevision);
+}
+
+export async function updateDisposition(
+  session: SessionInfo,
+  reviewRevisionId: string,
+  matrixRowId: string,
+  etag: string,
+  body: { decision: string; edited_summary?: string | null; notes?: string | null },
+  options: ApiFetchOptions = {},
+): Promise<Disposition> {
+  const response = await apiFetch(
+    `${API_BASE}/review-revisions/${reviewRevisionId}/dispositions/${matrixRowId}`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...mutationHeaders(session, { "If-Match": etag }),
+        ...options.headers,
+      },
+      body: JSON.stringify(body),
+      ...options,
+    },
+  );
+  return readValidatedJson(response, parseDisposition);
+}
+
+export async function createExportDraft(
+  session: SessionInfo,
+  reviewRevisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<ExportDraft> {
+  const response = await apiFetch(
+    `${API_BASE}/review-revisions/${reviewRevisionId}/export-drafts`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Idempotency-Key": crypto.randomUUID(),
+        ...mutationHeaders(session),
+        ...options.headers,
+      },
+      ...options,
+    },
+  );
+  return readValidatedJson(response, parseExportDraft);
+}
+
+export async function submitExportDraft(
+  session: SessionInfo,
+  exportDraftId: string,
+  options: ApiFetchOptions = {},
+): Promise<Approval> {
+  const response = await apiFetch(`${API_BASE}/export-drafts/${exportDraftId}/submit`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session, { "If-Match": '"v1"' }),
+      ...options.headers,
+    },
+    ...options,
+  });
+  return readValidatedJson(response, parseApproval);
+}
+
+export async function approveExport(
+  session: SessionInfo,
+  approvalId: string,
+  options: ApiFetchOptions = {},
+): Promise<Approval> {
+  const response = await apiFetch(`${API_BASE}/approvals/${approvalId}/approve`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session),
+      ...options.headers,
+    },
+    body: JSON.stringify({}),
+    ...options,
+  });
+  return readValidatedJson(response, parseApproval);
+}
+
+export async function downloadExport(
+  _session: SessionInfo,
+  exportId: string,
+  options: ApiFetchOptions = {},
+): Promise<Blob> {
+  const response = await apiFetch(`${API_BASE}/exports/${exportId}/download`, {
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...options.headers,
+    },
+    ...options,
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, response.statusText);
+  }
+  return response.blob();
+}
+
+export async function startTargetedRun(
+  session: SessionInfo,
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<AnalysisRun> {
+  const response = await apiFetch(
+    `${API_BASE}/package-revisions/${revisionId}/runs`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID(),
+        ...mutationHeaders(session),
+        ...options.headers,
+      },
+      body: JSON.stringify({
+        run_type: "targeted",
+        parent_run_id: null,
+        assessment_item_ids: [],
+      }),
+      ...options,
+    },
+  );
+  return readValidatedJson(response, parseAnalysisRun);
 }

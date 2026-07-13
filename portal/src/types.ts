@@ -139,6 +139,54 @@ export type MatrixRow = {
   finding_summary: string;
 };
 
+export type PreflightResult = {
+  analysis_eligible: boolean;
+  export_eligible: boolean;
+  analysis_blockers: string[];
+  export_blockers: string[];
+  warnings: string[];
+  readiness: {
+    numerator: number;
+    denominator: number;
+    score: number;
+  };
+};
+
+export type Disposition = {
+  matrix_row_id: string;
+  decision: string;
+  edited_summary: string | null;
+  notes: string | null;
+  version: number;
+  decided_by: string;
+  decided_at: string;
+};
+
+export type ReviewRevision = {
+  review_revision_id: string;
+  run_id: string;
+  version: number;
+  status: string;
+  dispositions: Disposition[];
+};
+
+export type ExportDraft = {
+  export_draft_id: string;
+  review_revision_id: string;
+  payload_manifest_sha256: string;
+  status: string;
+};
+
+export type Approval = {
+  approval_id: string;
+  export_draft_id: string;
+  payload_manifest_sha256: string;
+  submitted_by: string;
+  decided_by: string | null;
+  decision: string;
+  expires_at: string;
+};
+
 export type ReadinessCheck = {
   name: string;
   status: string;

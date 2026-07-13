@@ -18,16 +18,19 @@ def generate_profile_artifacts(
     sealed_document: dict[str, Any],
     review_revision_id: Any,
     run_id: Any,
+    dispositions: list[dict[str, Any]] | None = None,
+    matrix_rows: list[dict[str, Any]] | None = None,
 ) -> GeneratedProfileArtifacts:
     """Generate draft human/machine artifact descriptors without HS-001/HS-002 claims."""
+    readme_text = (
+        "Draft export bundle. Official schema qualification remains blocked by open hard stops."
+    )
     files: list[dict[str, Any]] = [
         {
             "path": "README.txt",
             "media_type": "text/plain",
-            "sha256": _sha256_text(
-                "Draft export bundle. Official schema qualification remains blocked by open hard stops."
-            ),
-            "size_bytes": 88,
+            "sha256": _sha256_text(readme_text),
+            "size_bytes": len(readme_text.encode("utf-8")),
             "official_schema_id": None,
         },
         {
@@ -56,10 +59,52 @@ def generate_profile_artifacts(
                     sort_keys=True,
                 )
             ),
-            "size_bytes": 64,
+            "size_bytes": len(
+                json.dumps(
+                    {
+                        "review_revision_id": str(review_revision_id).lower(),
+                        "run_id": str(run_id).lower(),
+                    },
+                    sort_keys=True,
+                )
+            ),
             "official_schema_id": None,
         },
     ]
+    if dispositions is not None:
+        disposition_bytes = json.dumps({"dispositions": dispositions}, sort_keys=True)
+        files.append(
+            {
+                "path": "provenance/dispositions.json",
+                "media_type": "application/json",
+                "sha256": _sha256_text(disposition_bytes),
+                "size_bytes": len(disposition_bytes.encode("utf-8")),
+                "official_schema_id": None,
+            }
+        )
+    if matrix_rows is not None:
+        matrix_bytes = json.dumps({"rows": matrix_rows}, sort_keys=True)
+        files.append(
+            {
+                "path": "machine/assessment-matrix.json",
+                "media_type": "application/json",
+                "sha256": _sha256_text(matrix_bytes),
+                "size_bytes": len(matrix_bytes.encode("utf-8")),
+                "official_schema_id": None,
+            }
+        )
+    files.extend(
+        _profile_specific_files(profile_id=profile_id, sealed_document=sealed_document)
+    )
+    return GeneratedProfileArtifacts(files=files)
+
+
+def _profile_specific_files(
+    *,
+    profile_id: str,
+    sealed_document: dict[str, Any],
+) -> list[dict[str, Any]]:
+    files: list[dict[str, Any]] = []
     if profile_id == "fedramp_20x_program":
         section = sealed_document.get("fedramp_20x") or {}
         files.append(
@@ -93,7 +138,7 @@ def generate_profile_artifacts(
                 "official_schema_id": None,
             }
         )
-    return GeneratedProfileArtifacts(files=files)
+    return files
 
 
 def _readiness_summary(*, profile_id: str, document: dict[str, Any]) -> str:

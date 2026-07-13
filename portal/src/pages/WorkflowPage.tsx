@@ -15,10 +15,13 @@ import {
   listRuns,
   listSystems,
   startRun,
+  startTargetedRun,
 } from "@/api/client";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { IntakeProgressPanel } from "@/components/IntakeProgressPanel";
+import { PreflightPanel } from "@/components/PreflightPanel";
+import { ReviewExportWorkbench } from "@/components/ReviewExportWorkbench";
 import {
   MatrixTableSkeleton,
   RevisionWorkflowSkeleton,
@@ -564,29 +567,51 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
 
             {revision.status === "ready" ? (
               <div className="space-y-6">
+                <PreflightPanel revisionId={revision.package_revision_id} />
                 <AlertBanner tone="warning">
                   Draft analysis readiness - not official status in GRC, FedRAMP, or an
                   agency authorization process.
                 </AlertBanner>
 
-                <div className="flex flex-row items-center justify-between gap-4">
+                <div className="flex flex-row flex-wrap items-center justify-between gap-4">
                   <h3 className="text-base font-semibold">Analysis runs</h3>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      void startRun(session, revision.package_revision_id)
-                        .then((created) => {
-                          setSelectedRunId(created.run_id);
-                          return refreshRevisionDetail();
-                        })
-                        .then(() => refreshRunDetail())
-                        .then(() => setMessage("Deterministic analysis run started."))
-                        .catch((err) => setError(formatApiError(err)));
-                    }}
-                  >
-                    Start deterministic run
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        void startRun(session, revision.package_revision_id)
+                          .then((created) => {
+                            setSelectedRunId(created.run_id);
+                            return refreshRevisionDetail();
+                          })
+                          .then(() => refreshRunDetail())
+                          .then(() => setMessage("Deterministic analysis run started."))
+                          .catch((err) => setError(formatApiError(err)));
+                      }}
+                    >
+                      Start deterministic run
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void startTargetedRun(session, revision.package_revision_id)
+                          .then((created) => {
+                            setSelectedRunId(created.run_id);
+                            return refreshRevisionDetail();
+                          })
+                          .then(() => refreshRunDetail())
+                          .then(() =>
+                            setMessage("Targeted sealed-content analysis run started."),
+                          )
+                          .catch((err) => setError(formatApiError(err)));
+                      }}
+                    >
+                      Start targeted run
+                    </Button>
+                  </div>
                 </div>
 
                 {runs.length === 0 ? (
@@ -677,6 +702,11 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
                                 </tbody>
                               </table>
                             </div>
+                            <ReviewExportWorkbench
+                              session={session}
+                              runId={activeRun.run_id}
+                              matrixRows={matrixRows}
+                            />
                           </>
                         ) : (
                           <MatrixTableSkeleton />

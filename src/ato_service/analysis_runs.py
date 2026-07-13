@@ -268,8 +268,10 @@ def _assert_deterministic_run_gate(
         raise AnalysisRunPolicyError(error_code="model_routing_denied")
     if package_revision.status != "ready":
         raise AnalysisRunPolicyError(error_code="analysis_not_eligible")
-    if run_type != "deterministic_only":
+    if run_type not in {"deterministic_only", "targeted"}:
         raise AnalysisRunPolicyError(error_code="prohibited_model_action")
+    if run_type == "targeted" and package_revision.package_content_sha256 is None:
+        raise AnalysisRunPolicyError(error_code="analysis_not_eligible")
 
 
 async def start_run(

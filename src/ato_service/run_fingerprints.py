@@ -10,8 +10,11 @@ from ato_service.idempotency import canonical_json_bytes
 from ato_service.runtime_config import RuntimeConfig
 
 _EMPTY_PROMPT_BUNDLE_BYTES = canonical_json_bytes({})
+_TARGETED_PROMPT_BUNDLE_BYTES = canonical_json_bytes({"bundle": "targeted-sealed-mock-1"})
 DETERMINISTIC_MODEL_PROFILE = "deterministic"
+TARGETED_MODEL_PROFILE = "mock-assisted"
 DETERMINISTIC_PROMPT_BUNDLE_SHA256 = hashlib.sha256(_EMPTY_PROMPT_BUNDLE_BYTES).hexdigest()
+TARGETED_PROMPT_BUNDLE_SHA256 = hashlib.sha256(_TARGETED_PROMPT_BUNDLE_BYTES).hexdigest()
 
 
 def compute_config_fingerprint(config: RuntimeConfig) -> str:
@@ -27,14 +30,18 @@ def prompt_bundle_sha256_for_run_type(run_type: str) -> str:
     """Return the prompt bundle digest for a run type."""
     if run_type == "deterministic_only":
         return DETERMINISTIC_PROMPT_BUNDLE_SHA256
-    raise ValueError("only deterministic_only runs are supported in this slice")
+    if run_type == "targeted":
+        return TARGETED_PROMPT_BUNDLE_SHA256
+    raise ValueError("only deterministic_only and targeted runs are supported in this slice")
 
 
 def model_profile_for_run_type(run_type: str) -> str:
     """Return the model profile label stored on an analysis run."""
     if run_type == "deterministic_only":
         return DETERMINISTIC_MODEL_PROFILE
-    raise ValueError("only deterministic_only runs are supported in this slice")
+    if run_type == "targeted":
+        return TARGETED_MODEL_PROFILE
+    raise ValueError("only deterministic_only and targeted runs are supported in this slice")
 
 
 def _strip_credential_references(document: dict[str, Any]) -> dict[str, Any]:

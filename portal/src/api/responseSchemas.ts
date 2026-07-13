@@ -223,3 +223,71 @@ export function parseReadinessResponse(value: unknown) {
 export function parsePackageRevisionDraft(value: unknown) {
   return parseWithSchema(packageRevisionDraftSchema, value);
 }
+
+const preflightSchema = z.object({
+  analysis_eligible: z.boolean(),
+  export_eligible: z.boolean(),
+  analysis_blockers: z.array(z.string()),
+  export_blockers: z.array(z.string()),
+  warnings: z.array(z.string()),
+  readiness: z.object({
+    numerator: z.number().int().nonnegative(),
+    denominator: z.number().int().nonnegative(),
+    score: z.number(),
+  }),
+});
+
+const dispositionSchema = z.object({
+  matrix_row_id: z.string().uuid(),
+  decision: z.string(),
+  edited_summary: z.string().nullable(),
+  notes: z.string().nullable(),
+  version: z.number().int().nonnegative(),
+  decided_by: z.string(),
+  decided_at: z.string(),
+});
+
+const reviewRevisionSchema = z.object({
+  review_revision_id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  version: z.number().int().nonnegative(),
+  status: z.string(),
+  dispositions: z.array(dispositionSchema),
+});
+
+const exportDraftSchema = z.object({
+  export_draft_id: z.string().uuid(),
+  review_revision_id: z.string().uuid(),
+  payload_manifest_sha256: z.string().length(64),
+  status: z.string(),
+});
+
+const approvalSchema = z.object({
+  approval_id: z.string().uuid(),
+  export_draft_id: z.string().uuid(),
+  payload_manifest_sha256: z.string().length(64),
+  submitted_by: z.string(),
+  decided_by: z.string().nullable(),
+  decision: z.string(),
+  expires_at: z.string(),
+});
+
+export function parsePreflight(value: unknown) {
+  return parseWithSchema(preflightSchema, value);
+}
+
+export function parseDisposition(value: unknown) {
+  return parseWithSchema(dispositionSchema, value);
+}
+
+export function parseReviewRevision(value: unknown) {
+  return parseWithSchema(reviewRevisionSchema, value);
+}
+
+export function parseExportDraft(value: unknown) {
+  return parseWithSchema(exportDraftSchema, value);
+}
+
+export function parseApproval(value: unknown) {
+  return parseWithSchema(approvalSchema, value);
+}
