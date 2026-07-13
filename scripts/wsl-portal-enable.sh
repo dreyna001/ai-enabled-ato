@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Enable portal auth on an existing WSL local deploy (API on 8001 + OIDC dev issuer).
+if grep -q $'\r' "$0" 2>/dev/null; then
+  exec /usr/bin/env bash <(sed 's/\r$//' "$0") "$@"
+fi
 set -euo pipefail
 
 readonly INSTALL_DIR="/opt/ato-analyzer"

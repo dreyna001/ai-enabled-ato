@@ -2,6 +2,9 @@
 # wsl-local-deploy.sh -- Install and start the implemented ATO API + synthetic
 # intake worker inside WSL using production host paths (/opt, /etc, /var) and
 # systemd. WSL-only; not a production release claim.
+if grep -q $'\r' "$0" 2>/dev/null; then
+  exec /usr/bin/env bash <(sed 's/\r$//' "$0") "$@"
+fi
 set -euo pipefail
 IFS=$'\n\t'
 
