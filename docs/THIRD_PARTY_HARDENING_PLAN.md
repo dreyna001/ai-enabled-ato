@@ -141,6 +141,11 @@ Custom behavior that must survive consolidation:
 4. If library cannot express auto-create cleanly, **keep custom helpers** and close
    the spike as "no change."
 
+**Verdict (2026-07-13): no-go.** The `jsonpointer` library raises when intermediate
+dict keys are missing; product set semantics require auto-create to `{}`. Custom
+helpers in `json_utils.py` and `draft_builder.py` are retained. See
+`tests/ato_service/test_jsonpointer_evaluation.py`.
+
 ### Out of scope
 
 - Changing canonical JSON digest algorithms or merge policy.
@@ -270,3 +275,4 @@ Internal consolidation only (no new deps): route remaining secret reads in
 | --- | --- |
 | 2026-07-13 | Initial plan approved (Authlib, jsonpointer spike, ClamAV Diff 7, keep list). |
 | 2026-07-13 | Authlib production id_token validation implemented (`oidc_jwt.py`); TM-002 unit matrix landed; HS-003 remains customer IdP drill. |
+| 2026-07-13 | jsonpointer spike verdict: **no-go** — library lacks intermediate dict auto-create; custom helpers retained (`test_jsonpointer_evaluation.py`). |
