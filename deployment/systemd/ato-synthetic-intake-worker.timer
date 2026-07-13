@@ -1,0 +1,10 @@
+[Unit]
+Description=Drain synthetic JSON intake revisions every 30 seconds (WSL local)
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+Unit=ato-synthetic-intake-worker.service
+
+[Install]
+WantedBy=timers.target

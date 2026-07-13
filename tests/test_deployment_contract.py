@@ -12,9 +12,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 SYSTEMD_UNIT = ROOT / "deployment" / "systemd" / "ato-api.service"
+WSL_SYSTEMD_UNIT = ROOT / "deployment" / "systemd" / "ato-api.wsl-local.service"
+SYNTHETIC_WORKER_UNIT = (
+    ROOT / "deployment" / "systemd" / "ato-synthetic-intake-worker.service"
+)
+SYNTHETIC_WORKER_TIMER = (
+    ROOT / "deployment" / "systemd" / "ato-synthetic-intake-worker.timer"
+)
 NGINX_CONF = ROOT / "deployment" / "nginx" / "ato-api.conf"
 INSTALL_SCRIPT = ROOT / "scripts" / "install.sh"
+WSL_DEPLOY_SCRIPT = ROOT / "scripts" / "wsl-local-deploy.sh"
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke_service_chain.sh"
+WSL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_local.json"
 DEPLOYMENT_README = ROOT / "deployment" / "README.md"
 PYPROJECT = ROOT / "pyproject.toml"
 MAIN_MODULE = ROOT / "src" / "ato_service" / "main.py"
@@ -83,6 +92,11 @@ def deployment_readme_text() -> str:
         INSTALL_SCRIPT,
         SMOKE_SCRIPT,
         RUNTIME_CONFIG_EXAMPLE_SRC,
+        WSL_SYSTEMD_UNIT,
+        SYNTHETIC_WORKER_UNIT,
+        SYNTHETIC_WORKER_TIMER,
+        WSL_DEPLOY_SCRIPT,
+        WSL_RUNTIME_CONFIG,
     ],
 )
 def test_deployment_assets_exist(path: Path) -> None:
@@ -96,6 +110,8 @@ def test_deployment_assets_exist(path: Path) -> None:
         NGINX_CONF,
         INSTALL_SCRIPT,
         SMOKE_SCRIPT,
+        WSL_DEPLOY_SCRIPT,
+        WSL_RUNTIME_CONFIG,
     ],
 )
 def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
@@ -109,7 +125,7 @@ def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 @pytest.mark.parametrize(
     "script",
-    [INSTALL_SCRIPT, SMOKE_SCRIPT],
+    [INSTALL_SCRIPT, SMOKE_SCRIPT, WSL_DEPLOY_SCRIPT],
 )
 def test_shell_scripts_pass_bash_syntax_check(script: Path) -> None:
     script_text = _read(script).replace("\r\n", "\n").replace("\r", "\n")
@@ -198,10 +214,51 @@ def test_systemd_unit_hardens_service_and_declares_writable_storage(
         assert directive in systemd_text
 
 
-def test_systemd_unit_does_not_ship_worker_portal_or_model_units() -> None:
+def test_systemd_units_include_production_api_and_wsl_local_worker_only() -> None:
     systemd_dir = ROOT / "deployment" / "systemd"
-    names = {path.name for path in systemd_dir.glob("*.service")}
-    assert names == {"ato-api.service"}
+    service_names = {path.name for path in systemd_dir.glob("*.service")}
+    timer_names = {path.name for path in systemd_dir.glob("*.timer")}
+    assert service_names == {
+        "ato-api.service",
+        "ato-api.wsl-local.service",
+        "ato-synthetic-intake-worker.service",
+    }
+    assert timer_names == {"ato-synthetic-intake-worker.timer"}
+    for forbidden in ("portal", "model", "nginx"):
+        for name in service_names:
+            assert forbidden not in name
+
+
+def test_wsl_systemd_unit_uses_dev_local_runtime_config_under_opt() -> None:
+    text = _read(WSL_SYSTEMD_UNIT)
+    assert (
+        "Environment=ATO_RUNTIME_CONFIG_PATH=/opt/ato-analyzer/runtime-config.json"
+        in text
+    )
+    assert f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}" in text
+    assert f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
+    assert f"ReadWritePaths={DATA_DIR} /opt/ato-analyzer/data/ato-storage" in text
+
+
+def test_wsl_runtime_config_is_dev_local_with_systemd_credentials() -> None:
+    text = _read(WSL_RUNTIME_CONFIG)
+    assert '"runtime_profile": "dev_local"' in text
+    assert '"STORAGE_DATA_PATH": "/data/ato-storage"' in text
+    assert '"source": "systemd_credential"' in text
+    assert '"identifier": "database-dsn"' in text
+    assert '"identifier": "audit-hmac-key"' in text
+
+
+def test_wsl_deploy_script_reuses_installer_and_smoke_chain() -> None:
+    text = _read(WSL_DEPLOY_SCRIPT)
+    assert "scripts/install.sh" in text
+    assert "--skip-nginx" in text
+    assert "--skip-systemd" in text
+    assert "runtime-config.wsl_local.json" in text
+    assert "mount --bind" in text
+    assert "ALLOW_DEGRADED_READY=true" in text
+    assert "wait_for_api_loopback" in text
+    assert "ato-synthetic-intake-worker.timer" in text
 
 
 def test_nginx_template_is_tls_edge_with_loopback_proxy(nginx_text: str) -> None:
@@ -521,3 +578,5 @@ def test_deployment_readme_matches_current_installer_contract(
     assert "# 4. Start API when prerequisites exist" not in deployment_readme_text
     assert "Production-readiness:" in deployment_readme_text
     assert "bash scripts/smoke_service_chain.sh" in deployment_readme_text
+    assert "docs/WSL_LOCAL_DEPLOY.md" in deployment_readme_text
+    assert "scripts/wsl-local-deploy.sh" in deployment_readme_text

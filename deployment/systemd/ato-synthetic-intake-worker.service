@@ -1,0 +1,34 @@
+[Unit]
+Description=ATO synthetic JSON intake worker (WSL local drain)
+Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
+After=network-online.target postgresql.service ato-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ato
+Group=ato
+
+WorkingDirectory=/opt/ato-analyzer
+
+Environment=ATO_RUNTIME_CONFIG_PATH=/opt/ato-analyzer/runtime-config.json
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
+LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+
+ExecStart=/opt/ato-analyzer/venv/bin/ato-synthetic-intake-worker
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/ato-packages /opt/ato-analyzer/data/ato-storage
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ato-synthetic-intake-worker
+
+[Install]
+WantedBy=multi-user.target

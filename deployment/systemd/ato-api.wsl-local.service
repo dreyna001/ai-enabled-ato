@@ -1,0 +1,57 @@
+[Unit]
+Description=ATO Evidence Analysis API (WSL local)
+Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ato
+Group=ato
+
+WorkingDirectory=/opt/ato-analyzer
+
+Environment=ATO_RUNTIME_CONFIG_PATH=/opt/ato-analyzer/runtime-config.json
+Environment=ATO_AUTHORITY_MANIFEST_PATH=/opt/ato-analyzer/docs/contracts/authority-manifest.json
+Environment=ATO_HOST=127.0.0.1
+# WSL local uses 8001 so a Windows-side dev server can keep 8000.
+Environment=ATO_PORT=8001
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
+LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+
+ExecStart=/opt/ato-analyzer/venv/bin/ato-service
+
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/ato-packages /opt/ato-analyzer/data/ato-storage
+
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ato-api
+
+[Install]
+WantedBy=multi-user.target

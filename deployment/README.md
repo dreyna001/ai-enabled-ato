@@ -105,6 +105,22 @@ Optional edge check:
 NGINX_BASE_URL=https://ato-api.customer.internal bash scripts/smoke_service_chain.sh
 ```
 
+## WSL local deploy (developer only)
+
+For a contained Linux environment on Windows with the same `/opt`, `/etc`, and
+`/var` layout plus systemd, use [`docs/WSL_LOCAL_DEPLOY.md`](../docs/WSL_LOCAL_DEPLOY.md).
+That path installs only what exists today:
+
+- `ato-api.service` (WSL variant using `dev_local` runtime JSON under `/opt/ato-analyzer`)
+- `ato-synthetic-intake-worker.service` + timer for P1.2 synthetic JSON intake
+
+It does not claim RHEL validation, production release, nginx TLS edge, OIDC, or
+customer extraction.
+
+```bash
+sudo bash scripts/wsl-local-deploy.sh
+```
+
 ## Verification (repository)
 
 Network-free deployment asset checks:
