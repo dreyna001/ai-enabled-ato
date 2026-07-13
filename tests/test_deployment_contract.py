@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 SYSTEMD_UNIT = ROOT / "deployment" / "systemd" / "ato-api.service"
+ANALYZER_WORKER_UNIT = ROOT / "deployment" / "systemd" / "ato-analyzer-worker.service"
 WSL_SYSTEMD_UNIT = ROOT / "deployment" / "systemd" / "ato-api.wsl-local.service"
 SYNTHETIC_WORKER_UNIT = (
     ROOT / "deployment" / "systemd" / "ato-synthetic-intake-worker.service"
@@ -257,6 +258,7 @@ def test_systemd_units_include_production_api_intake_and_wsl_local_assets() -> N
     assert service_names == {
         "ato-api.service",
         "ato-api.wsl-local.service",
+        "ato-analyzer-worker.service",
         "ato-intake-worker.service",
         "ato-synthetic-intake-worker.service",
     }
@@ -617,6 +619,15 @@ def test_smoke_script_does_not_disable_tls_verification(smoke_text: str) -> None
 
 def test_smoke_script_defaults_to_loopback_api(smoke_text: str) -> None:
     assert "http://127.0.0.1:8000" in smoke_text
+
+
+def test_analyzer_worker_systemd_unit_is_hardened_and_inactive_by_default() -> None:
+    text = _read(ANALYZER_WORKER_UNIT)
+    assert "ato-analyzer-worker" in text
+    assert "NoNewPrivileges=true" in text
+    assert "ProtectSystem=strict" in text
+    assert "ReadWritePaths=/var/ato-packages" in text
+    assert "ato-analyzer" in text
 
 
 def test_deployment_readme_matches_current_installer_contract(

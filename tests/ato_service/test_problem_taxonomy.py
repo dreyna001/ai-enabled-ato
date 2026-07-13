@@ -398,7 +398,7 @@ def test_model_gateway_policy_errors_return_403_without_callback(
     request_factory: Callable[[], ModelCallRequest],
     path_suffix: str,
 ) -> None:
-    app = _create_base_app()
+    app = _create_problem_test_app()
     callback = AsyncMock(return_value="must-not-run")
 
     @app.post("/api/v1/package-revisions/{revision_id}/chat")
@@ -424,7 +424,7 @@ def test_model_gateway_policy_errors_return_403_without_callback(
 def test_model_call_limit_exceeded_returns_422_without_callback(
     run_id: str,
 ) -> None:
-    app = _create_base_app()
+    app = _create_problem_test_app()
     callback = AsyncMock(return_value="must-not-run")
 
     @app.post("/api/v1/package-revisions/{revision_id}/chat")

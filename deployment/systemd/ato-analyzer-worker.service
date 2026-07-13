@@ -1,0 +1,26 @@
+[Unit]
+Description=ATO deterministic analyzer worker (inactive until operator enablement)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ato-analyzer
+Group=ato-analyzer
+WorkingDirectory=/opt/ato-analyzer
+Environment=ATO_RUNTIME_CONFIG_PATH=/etc/ato-analyzer/runtime-config.json
+ExecStart=/opt/ato-analyzer/.venv/bin/ato-analyzer-worker --config /etc/ato-analyzer/runtime-config.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/ato-packages
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryMax=2G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target

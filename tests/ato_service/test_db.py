@@ -93,6 +93,13 @@ EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
         "package_revision_intake_work",
         "package_revision_intake_attempts",
         "package_normalization_steps",
+        "authorization_decision_records",
+        "review_revisions",
+        "dispositions",
+        "review_comments",
+        "export_drafts",
+        "approvals",
+        "exports",
     }
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states"})
@@ -553,10 +560,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_package_normalization_steps_migration() -> None:
+def test_alembic_head_is_review_export_auth_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260714_0009"
+    assert script.get_current_head() == "20260715_0010"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

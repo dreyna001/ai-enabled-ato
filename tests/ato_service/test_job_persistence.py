@@ -330,7 +330,7 @@ def test_postgresql_ddl_compiles_for_job_tables() -> None:
 def test_alembic_head_is_package_editor_persistence_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260714_0009"
+    assert script.get_current_head() == "20260715_0010"
 
 
 def test_jobs_migration_chains_from_initial_migration() -> None:

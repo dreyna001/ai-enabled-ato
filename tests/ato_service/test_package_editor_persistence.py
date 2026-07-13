@@ -87,7 +87,7 @@ def _package_draft_validator() -> Draft202012Validator:
 def test_alembic_head_is_package_editor_persistence_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260714_0009"
+    assert script.get_current_head() == "20260715_0010"
 
 
 def test_migration_declares_package_editor_tables_and_columns() -> None:

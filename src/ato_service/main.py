@@ -161,6 +161,9 @@ def create_app(
     from ato_service.auth_router import create_auth_router
 
     app.include_router(create_api_router(), prefix="/api/v1")
+    from ato_service.extended_api_router import build_extended_router
+
+    app.include_router(build_extended_router(), prefix="/api/v1")
     app.include_router(create_auth_router(), prefix="/api/v1")
     app.openapi = lambda: _custom_openapi(app)
     if runtime_state is not None:

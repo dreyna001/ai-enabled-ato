@@ -1146,7 +1146,8 @@
             "scanner_export",
             "architecture",
             "attestation",
-            "reference_catalog"
+            "reference_catalog",
+            "privacy_artifact"
           ]
         },
         "malware_scan_status": {

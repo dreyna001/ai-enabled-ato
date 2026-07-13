@@ -355,7 +355,8 @@
                       "scanner_export",
                       "architecture",
                       "attestation",
-                      "reference_catalog"
+                      "reference_catalog",
+                      "privacy_artifact"
                     ]
                   },
                   "source_date": {

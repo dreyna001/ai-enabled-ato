@@ -10,6 +10,7 @@ export const ARTIFACT_KINDS = [
   "fedramp_sdr",
   "fedramp_ocr",
   "fedramp_scg",
+  "privacy_artifact",
 ] as const;
 
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
@@ -26,6 +27,7 @@ export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
   fedramp_sdr: "FedRAMP SDR",
   fedramp_ocr: "FedRAMP OCR",
   fedramp_scg: "FedRAMP SCG",
+  privacy_artifact: "Privacy artifact",
 };
 
 export const UPLOAD_ACCEPT =

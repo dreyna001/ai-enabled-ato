@@ -225,9 +225,16 @@
       "spec_section": "32",
       "requirement_text": "Official FedRAMP and OSCAL payloads remain schema-pure and are validated against reviewed official schemas.",
       "epic": "EP-05-draft-artifacts",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Blocked by HS-001; planned official FedRAMP and OSCAL schema validation",
+      "implementation_files": [
+        "src/ato_service/preflight.py",
+        "src/ato_service/export_readiness.py",
+        "docs/contracts/preflight.schema.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_downstream_contracts.py::test_preflight_blocks_export_without_assessor_and_privacy",
+        "tests/ato_service/test_downstream_contracts.py::test_export_readiness_reports_missing_assessor_inputs"
+      ],
+      "verification_type": "Deterministic preflight with separate analysis_eligible and export_eligible; structural FedRAMP export-readiness checks remain draft-only under HS-001",
       "status": "blocked"
     },
     {
@@ -236,10 +243,14 @@
       "requirement_text": "Assessor-owned fields are import-only and cannot be generated or changed by the model.",
       "epic": "EP-05-draft-artifacts",
       "implementation_files": [
-        "docs/contracts/domain.schema.json"
+        "src/ato_service/assessor_import.py",
+        "src/ato_service/draft_builder.py",
+        "docs/contracts/package-draft-document.schema.json"
       ],
-      "test_ids": [],
-      "verification_type": "Current schema and prompt review plus planned assessor-field contract tests",
+      "test_ids": [
+        "tests/ato_service/test_assessor_import.py"
+      ],
+      "verification_type": "Import-only assessor_inputs mapper with owner=assessor tagging; normalize_proposal and owner upload paths remain blocked for assessor-owned prefixes",
       "status": "partial"
     },
     {
@@ -258,6 +269,7 @@
       "requirement_text": "Portal and API access use OIDC and default-deny object-level authorization.",
       "epic": "EP-06-review-portal",
       "implementation_files": [
+        "src/ato_service/package_rbac.py",
         "src/ato_service/oidc_auth.py",
         "src/ato_service/oidc_jwt.py",
         "docs/THREAT_MODEL.md"
@@ -265,7 +277,7 @@
       "test_ids": [
         "tests/ato_service/test_oidc_auth.py"
       ],
-      "verification_type": "Authlib JWT validation matrix (signature, iss, aud, exp, iat skew, nonce, kid rotation, jwk-header rejection); production deployment also depends on HS-003 live IdP drill",
+      "verification_type": "Authlib JWT validation plus package-scoped RBAC role matrix; production deployment also depends on HS-003 live IdP drill",
       "status": "partial"
     },
     {
@@ -273,10 +285,14 @@
       "spec_section": "32",
       "requirement_text": "Submitters cannot approve their own export and every approval is bound to the exact export payload hash.",
       "epic": "EP-06-review-portal",
-      "implementation_files": [],
+      "implementation_files": [
+        "src/ato_service/export_service.py",
+        "src/ato_service/review_revisions.py",
+        "docs/contracts/export-manifest.schema.json"
+      ],
       "test_ids": [],
-      "verification_type": "Planned self-approval, changed-payload, expiry, and replay tests",
-      "status": "planned"
+      "verification_type": "Hash-bound export draft and approval service with self-approval denial; download ZIP assembly and live approval drills remain partial",
+      "status": "partial"
     },
     {
       "requirement_id": "R-016",

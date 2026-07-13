@@ -16,18 +16,16 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`config/runtime-config.dev_local.bedrock.example.json`](config/runtime-config.dev_local.bedrock.example.json) | Dev/work example for AWS Bedrock text LLM calls |
 | [`systemd/ato-api.service`](systemd/ato-api.service) | Unprivileged API unit; pins config path, loopback bind, and API-consumed database/audit credentials |
 | [`systemd/ato-intake-worker.service`](systemd/ato-intake-worker.service) | Long-running `dev_local` synthetic intake worker (inactive until explicitly enabled) |
+| [`systemd/ato-analyzer-worker.service`](systemd/ato-analyzer-worker.service) | Deterministic analyzer worker unit (inactive until operator enablement) |
 | [`nginx/ato-api.conf`](nginx/ato-api.conf) | Inactive TLS edge template for health-only API exposure |
 | [`nginx/ato-portal.conf`](nginx/ato-portal.conf) | Inactive TLS edge template serving the built React portal and proxying `/api/` |
 | [`../portal/`](../portal/) | React/Vite portal source; build with `npm run build` before packaging |
 | [`../scripts/install.sh`](../scripts/install.sh) | Root installer: layout, package copy, systemd/nginx assets |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
 
-There is no analyzer worker systemd unit, model sidecar, or timer in this
-slice. The application package includes the long-running `ato-intake-worker`
-and `ato-analyzer-worker` processes for `dev_local` synthetic workflows, but
-the installer does not deploy, configure, start, or credential those
-development-only workers by default. Live service installation remains a later
-release gate.
+There is no model sidecar or timer in this slice. The application package
+includes the long-running `ato-intake-worker` and `ato-analyzer-worker`
+processes for `dev_local` synthetic workflows, but the installer does not deploy, configure, start, or credential those development-only workers by default. The analyzer worker systemd unit ships inactive for implemented runtime acceptance; live service installation remains a later release gate.
 
 ## Host layout
 
