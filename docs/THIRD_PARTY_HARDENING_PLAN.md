@@ -276,3 +276,4 @@ Internal consolidation only (no new deps): route remaining secret reads in
 | 2026-07-13 | Initial plan approved (Authlib, jsonpointer spike, ClamAV Diff 7, keep list). |
 | 2026-07-13 | Authlib production id_token validation implemented (`oidc_jwt.py`); TM-002 unit matrix landed; HS-003 remains customer IdP drill. |
 | 2026-07-13 | jsonpointer spike verdict: **no-go** — library lacks intermediate dict auto-create; custom helpers retained (`test_jsonpointer_evaluation.py`). |
+| 2026-07-13 | ClamAV local adapter implemented (`clamav_scanner.py`); runtime schema/examples/docs updated; **HS-005** remains open pending customer live drill. |

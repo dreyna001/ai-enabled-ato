@@ -351,6 +351,34 @@
     "MALWARE_SCANNER_FAILURE_POLICY": {
       "const": "fail_closed"
     },
+    "MALWARE_SCANNER_TRANSPORT": {
+      "type": "string",
+      "enum": [
+        "unix_socket",
+        "tcp_loopback"
+      ]
+    },
+    "MALWARE_SCANNER_SOCKET_PATH": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "MALWARE_SCANNER_HOST": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "MALWARE_SCANNER_PORT": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "MALWARE_SCANNER_TIMEOUT_SECONDS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 30
+    },
     "RETENTION_YEARS": {
       "allOf": [
         {
@@ -492,6 +520,8 @@
           "MALWARE_SCANNER_ENABLED",
           "MALWARE_SCANNER_ID",
           "MALWARE_SCANNER_FAILURE_POLICY",
+          "MALWARE_SCANNER_TRANSPORT",
+          "MALWARE_SCANNER_TIMEOUT_SECONDS",
           "RETENTION_YEARS",
           "APPROVAL_EXPIRY_DAYS",
           "AUDIT_CHAIN_ALGORITHM",
@@ -520,6 +550,49 @@
             ]
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "runtime_profile": {
+            "const": "onprem_production"
+          },
+          "MALWARE_SCANNER_TRANSPORT": {
+            "const": "unix_socket"
+          }
+        },
+        "required": [
+          "runtime_profile",
+          "MALWARE_SCANNER_TRANSPORT"
+        ]
+      },
+      "then": {
+        "required": [
+          "MALWARE_SCANNER_SOCKET_PATH"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "runtime_profile": {
+            "const": "onprem_production"
+          },
+          "MALWARE_SCANNER_TRANSPORT": {
+            "const": "tcp_loopback"
+          }
+        },
+        "required": [
+          "runtime_profile",
+          "MALWARE_SCANNER_TRANSPORT"
+        ]
+      },
+      "then": {
+        "required": [
+          "MALWARE_SCANNER_HOST",
+          "MALWARE_SCANNER_PORT"
+        ]
       }
     },
     {
