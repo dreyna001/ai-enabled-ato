@@ -498,6 +498,8 @@ def create_api_router() -> APIRouter:
         principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        blob_store: Annotated[BlobStore, Depends(get_blob_store)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
         if_match = request.headers.get("if-match")
@@ -509,6 +511,8 @@ def create_api_router() -> APIRouter:
             idempotency_key=idempotency_key,
             hmac_key=audit_hmac_key,
             now=_utc_now(),
+            config=runtime_state.config,
+            blob_store=blob_store,
         )
         return _package_revision_json_response(result)
 

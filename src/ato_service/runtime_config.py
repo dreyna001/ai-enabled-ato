@@ -93,6 +93,24 @@ _DOMAIN_MAX_FILES_PER_REVISION = 500
 
 
 _DEFAULT_APPROVAL_EXPIRY_DAYS = 7
+_DEFAULT_CHAT_MAX_RETRIEVED_CHUNKS = 8
+_DEFAULT_CHAT_TURN_LIMIT = 20
+_DEFAULT_CHAT_DAILY_TOKEN_LIMIT_PER_USER = 100_000
+_DEFAULT_CHAT_RATE_LIMIT = {"max_requests": 30, "window_seconds": 60}
+_DEFAULT_CHAT_INPUT_LIMIT = {"value": 4000, "unit": "characters"}
+
+
+@dataclass(frozen=True, slots=True)
+class ChatLimits:
+    """Immutable package-chat limits resolved from runtime configuration."""
+
+    max_retrieved_chunks: int
+    rate_limit_max_requests: int
+    rate_limit_window_seconds: int
+    input_limit_value: int
+    input_limit_unit: str
+    turn_limit: int
+    daily_token_limit_per_user: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +161,11 @@ class RuntimeConfig:
                 "TEXT_MODEL_PROVIDER must be openai_compatible or aws_bedrock"
             )
         return provider
+
+    @property
+    def chat_limits(self) -> ChatLimits:
+        """Return validated package-chat limits from runtime configuration."""
+        return _resolve_chat_limits(self.document)
 
     @property
     def installation_customer_enterprise_id(self) -> str:
@@ -517,6 +540,63 @@ def _validate_process_capability_consistency(document: dict[str, Any]) -> None:
                 "TEXT_MODEL_ENDPOINT_POLICY_APPROVED must be true when "
                 "PROCESS_CAPABILITIES.text_model_calls is true for onprem_production"
             )
+    if capabilities.package_chat:
+        _resolve_chat_limits(document)
+    if capabilities.package_search:
+        _resolve_chat_limits(document)
+
+
+def _resolve_chat_limits(document: dict[str, Any]) -> ChatLimits:
+    max_retrieved = document.get("CHAT_MAX_RETRIEVED_CHUNKS", _DEFAULT_CHAT_MAX_RETRIEVED_CHUNKS)
+    if isinstance(max_retrieved, bool) or not isinstance(max_retrieved, int):
+        raise RuntimeConfigValidationError("CHAT_MAX_RETRIEVED_CHUNKS must be an integer")
+    if max_retrieved < 1 or max_retrieved > 8:
+        raise RuntimeConfigValidationError("CHAT_MAX_RETRIEVED_CHUNKS must be between 1 and 8")
+
+    rate_limit = document.get("CHAT_RATE_LIMIT_PER_USER", _DEFAULT_CHAT_RATE_LIMIT)
+    if not isinstance(rate_limit, dict):
+        raise RuntimeConfigValidationError("CHAT_RATE_LIMIT_PER_USER must be an object")
+    max_requests = rate_limit.get("max_requests")
+    window_seconds = rate_limit.get("window_seconds")
+    if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 1:
+        raise RuntimeConfigValidationError("CHAT_RATE_LIMIT_PER_USER.max_requests must be a positive integer")
+    if isinstance(window_seconds, bool) or not isinstance(window_seconds, int) or window_seconds < 1:
+        raise RuntimeConfigValidationError(
+            "CHAT_RATE_LIMIT_PER_USER.window_seconds must be a positive integer"
+        )
+
+    input_limit = document.get("CHAT_INPUT_LIMIT", _DEFAULT_CHAT_INPUT_LIMIT)
+    if not isinstance(input_limit, dict):
+        raise RuntimeConfigValidationError("CHAT_INPUT_LIMIT must be an object")
+    input_value = input_limit.get("value")
+    input_unit = input_limit.get("unit")
+    if isinstance(input_value, bool) or not isinstance(input_value, int) or input_value < 1:
+        raise RuntimeConfigValidationError("CHAT_INPUT_LIMIT.value must be a positive integer")
+    if input_unit not in {"characters", "tokens"}:
+        raise RuntimeConfigValidationError("CHAT_INPUT_LIMIT.unit must be characters or tokens")
+
+    turn_limit = document.get("CHAT_TURN_LIMIT", _DEFAULT_CHAT_TURN_LIMIT)
+    if isinstance(turn_limit, bool) or not isinstance(turn_limit, int) or turn_limit < 1:
+        raise RuntimeConfigValidationError("CHAT_TURN_LIMIT must be a positive integer")
+
+    daily_tokens = document.get(
+        "CHAT_DAILY_TOKEN_LIMIT_PER_USER",
+        _DEFAULT_CHAT_DAILY_TOKEN_LIMIT_PER_USER,
+    )
+    if isinstance(daily_tokens, bool) or not isinstance(daily_tokens, int) or daily_tokens < 1:
+        raise RuntimeConfigValidationError(
+            "CHAT_DAILY_TOKEN_LIMIT_PER_USER must be a positive integer"
+        )
+
+    return ChatLimits(
+        max_retrieved_chunks=max_retrieved,
+        rate_limit_max_requests=max_requests,
+        rate_limit_window_seconds=window_seconds,
+        input_limit_value=input_value,
+        input_limit_unit=input_unit,
+        turn_limit=turn_limit,
+        daily_token_limit_per_user=daily_tokens,
+    )
 
 
 def _validate_internal_egress_allowlist(document: dict[str, Any]) -> None:

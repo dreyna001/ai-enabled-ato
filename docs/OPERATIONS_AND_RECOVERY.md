@@ -249,7 +249,7 @@ Each retained object supports `legal_hold=true`. Purge must:
 
 1. Require platform-admin initiation and a second confirmation.
 2. Refuse any object under legal hold.
-3. Remove primary blobs, search indexes, derived chunks, prompts/responses, and exports.
+3. Remove primary blobs, search indexes (`package_revision_search_chunks`, `package_revision_search_indexes`), derived chunks, prompts/responses, and exports.
 4. Write a tombstone and a non-sensitive audit event.
 5. Allow encrypted backups to age out under the documented backup schedule.
 
