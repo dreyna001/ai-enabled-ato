@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 from alembic import command
@@ -37,7 +38,7 @@ from ato_operator.evaluation_record import (
     command_validate_evaluation_record,
     command_write_evaluation_record,
 )
-from ato_operator.preflight import run_operator_preflight_sync
+from ato_operator.preflight import PreflightCheckResult, run_operator_preflight_sync
 from ato_operator.qualification_check import run_qualification_check
 from ato_operator.release_allowlist import ReleaseBuildOptions
 from ato_operator.release_packaging import (
@@ -73,6 +74,10 @@ def _resolve_config_path(args: argparse.Namespace) -> Path:
     raise RuntimeConfigError("config path required via --config or ATO_RUNTIME_CONFIG_PATH")
 
 
+def _preflight_check_to_dict(item: PreflightCheckResult) -> dict[str, str]:
+    return {"name": item.name, "status": item.status, "detail": item.detail}
+
+
 def _load_config(args: argparse.Namespace) -> RuntimeConfig:
     config_path = _resolve_config_path(args)
     project_root = _find_project_root(config_path.parent)
@@ -97,7 +102,7 @@ def _command_validate_config(args: argparse.Namespace) -> int:
     payload = {
         "runtime_profile": config.runtime_profile,
         "storage_data_path": str(config.storage_data_path),
-        "process_capabilities": None if capabilities is None else capabilities.__dict__,
+        "process_capabilities": None if capabilities is None else asdict(capabilities),
     }
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -106,7 +111,7 @@ def _command_validate_config(args: argparse.Namespace) -> int:
         print(f"  profile: {config.runtime_profile}")
         print(f"  storage: {config.storage_data_path}")
         if capabilities is not None:
-            active = [name for name, value in capabilities.__dict__.items() if value]
+            active = [name for name, value in asdict(capabilities).items() if value]
             print(f"  active capabilities: {', '.join(active) if active else '(none)'}")
     return 0
 
@@ -127,12 +132,13 @@ def _command_validate_credentials(args: argparse.Namespace) -> int:
             "backup_encryption_key",
         }
     ]
+    passed = all(item.status in {"ok", "skip"} for item in credential_checks)
     if args.json:
         print(
             json.dumps(
                 {
-                    "passed": all(item.status in {"ok", "skip"} for item in credential_checks),
-                    "checks": [item.__dict__ for item in credential_checks],
+                    "passed": passed,
+                    "checks": [_preflight_check_to_dict(item) for item in credential_checks],
                 },
                 indent=2,
                 sort_keys=True,
@@ -141,7 +147,7 @@ def _command_validate_credentials(args: argparse.Namespace) -> int:
     else:
         for item in credential_checks:
             print(f"{item.name}: {item.status} ({item.detail})")
-    return 0 if all(item.status in {"ok", "skip"} for item in credential_checks) else 1
+    return 0 if passed else 1
 
 
 def _command_preflight(args: argparse.Namespace) -> int:
@@ -411,7 +417,7 @@ def _command_print_checklist(args: argparse.Namespace) -> int:
     if args.json:
         print(
             json.dumps(
-                [item.__dict__ for item in items],
+                [asdict(item) for item in items],
                 indent=2,
                 sort_keys=True,
             )
