@@ -41,6 +41,7 @@ ato-service = "ato_service.main:main"
 ato-intake-worker = "ato_service.intake_worker:main"
 ato-synthetic-intake-worker = "ato_service.synthetic_intake_worker:main"
 ato-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"
+ato-operator = "ato_operator.cli:main"
 
 [project.optional-dependencies]
 dev = [
