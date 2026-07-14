@@ -1,10 +1,19 @@
-"""Operator qualification checklist derived from hard stops and Phase 1 gates."""
+"""Operator qualification checklist derived from hard stops and capability topology."""
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
+
+from ato_operator.capability_topology import (
+    DEFAULT_CONFIG_PATH,
+    CapabilityTopologyItem,
+    build_capability_topology,
+)
+from ato_operator.migration_contract import EXPECTED_ALEMBIC_HEAD, resolve_alembic_head
+from ato_service.runtime_config import RuntimeConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +134,58 @@ def build_operator_checklist(*, project_root: Path) -> list[ChecklistItem]:
     return items
 
 
+def build_capability_checklist_report(
+    config: RuntimeConfig,
+    *,
+    project_root: Path,
+    config_path: str = DEFAULT_CONFIG_PATH,
+) -> dict[str, Any]:
+    """Return machine-readable per-capability onboarding checklist without secret values."""
+    topology = build_capability_topology(config, config_path=config_path)
+    head = resolve_alembic_head(project_root=project_root)
+    return {
+        "schema_version": "1.0.0",
+        "runtime_profile": config.runtime_profile,
+        "config_path": config_path,
+        "expected_migration_head": EXPECTED_ALEMBIC_HEAD,
+        "repository_migration_head": head,
+        "migration_head_matches_contract": head == EXPECTED_ALEMBIC_HEAD,
+        "capabilities": [_capability_item_to_dict(item) for item in topology],
+        "hard_stops": [
+            {
+                "hard_stop_id": stop_id,
+                "status": status,
+                "blocked_work": blocked,
+            }
+            for stop_id, status, blocked in _load_hard_stops(project_root)
+        ],
+        "global_verification_commands": [
+            f"ato-operator print-checklist --config {config_path} --json",
+            f"ato-operator verify-migrations --config {config_path} --dry-run",
+            "sudo bash scripts/install.sh --dry-run",
+            "sudo bash scripts/verify_backup_contract.sh",
+        ],
+        "live_validation_pending": [
+            "RHEL 9 systemd install/start on customer host",
+            "PostgreSQL TLS and backup/restore drill execution",
+            "nginx TLS promotion and edge smoke",
+        ],
+    }
+
+
+def _capability_item_to_dict(item: CapabilityTopologyItem) -> dict[str, Any]:
+    payload = asdict(item)
+    payload["credentials"] = [
+        {
+            "config_field": cred.config_field,
+            "identifier": cred.identifier,
+            "systemd_units": list(cred.systemd_units),
+        }
+        for cred in item.credentials
+    ]
+    return payload
+
+
 def format_checklist(items: list[ChecklistItem]) -> str:
     lines = ["ATO operator checklist", ""]
     for item in items:
@@ -135,4 +196,70 @@ def format_checklist(items: list[ChecklistItem]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-__all__ = ["ChecklistItem", "build_operator_checklist", "format_checklist"]
+def format_capability_checklist(report: dict[str, Any]) -> str:
+    lines = [
+        "ATO per-capability onboarding checklist",
+        "",
+        f"runtime_profile: {report['runtime_profile']}",
+        f"config_path: {report['config_path']}",
+        (
+            "migration_head: "
+            f"{report['repository_migration_head']} "
+            f"(expected {report['expected_migration_head']})"
+        ),
+        "",
+    ]
+    for item in report["capabilities"]:
+        state = "enabled" if item["enabled"] else "disabled"
+        lines.append(f"[{item['capability']}] {state}")
+        if item["process"]:
+            lines.append(f"  process: {item['process']}")
+        if item["systemd_unit"]:
+            lines.append(f"  systemd_unit: {item['systemd_unit']}")
+        if item["credentials"]:
+            lines.append("  credentials:")
+            for cred in item["credentials"]:
+                units = ", ".join(cred["systemd_units"]) or "(operator-provisioned)"
+                lines.append(
+                    f"    - {cred['config_field']} -> {cred['identifier']} ({units})"
+                )
+        if item["endpoints"]:
+            lines.append("  endpoints:")
+            for endpoint in item["endpoints"]:
+                lines.append(f"    - {endpoint}")
+        if item["allowlists"]:
+            lines.append("  allowlists:")
+            for allowlist in item["allowlists"]:
+                lines.append(f"    - {allowlist}")
+        if item["hard_stops"]:
+            lines.append(f"  hard_stops: {', '.join(item['hard_stops'])}")
+        if item["verification_commands"]:
+            lines.append("  verification_commands:")
+            for command in item["verification_commands"]:
+                lines.append(f"    - {command}")
+        lines.append(f"  notes: {item['notes']}")
+        lines.append("")
+
+    lines.append("Global verification commands:")
+    for command in report["global_verification_commands"]:
+        lines.append(f"  - {command}")
+    lines.append("")
+    lines.append("Live validation explicitly pending:")
+    for blocker in report["live_validation_pending"]:
+        lines.append(f"  - {blocker}")
+    lines.append("")
+    lines.append("Open hard stops:")
+    for entry in report["hard_stops"]:
+        lines.append(
+            f"  - {entry['hard_stop_id']}: {entry['status']} ({entry['blocked_work']})"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+__all__ = [
+    "ChecklistItem",
+    "build_capability_checklist_report",
+    "build_operator_checklist",
+    "format_capability_checklist",
+    "format_checklist",
+]

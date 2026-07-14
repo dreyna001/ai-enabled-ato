@@ -165,6 +165,7 @@ def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
         ROLLBACK_SCRIPT,
         BACKUP_CONTRACT_SCRIPT,
         PRESTAGE_SCRIPT,
+        INSTALL_SCRIPT,
     ],
 )
 def test_shell_scripts_pass_bash_syntax_check(script: Path) -> None:
@@ -736,6 +737,76 @@ def test_operational_scripts_reference_bounded_flows() -> None:
     assert "current-snapshot" in rollback_text
     assert "HS-008" in backup_text
     assert "BACKUP_OFF_HOST_ENABLED" in backup_text
+
+
+def test_install_script_supports_dry_run_contract_validation(install_text: str) -> None:
+    assert "--dry-run" in install_text
+    assert "run_install_dry_run" in install_text
+    assert "validate_migration_head_contract" in install_text
+    assert 'EXPECTED_MIGRATION_HEAD="20260717_0012"' in install_text
+    assert "--dry-run cannot be combined with --migrate" in install_text
+
+
+def test_upgrade_and_rollback_scripts_support_dry_run() -> None:
+    upgrade_text = _read(UPGRADE_SCRIPT)
+    rollback_text = _read(ROLLBACK_SCRIPT)
+    assert "--dry-run" in upgrade_text
+    assert "run_upgrade_dry_run" in upgrade_text
+    assert "--dry-run" in rollback_text
+    assert "run_rollback_dry_run" in rollback_text
+
+
+def test_backup_contract_script_supports_strict_fail_closed() -> None:
+    backup_text = _read(BACKUP_CONTRACT_SCRIPT)
+    assert "--strict" in backup_text
+    assert "actionable_issues" in backup_text
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+def test_install_script_dry_run_succeeds_without_root() -> None:
+    result = subprocess.run(
+        ["bash", str(INSTALL_SCRIPT), "--dry-run"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Install dry-run complete" in result.stdout
+    assert "20260717_0012" in result.stdout
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+def test_upgrade_and_rollback_dry_run_succeed_without_root() -> None:
+    for script in (UPGRADE_SCRIPT, ROLLBACK_SCRIPT):
+        result = subprocess.run(
+            ["bash", str(script), "--dry-run"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "dry-run complete" in result.stdout
+
+
+def test_systemd_topology_matches_implemented_process_credentials() -> None:
+    api_text = _read(SYSTEMD_UNIT)
+    intake_text = _read(INTAKE_WORKER_UNIT)
+    analyzer_text = _read(ANALYZER_WORKER_UNIT)
+    for text in (api_text, intake_text, analyzer_text):
+        assert "User=ato" in text
+        assert "Group=ato" in text
+        assert f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}" in text
+        assert f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
+    assert (
+        f"LoadCredential={OIDC_CLIENT_IDENTIFIER}:{OIDC_CLIENT_CREDENTIAL_PATH}"
+        in api_text
+    )
+    assert "LoadCredential=oidc" not in intake_text.lower()
+    assert "LoadCredential=oidc" not in analyzer_text.lower()
+    assert "inactive until operator enablement" in intake_text
+    assert "inactive until operator enablement" in analyzer_text
 
 
 def test_airgap_and_onboarding_docs_retain_json_credential_contract() -> None:

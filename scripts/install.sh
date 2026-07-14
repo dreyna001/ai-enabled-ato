@@ -28,6 +28,8 @@ INSTALL_NGINX_SITE="${INSTALL_NGINX_SITE:-true}"
 START_SERVICE=false
 RUN_SMOKE=false
 RUN_MIGRATE=false
+DRY_RUN=false
+EXPECTED_MIGRATION_HEAD="20260717_0012"
 
 PRODUCTION_SYSTEMD_UNITS=(
     "ato-api.service"
@@ -58,6 +60,7 @@ Options:
   --start              Enable and start ato-api.service after install
   --smoke              Run scripts/smoke_service_chain.sh after install (requires --start)
   --migrate            Run alembic upgrade head using the protected DSN file
+  --dry-run            Validate repository install contract without host mutations
   --skip-systemd       Skip systemd unit installation and daemon-reload
   --skip-nginx         Skip nginx example template installation
   -h, --help           Show this help
@@ -101,6 +104,10 @@ while [[ $# -gt 0 ]]; do
             RUN_MIGRATE=true
             shift
             ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         --skip-systemd)
             INSTALL_SYSTEMD_UNITS=false
             shift
@@ -124,6 +131,9 @@ validate_boolean "INSTALL_NGINX_SITE" "$INSTALL_NGINX_SITE"
 
 if [[ "$RUN_SMOKE" == "true" && "$START_SERVICE" != "true" ]]; then
     err "--smoke requires --start in the same invocation (for example: --migrate --start --smoke)"
+fi
+if [[ "$DRY_RUN" == "true" && ( "$START_SERVICE" == "true" || "$RUN_SMOKE" == "true" || "$RUN_MIGRATE" == "true" ) ]]; then
+    err "--dry-run cannot be combined with --migrate, --start, or --smoke"
 fi
 
 check_root() {
@@ -398,6 +408,63 @@ install_nginx_examples() {
     warn "Replace TLS placeholders and rename *.conf.example before enabling nginx sites"
 }
 
+validate_migration_head_contract() {
+    local head=""
+    if ! head="$("$PYTHON_BIN" - "$REPO_DIR" "$EXPECTED_MIGRATION_HEAD" <<'PY'
+import sys
+from pathlib import Path
+
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
+project_root = Path(sys.argv[1])
+expected = sys.argv[2]
+script = ScriptDirectory.from_config(Config(str(project_root / "alembic.ini")))
+head = script.get_current_head() or ""
+print(head)
+raise SystemExit(0 if head == expected else 2)
+PY
+)"; then
+        err "Repository migration head must be ${EXPECTED_MIGRATION_HEAD} (found: ${head:-unknown})"
+    fi
+    info "Migration head contract satisfied: $head"
+}
+
+run_install_dry_run() {
+    info "Dry-run mode: validating install contract without host mutations"
+    check_python_version "$PYTHON_BIN"
+    validate_migration_head_contract
+
+    local unit
+    for unit in "${PRODUCTION_SYSTEMD_UNITS[@]}"; do
+        [[ -f "$REPO_DIR/deployment/systemd/$unit" ]] \
+            || err "Missing systemd unit in repository: deployment/systemd/$unit"
+        info "Repository systemd unit present: $unit"
+    done
+
+    for template_name in "${NGINX_EXAMPLE_TEMPLATES[@]}"; do
+        [[ -f "$REPO_DIR/deployment/nginx/$template_name" ]] \
+            || err "Missing nginx template in repository: deployment/nginx/$template_name"
+        info "Repository nginx template present: $template_name"
+    done
+
+    [[ -f "$REPO_DIR/deployment/config/runtime-config.onprem.example.json" ]] \
+        || err "Missing onprem runtime config example"
+    [[ -f "$REPO_DIR/scripts/smoke_service_chain.sh" ]] \
+        || err "Missing smoke script"
+    [[ -f "$REPO_DIR/scripts/drain_workers.sh" ]] \
+        || err "Missing drain script"
+    [[ -f "$REPO_DIR/scripts/upgrade.sh" ]] \
+        || err "Missing upgrade script"
+    [[ -f "$REPO_DIR/scripts/rollback.sh" ]] \
+        || err "Missing rollback script"
+    [[ -f "$REPO_DIR/scripts/verify_backup_contract.sh" ]] \
+        || err "Missing backup contract script"
+
+    info "Install dry-run contract satisfied"
+    info "Explicit operator actions still required for production: --migrate --start --smoke"
+}
+
 record_release_snapshot() {
     local stamp
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -432,6 +499,7 @@ validate_migration_prerequisites() {
 
 run_database_migrations() {
     validate_migration_prerequisites
+    validate_migration_head_contract
     info "Running database migrations via ATO_DATABASE_DSN_FILE"
     (
         cd "$INSTALL_DIR" || err "Failed to enter install directory: $INSTALL_DIR"
@@ -496,10 +564,18 @@ run_smoke_checks() {
 echo "=== ATO Installation ==="
 echo ""
 
-check_root
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    run_install_dry_run
+    echo ""
+    echo "Install dry-run complete."
+    echo "  Live RHEL/systemd/PostgreSQL/TLS/backup validation remains pending on customer host."
+    exit 0
+fi
+
+check_root
 
 validate_safe_path "INSTALL_DIR" "$INSTALL_DIR"
 validate_safe_path "CONFIG_DIR" "$CONFIG_DIR"

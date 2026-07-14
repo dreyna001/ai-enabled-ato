@@ -11,6 +11,8 @@ readonly REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUN_MIGRATE=true
 RUN_SMOKE=false
 RESTART_API=true
+DRY_RUN=false
+EXPECTED_MIGRATION_HEAD="20260717_0012"
 
 usage() {
     cat <<'EOF'
@@ -23,6 +25,7 @@ Options:
   --no-migrate           Skip alembic upgrade head
   --smoke                Run scripts/smoke_service_chain.sh after restart
   --no-restart           Refresh files without restarting ato-api.service
+  --dry-run              Validate upgrade contract without host mutations
   -h, --help             Show this help
 EOF
 }
@@ -35,10 +38,30 @@ while [[ $# -gt 0 ]]; do
         --no-migrate) RUN_MIGRATE=false; shift ;;
         --smoke) RUN_SMOKE=true; shift ;;
         --no-restart) RESTART_API=false; shift ;;
+        --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) err "Unknown argument: $1" ;;
     esac
 done
+
+if [[ "$DRY_RUN" == "true" && "$RUN_SMOKE" == "true" ]]; then
+    err "--dry-run cannot be combined with --smoke"
+fi
+
+run_upgrade_dry_run() {
+    info "Dry-run mode: validating upgrade contract without host mutations"
+    bash "$SCRIPT_DIR/install.sh" --dry-run
+    [[ -f "$SCRIPT_DIR/drain_workers.sh" ]] || err "Missing drain_workers.sh"
+    [[ -f "$SCRIPT_DIR/verify_backup_contract.sh" ]] || err "Missing verify_backup_contract.sh"
+    info "Upgrade dry-run contract satisfied"
+    info "Live upgrade still requires explicit install.sh --migrate/--start and customer backup evidence"
+}
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    run_upgrade_dry_run
+    echo "Upgrade dry-run complete."
+    exit 0
+fi
 
 [[ "$(id -u)" -eq 0 ]] || err "Run as root (sudo)"
 [[ -d "$INSTALL_DIR" ]] || err "Missing install tree: $INSTALL_DIR (run install.sh first)"

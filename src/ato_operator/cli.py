@@ -19,7 +19,13 @@ from sqlalchemy import create_engine
 from ato_operator.approval_expiry import process_approval_expiry_sync
 from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
-from ato_operator.checklist import build_operator_checklist, format_checklist
+from ato_operator.checklist import (
+    build_capability_checklist_report,
+    build_operator_checklist,
+    format_capability_checklist,
+    format_checklist,
+)
+from ato_operator.migration_contract import EXPECTED_ALEMBIC_HEAD
 from ato_operator.drill_handlers import (
     command_list_drill_records,
     command_list_drills,
@@ -178,8 +184,19 @@ def _command_verify_migrations(args: argparse.Namespace) -> int:
     script = ScriptDirectory.from_config(alembic_cfg)
     head = script.get_current_head()
     if args.dry_run:
-        print(f"migration head: {head}")
-        return 0 if head else 1
+        payload = {
+            "head": head,
+            "expected_head": EXPECTED_ALEMBIC_HEAD,
+            "passed": head == EXPECTED_ALEMBIC_HEAD,
+        }
+        if args.json:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(
+                f"head={head} expected={EXPECTED_ALEMBIC_HEAD} "
+                f"passed={payload['passed']}"
+            )
+        return 0 if payload["passed"] else 1
     try:
         dsn = _resolve_dsn(config)
         sync_dsn = dsn.replace("+asyncpg", "")
@@ -323,6 +340,20 @@ def _command_write_evaluation_record(args: argparse.Namespace) -> int:
 
 def _command_print_checklist(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
+    if args.config is not None:
+        config = _load_config(args)
+        config_path = str(_resolve_config_path(args))
+        report = build_capability_checklist_report(
+            config,
+            project_root=project_root,
+            config_path=config_path,
+        )
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+        else:
+            print(format_capability_checklist(report), end="")
+        return 0
+
     items = build_operator_checklist(project_root=project_root)
     if args.json:
         print(
@@ -367,7 +398,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "qualification-check",
             "Validate qualification corpus manifest, digests, and coverage (does not close hard stops)",
         ),
-        ("print-checklist", "Print airgapped onboarding checklist"),
+        (
+            "print-checklist",
+            "Print onboarding checklist; use --config for per-capability topology",
+        ),
     ):
         subparsers.add_parser(name, parents=[parent], help=help_text)
 

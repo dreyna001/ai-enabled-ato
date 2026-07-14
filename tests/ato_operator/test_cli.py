@@ -51,6 +51,19 @@ def test_verify_migrations_dry_run_reports_head() -> None:
     assert rc == 0
 
 
+def test_print_checklist_with_onprem_config() -> None:
+    assert (
+        main(
+            [
+                "print-checklist",
+                "--config",
+                str(ONPREM_EXAMPLE),
+            ]
+        )
+        == 0
+    )
+
+
 def test_qualification_check_reports_fixture_presence() -> None:
     assert main(["qualification-check"]) == 0
     assert main(["qualification-check", "--json"]) == 0

@@ -272,7 +272,7 @@ Workstream A ships a bounded operator CLI (`pyproject.toml` entrypoint `ato-oper
 | `expire-approvals` | Transition `pending_approval` and unexported `approved` drafts past `APPROVAL_EXPIRY_DAYS` to `expired` |
 | `rebuild-search-index` | Rebuild PostgreSQL full-text search chunks and GIN index metadata for one ready package revision |
 | `qualification-check` | Qualification corpus manifest schema, digest, path-safety, and coverage validation (does not close HS-001..009) |
-| `print-checklist` | Operator onboarding checklist including open hard stops |
+| `print-checklist` | Operator onboarding checklist including open hard stops; add `--config` for per-capability process/credential/allowlist topology |
 | `list-drills` | Published customer validation drill catalog |
 | `run-drill` | Execute one validation drill (default `dry_run`; optional `--write-record`) |
 | `list-drill-records` | List immutable drill records under `--records-root` |

@@ -120,6 +120,12 @@ Fails safely when `BACKUP_OFF_HOST_ENABLED=true` but customer target, key owners
 
 Complete the checklist items that apply to your scope; do not infer missing customer inputs.
 
+For a machine-readable per-capability report (enabled processes, credential identifiers, allowlists, hard stops, and verification commands without secret values):
+
+```bash
+ato-operator print-checklist --config /etc/ato-analyzer/runtime-config.json --json
+```
+
 ## 10. Customer validation drills
 
 After configuration and credentials are staged, run bounded validation drills and persist immutable records for customer evidence:

@@ -10,6 +10,7 @@ readonly CREDENTIALS_DIR="$CONFIG_DIR/credentials"
 readonly INSTALL_DIR="/opt/ato-analyzer"
 
 PRE_UPGRADE=false
+STRICT=false
 
 usage() {
     cat <<'EOF'
@@ -20,7 +21,8 @@ backup prerequisites are present. Exits non-zero when backup is enabled in JSON
 but required customer inputs are missing (HS-008). Does not run backup jobs.
 
 Options:
-  --pre-upgrade          Informational mode used by upgrade.sh
+  --pre-upgrade          Informational mode used by upgrade.sh (warn unless --strict)
+  --strict               Fail closed when backup declarations are incomplete
   -h, --help             Show this help
 EOF
 }
@@ -32,6 +34,7 @@ info() { echo "  $*"; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --pre-upgrade) PRE_UPGRADE=true; shift ;;
+        --strict) STRICT=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) err "Unknown argument: $1" ;;
     esac
@@ -101,11 +104,28 @@ import json, sys
 for issue in json.loads(sys.argv[1]):
     print(f"  CHECK: {issue}")
 ' "$issues_json"
-    if [[ "$PRE_UPGRADE" == "true" ]]; then
-        warn "Backup contract incomplete for production claims; upgrade may continue for non-production hosts"
+    actionable_issues="$(printf '%s' "$result" | "$PYBIN" -c '
+import json, sys
+issues = json.load(sys.stdin)["issues"]
+actionable = [
+    issue for issue in issues
+    if not issue.startswith("customer backup target selection")
+]
+print(json.dumps(actionable))
+')"
+    if [[ "$actionable_issues" != "[]" ]]; then
+        if [[ "$PRE_UPGRADE" == "true" && "$STRICT" != "true" ]]; then
+            warn "Backup contract incomplete for production claims; upgrade may continue for non-production hosts"
+            exit 0
+        fi
+        err "Backup contract verification failed (HS-008). Supply customer backup target and key ownership before production readiness."
+    fi
+    if [[ "$PRE_UPGRADE" == "true" && "$STRICT" != "true" ]]; then
+        warn "Backup customer restore drill evidence remains operator-owned (HS-008)"
         exit 0
     fi
-    err "Backup contract verification failed (HS-008). Supply customer backup target and key ownership before production readiness."
+    info "Backup declarations present; customer restore drill evidence remains operator-owned (HS-008)"
+    exit 0
 fi
 
 info "Backup disabled in runtime JSON or contract satisfied for scaffold verification"
