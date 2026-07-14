@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
 from typing import Any
 
 from ato_service.db.models import SourceArtifact

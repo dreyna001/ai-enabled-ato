@@ -14,7 +14,6 @@ import pytest
 
 from ato_service.analysis_runs import (
     AnalysisRunPolicyError,
-    AnalysisRunValidationError,
     ConcurrentRunLimitExceededError,
     StartRunInput,
     start_run,

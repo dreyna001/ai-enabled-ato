@@ -9,7 +9,6 @@ from typing import Awaitable, TypeVar
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-import pytest
 
 from ato_service.intake import IntakeOutcomeKind, IntakeResult, build_intake_lease_owner
 from ato_service.intake_worker import run_intake_worker_loop
