@@ -46,6 +46,7 @@ ato-operator = "ato_operator.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "ruff",
 ]
 bedrock = [
     "boto3>=1.35",

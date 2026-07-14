@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 from ato_service.package_search_index import (
-    PendingSearchChunk,
     collect_searchable_chunks,
     decode_search_cursor,
     encode_search_cursor,

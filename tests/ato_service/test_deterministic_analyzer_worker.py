@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from ato_service.deterministic_analyzer import DeterministicAnalysisResult
 from ato_service.deterministic_analyzer_worker import (

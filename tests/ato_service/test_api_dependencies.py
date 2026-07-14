@@ -22,7 +22,6 @@ from ato_service.api_dependencies import (
 )
 from ato_service.blobs import BlobStore
 from ato_service.main import (
-    RUNTIME_STATE_ATTR,
     AppRuntimeSnapshot,
     AppRuntimeState,
     create_app,

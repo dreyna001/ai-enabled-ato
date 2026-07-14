@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import os
 import signal
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +27,6 @@ from ato_service.deterministic_analyzer import (
 )
 from ato_service.model_assisted_analyzer import (
     ModelAssistedAnalysisProcessingError,
-    ModelAssistedAnalysisResult,
     process_next_model_assisted_analysis,
 )
 from ato_service.jobs import (

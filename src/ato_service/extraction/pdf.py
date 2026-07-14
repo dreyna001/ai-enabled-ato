@@ -17,9 +17,7 @@ from ato_service.extraction.types import (
     ExtractedSegment,
     ExtractionLimits,
     ExtractionOutcome,
-    ExtractionStatus,
     VisionPolicy,
-    VisionStatus,
 )
 
 try:

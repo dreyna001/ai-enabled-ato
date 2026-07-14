@@ -188,6 +188,11 @@ def test_pyproject_declares_service_and_worker_entrypoints() -> None:
     )
 
 
+def test_pyproject_declares_ruff_dev_dependency() -> None:
+    text = _read(PYPROJECT)
+    assert '"ruff"' in text
+
+
 def test_pyproject_declares_approved_extraction_dependencies() -> None:
     """Approved extraction libraries are pinned per PACKAGE_EDITOR_PLAN Section 5."""
     text = _read(PYPROJECT)
@@ -475,10 +480,10 @@ def test_install_script_does_not_shell_source_config_or_log_secrets(
 def test_install_script_keeps_application_code_root_owned(install_text: str) -> None:
     assert "set_install_tree_permissions" in install_text
     assert 'chown -R root:root "$INSTALL_DIR"' in install_text
-    assert f'chown -R "$SVC_USER:$SVC_USER" "$INSTALL_DIR"' not in install_text
-    assert f'ensure_dir "$INSTALL_DIR" "root:root" 755' in install_text
-    assert f'ensure_dir "$DATA_DIR" "$SVC_USER:$SVC_USER" 750' in install_text
-    assert f'create_user_if_missing "$SVC_USER" "$SVC_HOME"' in install_text
+    assert 'chown -R "$SVC_USER:$SVC_USER" "$INSTALL_DIR"' not in install_text
+    assert 'ensure_dir "$INSTALL_DIR" "root:root" 755' in install_text
+    assert 'ensure_dir "$DATA_DIR" "$SVC_USER:$SVC_USER" 750' in install_text
+    assert 'create_user_if_missing "$SVC_USER" "$SVC_HOME"' in install_text
 
 
 def test_install_script_uses_normal_pip_install_without_upgrade(install_text: str) -> None:
@@ -493,12 +498,12 @@ def test_install_script_rejects_symlinks_for_fixed_layout_paths(install_text: st
     assert "reject_unsafe_existing_path" in install_text
     assert "must be a directory, not a symlink" in install_text
     for path_fragment in (
-        f'ensure_dir "$INSTALL_DIR"',
-        f'ensure_dir "$CONFIG_DIR"',
-        f'ensure_dir "$DATA_DIR"',
-        f'ensure_dir "$DATA_DIR/_tmp"',
-        f'ensure_dir "$CREDENTIALS_DIR"',
-        f'ensure_dir "$SVC_HOME"',
+        'ensure_dir "$INSTALL_DIR"',
+        'ensure_dir "$CONFIG_DIR"',
+        'ensure_dir "$DATA_DIR"',
+        'ensure_dir "$DATA_DIR/_tmp"',
+        'ensure_dir "$CREDENTIALS_DIR"',
+        'ensure_dir "$SVC_HOME"',
     ):
         assert path_fragment in install_text
 
@@ -555,7 +560,7 @@ def test_install_script_installs_inactive_runtime_config_example(
         'enforce_existing_regular_file "$DATABASE_DSN_CREDENTIAL_PATH" "root:root" 600'
         in install_text
     )
-    assert f'cp "$src" "$RUNTIME_CONFIG_PATH"' not in install_text
+    assert 'cp "$src" "$RUNTIME_CONFIG_PATH"' not in install_text
 
 
 def test_install_script_rejects_symlink_or_non_regular_destination_files(

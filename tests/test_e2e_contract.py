@@ -11,6 +11,7 @@ from jsonschema.exceptions import SchemaError
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS_DIR = ROOT / "docs" / "contracts"
+CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "contracts.yml"
 
 E2E_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.dev_local.e2e.json"
 E2E_STACK_START = ROOT / "scripts" / "e2e-stack-start.sh"
@@ -46,6 +47,7 @@ def _validator_for(schema_path: Path) -> Draft202012Validator:
         E2E_STACK_COMMON,
         PLAYWRIGHT_CONFIG,
         PORTAL_E2E_README,
+        CONTRACTS_WORKFLOW,
         *SYNTHETIC_PACKAGES,
     ],
 )
@@ -85,3 +87,19 @@ def test_portal_package_declares_e2e_scripts() -> None:
     assert "test:e2e:managed" in scripts
     assert "stack:e2e:start" in scripts
     assert "stack:e2e:stop" in scripts
+
+
+def test_contracts_workflow_declares_offline_and_portal_gates() -> None:
+    text = CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
+    assert "ruff check ." in text
+    assert 'python -m pytest tests/test_contracts.py' in text
+    assert 'python -m pytest -m "not integration"' in text
+    assert "python -m alembic upgrade head" in text
+    assert "test_workflow_e2e_integration.py" in text
+    assert "portal:" in text
+    assert "portal-playwright-mocked:" in text
+    assert "npm test" in text
+    assert "npm run build" in text
+    assert "e2e/security/rendering-authz.spec.ts" in text
+    assert "npx playwright install chromium" in text
+    assert "secrets." not in text

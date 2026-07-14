@@ -14,9 +14,9 @@ import sys
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
-from jsonschema.exceptions import SchemaError, ValidationError
+from jsonschema.exceptions import ValidationError
 
-from ato_service.domain_mapping import format_uuid, format_utc_datetime
+from ato_service.domain_mapping import format_utc_datetime
 from ato_service.storage_reconciliation import (
     StoragePathError,
     ensure_storage_directory,

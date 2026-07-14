@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ato_service.artifact_manifests import (
-    GeneratedRunFile,
     write_artifact_manifest,
     write_run_output_file,
 )

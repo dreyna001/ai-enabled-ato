@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any
 
 from ato_service.revision_delta import (
-    RevisionDeltaReport,
     compute_revision_delta,
     targeted_assessment_item_ids_from_delta,
 )

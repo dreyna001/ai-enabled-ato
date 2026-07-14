@@ -14,7 +14,7 @@ concurrency:
 jobs:
   contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -29,11 +29,74 @@ jobs:
       - name: Install development dependencies
         run: python -m pip install -e ".[dev]"
 
+      - name: Run Ruff
+        run: ruff check .
+
       - name: Run contract tests
         run: python -m pytest tests/test_contracts.py
 
+      - name: Run deployment, portal, and E2E contract tests
+        run: python -m pytest tests/test_deployment_contract.py tests/test_portal_contract.py tests/test_e2e_contract.py
+
+      - name: Run operator tests
+        run: python -m pytest tests/ato_operator
+
       - name: Run non-integration tests
         run: python -m pytest -m "not integration"
+
+  portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Install portal dependencies
+        run: npm ci
+
+      - name: Run portal unit tests
+        run: npm test
+
+      - name: Typecheck and build portal
+        run: npm run build
+
+  portal-playwright-mocked:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: portal
+    env:
+      CI: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Install portal dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run mocked Playwright security regressions
+        run: npx playwright test e2e/security/rendering-authz.spec.ts
 
   integration-postgres:
     runs-on: ubuntu-latest

@@ -138,7 +138,7 @@ def test_load_valid_session_rejects_absolute_timeout() -> None:
 
 
 def test_session_cookie_name_uses_host_prefix_for_https() -> None:
-    settings = _settings()
+    _settings()
     assert session_cookie_name(secure_cookie=True) == SESSION_COOKIE_PRODUCTION
     assert session_cookie_name(secure_cookie=False) == SESSION_COOKIE_DEVELOPMENT
 
