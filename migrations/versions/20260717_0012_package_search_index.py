@@ -12,6 +12,9 @@ branch_labels = None
 depends_on = None
 
 _SHA256_REGEX = "^[a-f0-9]{64}$"
+_FK_PACKAGE_REVISION_SEARCH_INDEXES_REVISION = (
+    "fk_pkg_search_indexes_revision_id"
+)
 
 
 def upgrade() -> None:
@@ -88,7 +91,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["package_revision_id"],
             ["package_revisions.package_revision_id"],
-            name="fk_package_revision_search_indexes_revision_id_package_revisions",
+            name=_FK_PACKAGE_REVISION_SEARCH_INDEXES_REVISION,
             ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint(

@@ -11,6 +11,15 @@ down_revision = "20260711_0006"
 branch_labels = None
 depends_on = None
 
+_FK_PACKAGE_REVISIONS_SYSTEM_CONTEXT_SNAPSHOT = (
+    "fk_pkg_rev_system_context_snapshot_id"
+)
+_FK_SEALED_PACKAGE_CONTENTS_SYSTEM_CONTEXT_SNAPSHOT = (
+    "fk_sealed_pkg_system_context_snapshot_id"
+)
+_FK_PACKAGE_REVISION_DRAFTS_REVISION = "fk_pkg_revision_drafts_revision_id"
+_FK_SEALED_PACKAGE_CONTENTS_REVISION = "fk_sealed_pkg_contents_revision_id"
+
 
 def upgrade() -> None:
     op.create_table(
@@ -70,7 +79,7 @@ def upgrade() -> None:
         sa.Column("system_context_snapshot_id", sa.Uuid(), nullable=True),
     )
     op.create_foreign_key(
-        "fk_package_revisions_system_context_snapshot_id_system_context_snapshots",
+        _FK_PACKAGE_REVISIONS_SYSTEM_CONTEXT_SNAPSHOT,
         "package_revisions",
         "system_context_snapshots",
         ["system_context_snapshot_id"],
@@ -111,7 +120,7 @@ def upgrade() -> None:
             ["package_revision_id"],
             ["package_revisions.package_revision_id"],
             ondelete="RESTRICT",
-            name="fk_package_revision_drafts_package_revision_id_package_revisions",
+            name=_FK_PACKAGE_REVISION_DRAFTS_REVISION,
         ),
         sa.PrimaryKeyConstraint(
             "package_revision_id",
@@ -157,16 +166,13 @@ def upgrade() -> None:
             ["package_revision_id"],
             ["package_revisions.package_revision_id"],
             ondelete="RESTRICT",
-            name="fk_sealed_package_contents_package_revision_id_package_revisions",
+            name=_FK_SEALED_PACKAGE_CONTENTS_REVISION,
         ),
         sa.ForeignKeyConstraint(
             ["system_context_snapshot_id"],
             ["system_context_snapshots.system_context_snapshot_id"],
             ondelete="RESTRICT",
-            name=(
-                "fk_sealed_package_contents_system_context_snapshot_id_"
-                "system_context_snapshots"
-            ),
+            name=_FK_SEALED_PACKAGE_CONTENTS_SYSTEM_CONTEXT_SNAPSHOT,
         ),
         sa.PrimaryKeyConstraint(
             "package_revision_id",
@@ -208,7 +214,7 @@ def downgrade() -> None:
         type_="check",
     )
     op.drop_constraint(
-        "fk_package_revisions_system_context_snapshot_id_system_context_snapshots",
+        _FK_PACKAGE_REVISIONS_SYSTEM_CONTEXT_SNAPSHOT,
         "package_revisions",
         type_="foreignkey",
     )

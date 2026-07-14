@@ -905,3 +905,21 @@ def test_deployment_readme_matches_current_installer_contract(
     assert "bash scripts/smoke_service_chain.sh" in deployment_readme_text
     assert "docs/WSL_LOCAL_DEPLOY.md" in deployment_readme_text
     assert "scripts/wsl-local-deploy.sh" in deployment_readme_text
+
+
+_MIGRATION_IDENTIFIER_PATTERN = re.compile(
+    r'name\s*=\s*(?:"([^"]{64,})"|\'([^\']{64,})\'|\(\s*"([^"]{64,})"\s*\))'
+)
+
+
+def test_migration_constraint_names_fit_postgresql_identifier_limit() -> None:
+    violations: list[str] = []
+    for migration_path in sorted((ROOT / "migrations" / "versions").glob("*.py")):
+        source = migration_path.read_text(encoding="utf-8")
+        for match in _MIGRATION_IDENTIFIER_PATTERN.finditer(source):
+            identifier = next(group for group in match.groups() if group is not None)
+            if len(identifier) > 63:
+                violations.append(f"{migration_path.name}: {identifier} ({len(identifier)})")
+    assert not violations, "PostgreSQL identifier limit is 63 characters:\n" + "\n".join(
+        violations
+    )
