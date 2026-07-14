@@ -267,7 +267,7 @@ def test_verify_release_archive_rejects_traversal_member(release_tree: Path, tmp
 
 
 def test_verify_release_archive_rejects_symlink_member(release_tree: Path, tmp_path: Path) -> None:
-    report = build_release_archive(
+    build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
             output_dir=tmp_path / "releases",

@@ -1,7 +1,7 @@
 # Release Evidence Index
 
-**Status:** Phase 6 documentation reconciliation (2026-07-14)  
-**Repository tip:** `feature/complete-ato-product` at Phase 5 implementation  
+**Status:** Phase 6 integration and release gate (2026-07-14)  
+**Repository tip:** `cursor/phase-6-integration-and-release-gate-f4f1` (integrated from `feature/complete-ato-product` @ `5dea50c` plus quality-gate, documentation-reconciliation, and release-packaging workstreams)  
 **Alembic head:** `20260717_0012` (`migrations/versions/20260717_0012_package_search_index.py`)
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
@@ -25,10 +25,26 @@ This index links automated contract evidence, qualification assets, drill schema
 | Deployment asset contracts | [`tests/test_deployment_contract.py`](../tests/test_deployment_contract.py) | included in non-integration gate | PASS (CI) |
 | Portal/nginx asset contracts | [`tests/test_portal_contract.py`](../tests/test_portal_contract.py) | included in non-integration gate | PASS (CI) |
 | Playwright E2E asset contracts | [`tests/test_e2e_contract.py`](../tests/test_e2e_contract.py) | included in non-integration gate | PASS (code) |
+| Playwright mocked rendering/authz | [`portal/e2e/security/rendering-authz.spec.ts`](../portal/e2e/security/rendering-authz.spec.ts) | `portal-playwright-mocked` | PASS (code) |
+| Release packaging (focused) | [`tests/test_release_packaging.py`](../tests/test_release_packaging.py) | included in non-integration gate | PASS (code) |
 | Service unit/integration (optional) | [`tests/ato_service/test_workflow_e2e_integration.py`](../tests/ato_service/test_workflow_e2e_integration.py), [`test_workflow_recovery_integration.py`](../tests/ato_service/test_workflow_recovery_integration.py) | `integration-postgres` | PASS (CI) when `ATO_TEST_DATABASE_URL` set |
 | PostgreSQL connectivity probe | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | optional local/CI | environment-not-run when URL absent |
 
-Recorded non-integration result at Phase 6 reconciliation: **1585 passed**, 1 skipped, 20 deselected (integration-marked).
+**Generated-at-build (Phase 6 integration gate, Python 3.12):**
+
+| Gate | Result |
+| --- | --- |
+| Focused contract/operator/release suite | **219 passed** |
+| Non-integration regression (`-m "not integration"`) | **1619 passed**, 1 skipped, 20 deselected |
+| Ruff (`ruff check .`) | **0 errors** |
+| Alembic heads | **single head `20260717_0012`** |
+| Portal vitest | **22 passed** |
+| Portal production build | **PASS** |
+| Playwright mocked rendering/authz | **6 passed** |
+| Integration collection without `ATO_TEST_DATABASE_URL` | **20 collected**, all skipped at runtime |
+| Shell syntax (deployment contract) | **10 passed** |
+
+Historical doc-reconciliation record (unchanged gate record [`P6_GATE_RECORD.md`](P6_GATE_RECORD.md)): **1585 passed**, 1 skipped, 20 deselected at documentation-reconciliation tip.
 
 ## Qualification and evaluation manifests
 
@@ -54,7 +70,7 @@ Live customer validation drills on RHEL hosts: **environment-not-run**.
 
 | Workflow | Path | Jobs |
 | --- | --- | --- |
-| Contracts + non-integration | [`.github/workflows/contracts.yml`](../.github/workflows/contracts.yml) | `contracts`, `integration-postgres` |
+| Contracts + non-integration | [`.github/workflows/contracts.yml`](../.github/workflows/contracts.yml) | `contracts`, `integration-postgres`, `portal-playwright-mocked` |
 
 ## Migration head
 
@@ -68,12 +84,14 @@ Live customer validation drills on RHEL hosts: **environment-not-run**.
 
 | Step | Command / asset | Classification |
 | --- | --- | --- |
+| Deterministic archive build | [`scripts/build_release.sh`](../scripts/build_release.sh) | PASS (code); integration dry-run **360 files**, migration head `20260717_0012` |
+| Offline archive verify | [`scripts/verify_release.sh`](../scripts/verify_release.sh) | PASS (code); `signature_status: unavailable` (no publication/signing) |
 | Install layout (no side effects by default) | [`scripts/install.sh`](../scripts/install.sh) | PASS (code) via deployment-contract tests |
-| Portal bundle staging | `portal/dist` after `npm run build` | environment-not-run in CI |
-| Airgap wheel prestage | [`scripts/prestage_airgap_deps.sh`](../scripts/prestage_airgap_deps.sh) | environment-not-run |
+| Portal bundle staging | `portal/dist` after `npm run build` | PASS (code) in integration environment |
+| Airgap wheel prestage | [`scripts/prestage_airgap_deps.sh`](../scripts/prestage_airgap_deps.sh) | PASS (code) `--verify-only` with temporary fixture |
 | Smoke chain | [`scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | environment-not-run without running API |
 | Backup contract check | [`scripts/verify_backup_contract.sh`](../scripts/verify_backup_contract.sh) | PASS (code); **customer-gated (HS-008)** for production readiness |
-| Playwright browser E2E | [`portal/e2e/`](../portal/e2e/) + [`scripts/e2e-stack-start.sh`](../scripts/e2e-stack-start.sh) | environment-not-run |
+| Playwright managed-stack E2E | [`portal/e2e/`](../portal/e2e/) + [`scripts/e2e-stack-start.sh`](../scripts/e2e-stack-start.sh) | environment-not-run |
 
 ## Build-phase gate records
 
@@ -88,7 +106,8 @@ Gate records distinguish **code-complete** automated evidence from **environment
 | P4 Draft artifacts | [`P4_GATE_RECORD.md`](P4_GATE_RECORD.md) | PASS (code) generators + schema | HS-001, HS-002, HS-009 release claims |
 | P5 Portal / review / export | [`P5_GATE_RECORD.md`](P5_GATE_RECORD.md) | PASS (code) API + portal assets | Playwright live **environment-not-run**; **customer-gated (HS-003)** IdP |
 | P6 Advanced analysis / assistant | [`P6_ANALYSIS_GATE_RECORD.md`](P6_ANALYSIS_GATE_RECORD.md) | PASS (code) search/chat/refusal | **blocked (HS-006)** AI qualification |
-| P6 Doc reconciliation | [`P6_GATE_RECORD.md`](P6_GATE_RECORD.md) | PASS (this phase) | Does not close build P6 AI gates |
+| P6 Doc reconciliation | [`P6_GATE_RECORD.md`](P6_GATE_RECORD.md) | PASS (historical) | Does not close build P6 AI gates |
+| P6 Integration / release gate | this index (generated-at-build) | PASS (code) automated gates above | Live RHEL/systemd/nginx/TLS/backup/customer IdP/scanner/model/authority drills **environment-not-run** or **customer-gated** |
 | P7 On-prem release | [`P7_GATE_RECORD.md`](P7_GATE_RECORD.md) | PASS (code) deployment contracts | Live RHEL drills **environment-not-run**; HS-005, HS-008 |
 
 ## Hard stops (never closed from mocks)

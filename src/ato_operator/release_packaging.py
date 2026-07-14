@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from fnmatch import fnmatch
 import gzip
 import hashlib
 import io
@@ -24,7 +23,6 @@ from jsonschema.exceptions import SchemaError, ValidationError
 
 from ato_operator.release_allowlist import (
     ALLOWLIST_ID,
-    DEFAULT_SOURCE_DATE_EPOCH,
     EXECUTABLE_SCRIPT_PREFIXES,
     FORBIDDEN_PATH_SEGMENTS,
     FORBIDDEN_SECRET_PATTERNS,
@@ -349,12 +347,6 @@ def build_release_archive(options: ReleaseBuildOptions) -> ReleaseBuildReport:
     )
 
     archive_sha256 = _hash_file(archive_path)
-    sbom_final = build_sbom(
-        project_root=root,
-        package_version=package_version,
-        git_revision=git_revision,
-        archive_sha256=archive_sha256,
-    )
 
     return ReleaseBuildReport(
         archive_path=archive_path,

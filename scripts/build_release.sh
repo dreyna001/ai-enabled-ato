@@ -7,7 +7,7 @@ IFS=$'\n\t'
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly PYTHON_BIN="${PYTHON_BIN:-python3.12}"
-readonly OUTPUT_DIR="${OUTPUT_DIR:-$REPO_DIR/dist/releases}"
+OUTPUT_DIR="${OUTPUT_DIR:-$REPO_DIR/dist/releases}"
 
 err() { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "  $*"; }
