@@ -1,7 +1,7 @@
 [Unit]
-Description=ATO Evidence Analysis Intake Worker
-Documentation=https://github.com/example/ato-analyzer
-After=network-online.target postgresql.service
+Description=ATO Evidence Analysis Intake Worker (inactive until operator enablement)
+Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
+After=network-online.target postgresql.service ato-api.service
 Wants=network-online.target
 Requires=ato-api.service
 
@@ -9,21 +9,46 @@ Requires=ato-api.service
 Type=simple
 User=ato
 Group=ato
+
+WorkingDirectory=/opt/ato-analyzer
+
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=ATO_RUNTIME_CONFIG_PATH=/etc/ato-analyzer/runtime-config.json
+
+# Protected credentials: runtime JSON references "database-dsn" and
+# "audit-hmac-key". Operators provision both files out of band.
+LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
+LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+
 ExecStart=/opt/ato-analyzer/venv/bin/ato-intake-worker
-Restart=on-failure
+
 TimeoutStopSec=30
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ato-intake-worker
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
+
 NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/var/ato-packages
-LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
-LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ato-intake-worker
 
 [Install]
 WantedBy=multi-user.target
