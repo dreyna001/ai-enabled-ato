@@ -12,6 +12,7 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`config/runtime-config.onprem.example.json`](config/runtime-config.onprem.example.json) | Redacted `onprem_production` template (non-secret settings and credential references only) |
 | [`config/runtime-config.dev_local.json`](config/runtime-config.dev_local.json) | Minimal dev profile referenced by local docs |
 | [`config/runtime-config.dev_local.portal.example.json`](config/runtime-config.dev_local.portal.example.json) | Dev profile with loopback OIDC issuer and portal origin for local portal work |
+| [`config/runtime-config.dev_local.e2e.json`](config/runtime-config.dev_local.e2e.json) | Schema-validated dev_local profile for bounded portal Playwright E2E (no secrets; credential paths materialized by `scripts/e2e-stack-start.sh`) |
 | [`config/runtime-config.dev_local.openai.example.json`](config/runtime-config.dev_local.openai.example.json) | Dev example for OpenAI-compatible text LLM calls |
 | [`config/runtime-config.dev_local.bedrock.example.json`](config/runtime-config.dev_local.bedrock.example.json) | Dev/work example for AWS Bedrock text LLM calls |
 | [`systemd/ato-api.service`](systemd/ato-api.service) | Unprivileged API unit; pins config path, loopback bind, and API-consumed database/audit credentials |

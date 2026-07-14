@@ -11,8 +11,12 @@
     "sync:openapi": "bash scripts/sync_openapi.sh",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:managed": "ATO_E2E_MANAGED_STACK=1 ATO_E2E_STACK_READY=1 playwright test",
+    "test:e2e:existing": "ATO_E2E_USE_EXISTING_STACK=1 ATO_E2E_STACK_READY=1 playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "install:e2e-browsers": "playwright install chromium"
+    "install:e2e-browsers": "playwright install chromium",
+    "stack:e2e:start": "bash ../scripts/e2e-stack-start.sh --portal",
+    "stack:e2e:stop": "bash ../scripts/e2e-stack-stop.sh"
   },
   "dependencies": {
     "@radix-ui/react-separator": "^1.1.8",

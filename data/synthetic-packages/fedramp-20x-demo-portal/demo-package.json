@@ -1,0 +1,80 @@
+{
+  "package": {
+    "profile_id": "fedramp_20x_program",
+    "title": "Synthetic FedRAMP 20x program demo",
+    "prepared_for": "Portal E2E — not official authorization evidence",
+    "reporting_period": null
+  },
+  "system": {
+    "display_name": "E2E FedRAMP 20x System",
+    "authorization_boundary": "Synthetic public cloud boundary for portal E2E only.",
+    "mission_summary": "Deterministic portal workflow fixture.",
+    "impact_level": "moderate",
+    "authorization_path": "fedramp"
+  },
+  "contacts": {
+    "system_owner": ["demo.owner@agency.example"],
+    "isso": ["demo.isso@agency.example"]
+  },
+  "control_set": {
+    "source": {},
+    "tailoring": [],
+    "organization_defined_parameters": {},
+    "inheritance": []
+  },
+  "security_controls": {
+    "CM-2": {
+      "implementation_status": "implemented",
+      "implementation_statement": "Baseline configuration reviewed quarterly.",
+      "responsible_parties": [],
+      "evidence_links": []
+    }
+  },
+  "evidence": {
+    "program_demo": {
+      "artifact_id": "program_demo",
+      "document_type": "cpo_excerpt",
+      "revision_date": "2026-06-15",
+      "attestation": "Synthetic excerpt for local portal E2E only."
+    }
+  },
+  "findings": {},
+  "poam_candidates": {},
+  "assessor_inputs": {},
+  "privacy": {
+    "artifacts_present": false,
+    "scope_notice": "Synthetic demo only."
+  },
+  "fedramp_20x": {
+    "cpo": {
+      "serviceIdentification": {
+        "providerName": "E2E Fixture Provider",
+        "serviceName": "E2E Fixture Service",
+        "serviceAcronym": "EFS",
+        "serviceDescription": "Synthetic portal E2E fixture only.",
+        "certificationType": "20x",
+        "fedRampPackageId": "E2E-FIXTURE-001",
+        "website": "https://example.test/e2e",
+        "logo": "https://example.test/e2e/logo.png"
+      },
+      "serviceProperties": {
+        "serviceType": ["SaaS"],
+        "deploymentModel": "Public Cloud",
+        "digitalIdentityLevel": "IAL2"
+      },
+      "contactInformation": [
+        {
+          "contactType": "Security",
+          "name": "E2E Security Contact",
+          "title": "ISSO",
+          "organization": "E2E Fixture Provider",
+          "email": "security@example.test",
+          "phone": "555-0199"
+        }
+      ]
+    }
+  },
+  "fedramp_rev5_transition": null,
+  "fisma_agency_security": null,
+  "extensions": {}
+}
