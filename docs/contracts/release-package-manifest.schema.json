@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato-analyzer.local/contracts/release-package-manifest.schema.json",
+  "title": "ReleasePackageManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_version",
+    "source_date_epoch",
+    "builder",
+    "allowlist_id",
+    "file_count",
+    "migration_head",
+    "portal_dist_required",
+    "airgap_required",
+    "signature_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "package_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_date_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "git_revision": {
+      "type": ["string", "null"]
+    },
+    "builder": {
+      "type": "string",
+      "minLength": 1
+    },
+    "allowlist_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "file_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "migration_head": {
+      "type": "string",
+      "minLength": 1
+    },
+    "portal_dist_required": {
+      "type": "boolean"
+    },
+    "airgap_required": {
+      "type": "boolean"
+    },
+    "signature_status": {
+      "type": "string",
+      "enum": ["unavailable", "verified", "failed"]
+    },
+    "archive_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

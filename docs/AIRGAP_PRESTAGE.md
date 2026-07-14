@@ -21,21 +21,34 @@ bash scripts/prestage_airgap_deps.sh
 
 # Build portal static assets for packaging
 cd portal && npm ci && npm run build && cd ..
+
+# Build and verify deterministic release archive
+bash scripts/build_release.sh --require-airgap
+bash scripts/verify_release.sh dist/releases/ato-analyzer-*.tar.gz
 ```
 
 This creates:
 
 ```text
 dist/airgap/
-  wheels/          # pip-downloaded dependencies for ato_service
-  manifest.json    # non-secret staging metadata
+  wheels/          # pip-downloaded dependencies with pinned SHA-256 digests
+  manifest.json    # wheel, portal lock, and optional portal dist digests
+dist/releases/
+  ato-analyzer-<version>.tar.gz
+  release/checksums.sha256, release/sbom.json inside the archive
 ```
 
-Transfer the release tree (including `dist/airgap/`, `deployment/`, `scripts/`, `src/`, `portal/dist/` when built) to the airgap host through customer-approved media.
+Transfer the verified release archive (or extracted tree) to the airgap host through customer-approved media. See [`RELEASE_PACKAGING.md`](RELEASE_PACKAGING.md) for full connected and airgap target steps.
 
 ## Target host install
 
 ```bash
+# Verify transferred archive offline (recommended)
+bash scripts/verify_release.sh /media/ato-analyzer-<version>.tar.gz
+
+# Verify prestaged wheels/manifest without network
+bash scripts/prestage_airgap_deps.sh --verify-only
+
 # Create venv and install from local wheels only
 sudo python3.12 -m venv /opt/ato-analyzer/venv
 sudo /opt/ato-analyzer/venv/bin/pip install \

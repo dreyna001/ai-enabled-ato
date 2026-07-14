@@ -28,9 +28,12 @@ DRAIN_SCRIPT = ROOT / "scripts" / "drain_workers.sh"
 UPGRADE_SCRIPT = ROOT / "scripts" / "upgrade.sh"
 ROLLBACK_SCRIPT = ROOT / "scripts" / "rollback.sh"
 BACKUP_CONTRACT_SCRIPT = ROOT / "scripts" / "verify_backup_contract.sh"
+BUILD_RELEASE_SCRIPT = ROOT / "scripts" / "build_release.sh"
+VERIFY_RELEASE_SCRIPT = ROOT / "scripts" / "verify_release.sh"
 PRESTAGE_SCRIPT = ROOT / "scripts" / "prestage_airgap_deps.sh"
 ONBOARDING_DOC = ROOT / "docs" / "CUSTOMER_ONBOARDING.md"
 AIRGAP_DOC = ROOT / "docs" / "AIRGAP_PRESTAGE.md"
+RELEASE_PACKAGING_DOC = ROOT / "docs" / "RELEASE_PACKAGING.md"
 WSL_DEPLOY_SCRIPT = ROOT / "scripts" / "wsl-local-deploy.sh"
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke_service_chain.sh"
 WSL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_local.json"
@@ -123,8 +126,11 @@ def deployment_readme_text() -> str:
         ROLLBACK_SCRIPT,
         BACKUP_CONTRACT_SCRIPT,
         PRESTAGE_SCRIPT,
+        BUILD_RELEASE_SCRIPT,
+        VERIFY_RELEASE_SCRIPT,
         ONBOARDING_DOC,
         AIRGAP_DOC,
+        RELEASE_PACKAGING_DOC,
     ],
 )
 def test_deployment_assets_exist(path: Path) -> None:
@@ -822,6 +828,8 @@ def test_airgap_and_onboarding_docs_retain_json_credential_contract() -> None:
     assert "Do not introduce `config.env`" in onboarding
     assert "credential references" in airgap.lower() or "credential files" in airgap.lower()
     assert "prestage_airgap_deps.sh" in airgap
+    assert "build_release.sh" in airgap or "verify_release.sh" in onboarding
+    assert "RELEASE_PACKAGING.md" in airgap or "RELEASE_PACKAGING.md" in onboarding
 
 
 def test_deployment_readme_matches_current_installer_contract(
@@ -837,6 +845,9 @@ def test_deployment_readme_matches_current_installer_contract(
     assert "scripts/verify_backup_contract.sh" in deployment_readme_text
     assert "CUSTOMER_ONBOARDING.md" in deployment_readme_text
     assert "AIRGAP_PRESTAGE.md" in deployment_readme_text
+    assert "RELEASE_PACKAGING.md" in deployment_readme_text
+    assert "build_release.sh" in deployment_readme_text
+    assert "verify_release.sh" in deployment_readme_text
     assert "/etc/nginx/conf.d/ato-api.conf\n" not in deployment_readme_text
     assert "location /api/" not in deployment_readme_text
     assert "--migrate --start --smoke" in deployment_readme_text
