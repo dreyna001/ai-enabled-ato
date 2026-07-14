@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.platform import requires_symlink
+
 from ato_service.credentials import (
     CREDENTIALS_DIRECTORY_ENV_VAR,
     CredentialResolutionError,
@@ -42,9 +44,7 @@ def test_read_secret_bytes_from_root_owned_file(tmp_path: Path) -> None:
     key_file = tmp_path / "audit-hmac-key"
     key_file.write_bytes(VALID_KEY)
 
-    assert (
-        read_secret_bytes_from_file(key_file.resolve()) == VALID_KEY
-    )
+    assert read_secret_bytes_from_file(key_file.resolve()) == VALID_KEY
 
 
 def test_read_secret_bytes_rejects_relative_path(tmp_path: Path) -> None:
@@ -187,6 +187,7 @@ def test_resolve_secret_bytes_from_systemd_credential_reference(
     assert resolved == VALID_KEY
 
 
+@requires_symlink
 def test_resolve_secret_bytes_rejects_symlinked_systemd_credential_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

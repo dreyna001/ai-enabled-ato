@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
@@ -256,8 +257,10 @@ def _resolve_local_ref(document_path: Path, ref: str) -> tuple[Path, str, Any]:
 
     assert target_path.is_file(), f"missing OpenAPI reference target: {ref}"
     document = _load_json(target_path)
-    return target_path, parsed.fragment, _resolve_json_pointer(
-        document, parsed.fragment, ref
+    return (
+        target_path,
+        parsed.fragment,
+        _resolve_json_pointer(document, parsed.fragment, ref),
     )
 
 
@@ -304,11 +307,15 @@ def _closed_values(
     if "$ref" in schema:
         assert document_path is not None, "document path is required to resolve $ref"
         target_path, _, target = _resolve_local_ref(document_path, schema["$ref"])
-        assert isinstance(target, dict), f"closed enum reference is not a schema: {schema}"
+        assert isinstance(target, dict), (
+            f"closed enum reference is not a schema: {schema}"
+        )
         return _closed_values(target, target_path)
     values = schema.get("enum", schema.get("const"))
     assert isinstance(values, list), f"expected a closed enum, got {schema!r}"
-    assert len(values) == len(set(values)), f"closed enum contains duplicates: {values!r}"
+    assert len(values) == len(set(values)), (
+        f"closed enum contains duplicates: {values!r}"
+    )
     return set(values)
 
 
@@ -318,7 +325,9 @@ def _traceability_records() -> list[dict[str, Any]]:
     )
     document = _load_json(TRACEABILITY_PATH)
     records = document.get("requirements") if isinstance(document, dict) else document
-    assert isinstance(records, list), "traceability must be a list or contain requirements"
+    assert isinstance(records, list), (
+        "traceability must be a list or contain requirements"
+    )
     assert records, "traceability requirements must not be empty"
     assert all(isinstance(record, dict) for record in records)
     return records
@@ -408,7 +417,9 @@ def test_authority_manifest_validates_and_matches_local_bytes() -> None:
 def test_qualification_manifest_validates_and_matches_local_bytes() -> None:
     manifest_path = ROOT / "data" / "qualification" / "manifest.json"
     manifest = _load_json(manifest_path)
-    _validator_for(CONTRACTS_DIR / "qualification-manifest.schema.json").validate(manifest)
+    _validator_for(CONTRACTS_DIR / "qualification-manifest.schema.json").validate(
+        manifest
+    )
 
     fixture_ids = [fixture["fixture_id"] for fixture in manifest["fixtures"]]
     assert len(fixture_ids) == len(set(fixture_ids)), "duplicate fixture_id"
@@ -427,6 +438,9 @@ def test_qualification_manifest_validates_and_matches_local_bytes() -> None:
             ) from error
         assert fixture_path.is_file(), f"missing qualification fixture: {relative_path}"
         content = fixture_path.read_bytes()
+        assert b"\r\n" not in content, (
+            f"{fixture['fixture_id']} must use LF-only bytes; add or fix .gitattributes"
+        )
         assert len(content) == fixture["size_bytes"], (
             f"{fixture['fixture_id']} size_bytes does not match {relative_path}"
         )
@@ -434,6 +448,38 @@ def test_qualification_manifest_validates_and_matches_local_bytes() -> None:
             f"{fixture['fixture_id']} sha256 does not match {relative_path}"
         )
         assert fixture["claim_metadata"]["closes_hard_stops"] is False
+
+
+def test_gitattributes_declares_byte_stable_fixture_paths() -> None:
+    attributes_path = ROOT / ".gitattributes"
+    text = attributes_path.read_text(encoding="utf-8")
+    required_rules = (
+        "*.sh text eol=lf",
+        "data/qualification/**/*.json text eol=lf",
+        "data/qualification/**/*.md text eol=lf",
+        "data/qualification/**/*.csv text eol=lf",
+        "data/qualification/**/*.txt text eol=lf",
+        "data/qualification/**/*.xml text eol=lf",
+        "docs/contracts/**/*.json text eol=lf",
+        "reference/authorities/**/*.json text eol=lf",
+    )
+    for rule in required_rules:
+        assert rule in text, f"missing .gitattributes rule: {rule}"
+
+
+def test_qualification_manifest_regeneration_is_deterministic() -> None:
+    manifest_path = ROOT / "data" / "qualification" / "manifest.json"
+    before = manifest_path.read_bytes()
+    completed = subprocess.run(
+        ["python3", str(ROOT / "scripts" / "regenerate_qualification_manifest.py")],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "wrote" in completed.stdout
+    after = manifest_path.read_bytes()
+    assert after == before, "regenerate_qualification_manifest.py must be deterministic"
 
 
 def test_contract_fixtures_follow_contracts() -> None:
@@ -490,7 +536,9 @@ def test_openapi_minimum_methods_and_health_root_override() -> None:
     for health_path in ("/health/live", "/health/ready"):
         path_item = openapi["paths"][health_path]
         servers = path_item["get"].get("servers", path_item.get("servers"))
-        assert isinstance(servers, list) and [server.get("url") for server in servers] == ["/"], (
+        assert isinstance(servers, list) and [
+            server.get("url") for server in servers
+        ] == ["/"], (
             f"{health_path} must override the /api/v1 server with the root server"
         )
 
@@ -586,11 +634,9 @@ def test_duplicated_closed_enums_are_synchronized() -> None:
             create_revision[property_name], openapi_path
         )
 
-    upload_kind = openapi["paths"][
-        "/package-revisions/{id}/files"
-    ]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"]["properties"][
-        "artifact_kind"
-    ]
+    upload_kind = openapi["paths"]["/package-revisions/{id}/files"]["post"][
+        "requestBody"
+    ]["content"]["multipart/form-data"]["schema"]["properties"]["artifact_kind"]
     assert _closed_values(
         domain_defs["SourceArtifact"]["properties"]["artifact_kind"]
     ) == _closed_values(upload_kind, openapi_path)
@@ -603,7 +649,9 @@ def test_duplicated_closed_enums_are_synchronized() -> None:
     assert _closed_values(
         domain_defs["Disposition"]["properties"]["decision"]
     ) == _closed_values(
-        openapi["components"]["schemas"]["DispositionRequest"]["properties"]["decision"],
+        openapi["components"]["schemas"]["DispositionRequest"]["properties"][
+            "decision"
+        ],
         openapi_path,
     )
 
@@ -660,11 +708,11 @@ def test_runtime_deployment_contract_is_persistent_across_active_plans() -> None
             "Each future process receives only the credential mappings",
             "There is no `config.env`",
         ),
-            OPERATIONS_PATH: (
-                "This table is the target topology.",
-                "ato-intake-worker.service",
-                "environment-not-run",
-            ),
+        OPERATIONS_PATH: (
+            "This table is the target topology.",
+            "ato-intake-worker.service",
+            "environment-not-run",
+        ),
         CONTRACT_INDEX_PATH: (
             "Runtime/deployment values and behavior form one contract",
             "python -m pytest tests/test_deployment_contract.py",
@@ -672,8 +720,7 @@ def test_runtime_deployment_contract_is_persistent_across_active_plans() -> None
         ),
         TRACEABILITY_PATH: (
             '"requirement_id": "R-023"',
-            '"epic": "Cross-cutting: EP-00-contracts through '
-            'EP-08-onprem-release"',
+            '"epic": "Cross-cutting: EP-00-contracts through EP-08-onprem-release"',
         ),
         P1_GATE_PATH: (
             "Runtime configuration contract",
@@ -871,9 +918,7 @@ def _minimal_onprem_runtime_config() -> dict[str, Any]:
         "VISION_MODEL_NAME": "fixture-vision-model",
         "VISION_MODEL_CONTEXT_TOKENS": 4096,
         "VISION_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
-        "MODEL_ENDPOINT_ALLOWLIST": [
-            {"host": "models.example.internal", "port": 443}
-        ],
+        "MODEL_ENDPOINT_ALLOWLIST": [{"host": "models.example.internal", "port": 443}],
         "MAX_MODEL_CALLS_PER_RUN": 120,
         "MAX_MODEL_INPUT_TOKENS_PER_RUN": 100000,
         "MAX_MODEL_OUTPUT_TOKENS_PER_RUN": 20000,
@@ -1213,7 +1258,9 @@ def test_job_and_job_attempt_schema_required_fields() -> None:
         "one JobAttempt per (job_id, attempt_number)",
         "error_code=job_lease_lost",
     ):
-        assert fragment in technical_spec, f"missing technical-spec job contract: {fragment}"
+        assert fragment in technical_spec, (
+            f"missing technical-spec job contract: {fragment}"
+        )
 
     assert "no `available -> failed` transition" in lifecycle
     assert "error_code=job_lease_lost" in lifecycle
@@ -1223,7 +1270,9 @@ def test_job_and_job_attempt_schema_required_fields() -> None:
 
 def test_expired_lease_recovery_contract_semantics() -> None:
     lifecycle = _lifecycle_markdown()
-    operations = (ROOT / "docs" / "OPERATIONS_AND_RECOVERY.md").read_text(encoding="utf-8")
+    operations = (ROOT / "docs" / "OPERATIONS_AND_RECOVERY.md").read_text(
+        encoding="utf-8"
+    )
     technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
     domain = _load_json(CONTRACTS_DIR / "domain.schema.json")
 
@@ -1238,7 +1287,9 @@ def test_expired_lease_recovery_contract_semantics() -> None:
         "one `active` `JobAttempt` row exists per `job_id`",
         "analyzer repository implementation always performs this coupling",
     ):
-        assert fragment in lifecycle, f"missing lifecycle expired-lease contract: {fragment}"
+        assert fragment in lifecycle, (
+            f"missing lifecycle expired-lease contract: {fragment}"
+        )
 
     for fragment in (
         "step_key",
@@ -1248,14 +1299,18 @@ def test_expired_lease_recovery_contract_semantics() -> None:
         "queued -> running",
         "last_error_code=job_lease_lost",
     ):
-        assert fragment in operations, f"missing operations expired-lease contract: {fragment}"
+        assert fragment in operations, (
+            f"missing operations expired-lease contract: {fragment}"
+        )
 
     for fragment in (
         "one active JobAttempt per job_id",
         "dependency_attempts_exhausted",
         "analyzer repository couples `queued -> running`",
     ):
-        assert fragment in technical_spec, f"missing technical-spec expired-lease contract: {fragment}"
+        assert fragment in technical_spec, (
+            f"missing technical-spec expired-lease contract: {fragment}"
+        )
 
     assert "active JobAttempt per job_id" in domain["$defs"]["JobAttempt"]["$comment"]
 
@@ -1268,7 +1323,10 @@ def test_pending_approval_expiry_uses_approval_expiry_days_default() -> None:
     assert "EP-06" in lifecycle
 
     technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
-    assert "pending_approval -> expired` at `submitted_at + APPROVAL_EXPIRY_DAYS" in technical_spec
+    assert (
+        "pending_approval -> expired` at `submitted_at + APPROVAL_EXPIRY_DAYS"
+        in technical_spec
+    )
 
     runtime_schema = _load_json(CONTRACTS_DIR / "runtime-config.schema.json")
     assert "APPROVAL_EXPIRY_DAYS" in runtime_schema["properties"]
@@ -1337,7 +1395,9 @@ def test_p11_system_package_revision_api_contract() -> None:
         assert "ETag" in openapi["components"]["responses"][response_name]["headers"]
 
     confirm = openapi["paths"]["/package-revisions/{id}/confirm"]["post"]
-    assert "IfMatch" in _operation_parameters(openapi, "post", "/package-revisions/{id}/confirm")
+    assert "IfMatch" in _operation_parameters(
+        openapi, "post", "/package-revisions/{id}/confirm"
+    )
     assert "428" in confirm["responses"]
     assert "412" in confirm["responses"]
 
@@ -1354,9 +1414,15 @@ def test_p11_system_package_revision_api_contract() -> None:
         ("CSRF", lifecycle, technical_spec, operations),
     )
     for fragment, lifecycle_text, spec_text, operations_text in auth_fragments:
-        assert fragment in lifecycle_text, f"missing lifecycle P1.1 auth boundary: {fragment}"
-        assert fragment in spec_text, f"missing technical-spec P1.1 auth boundary: {fragment}"
-        assert fragment in operations_text, f"missing operations P1.1 auth boundary: {fragment}"
+        assert fragment in lifecycle_text, (
+            f"missing lifecycle P1.1 auth boundary: {fragment}"
+        )
+        assert fragment in spec_text, (
+            f"missing technical-spec P1.1 auth boundary: {fragment}"
+        )
+        assert fragment in operations_text, (
+            f"missing operations P1.1 auth boundary: {fragment}"
+        )
 
     boundary_fragments = (
         "`uploading`",
@@ -1387,7 +1453,9 @@ def test_p11_system_package_revision_api_contract() -> None:
 
 
 def test_phase6_documentation_reconciliation_contract() -> None:
-    assert RELEASE_EVIDENCE_INDEX_PATH.is_file(), "missing docs/RELEASE_EVIDENCE_INDEX.md"
+    assert RELEASE_EVIDENCE_INDEX_PATH.is_file(), (
+        "missing docs/RELEASE_EVIDENCE_INDEX.md"
+    )
     assert P6_GATE_PATH.is_file(), "missing docs/P6_GATE_RECORD.md"
     assert MIGRATION_HEAD_PATH.is_file(), "missing package search index migration"
 
@@ -1426,7 +1494,9 @@ def test_phase6_documentation_reconciliation_contract() -> None:
         "package search",
     )
     for fragment in required_readme_fragments:
-        assert fragment in readme, f"README missing delivered-state fragment: {fragment}"
+        assert fragment in readme, (
+            f"README missing delivered-state fragment: {fragment}"
+        )
 
     assert MIGRATION_HEAD_REVISION in technical_spec
     assert "RELEASE_EVIDENCE_INDEX.md" in technical_spec
@@ -1434,7 +1504,10 @@ def test_phase6_documentation_reconciliation_contract() -> None:
     assert "Phase 6 reconciled" in epics or "Phase 6" in epics
 
     assert "API-only slice" not in configuration
-    assert "portal/API/worker" in configuration or "portal/API/worker/operator" in configuration
+    assert (
+        "portal/API/worker" in configuration
+        or "portal/API/worker/operator" in configuration
+    )
 
     gate_records = (
         ROOT / "docs" / "P2_GATE_RECORD.md",
@@ -1445,9 +1518,15 @@ def test_phase6_documentation_reconciliation_contract() -> None:
         ROOT / "docs" / "P7_GATE_RECORD.md",
     )
     for gate_path in gate_records:
-        assert gate_path.is_file(), f"missing gate record: {gate_path.relative_to(ROOT)}"
+        assert gate_path.is_file(), (
+            f"missing gate record: {gate_path.relative_to(ROOT)}"
+        )
         gate_text = gate_path.read_text(encoding="utf-8")
-        assert "customer-gated" in gate_text or "environment-not-run" in gate_text or "blocked" in gate_text, (
+        assert (
+            "customer-gated" in gate_text
+            or "environment-not-run" in gate_text
+            or "blocked" in gate_text
+        ), (
             f"{gate_path.name} must distinguish code-complete from live/customer evidence"
         )
 
