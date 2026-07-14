@@ -66,3 +66,8 @@ def test_onprem_example_loads_with_process_capabilities(
     assert capabilities["api"] is True
     assert capabilities["text_model_calls"] is False
     assert "INTERNAL_EGRESS_ALLOWLIST" in config.document
+
+
+def test_pyproject_declares_ato_operator_entrypoint() -> None:
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'ato-operator = "ato_operator.cli:main"' in pyproject

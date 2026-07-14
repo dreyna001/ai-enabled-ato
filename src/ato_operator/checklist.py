@@ -108,7 +108,7 @@ def build_operator_checklist(*, project_root: Path) -> list[ChecklistItem]:
             category="airgap",
             description="Stage offline wheels, authority bytes, and ClamAV signatures before cutover",
             status="required",
-            evidence="docs/AIRGAP_ONBOARDING.md",
+            evidence="docs/CONFIGURATION.md (Operator CLI section)",
         ),
     ]
 

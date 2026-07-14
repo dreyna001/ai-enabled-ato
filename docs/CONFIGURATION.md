@@ -240,6 +240,34 @@ $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/test_deploymen
 
 Optional live DB connectivity: set `ATO_TEST_DATABASE_URL` to run `tests/ato_service/test_db.py` integration cases.
 
+## Operator CLI (`ato-operator`)
+
+Workstream A ships a bounded operator CLI (`pyproject.toml` entrypoint `ato-operator`) for configuration validation and preflight on airgapped hosts. It reads the same schema-validated JSON selected by `--config` or `ATO_RUNTIME_CONFIG_PATH`. Secret values are never printed.
+
+| Command | Purpose |
+| --- | --- |
+| `validate-config` | JSON Schema + semantic validation |
+| `validate-credentials` | Active capability credential reference checks |
+| `preflight` | Capability-aware dependency probes (DB, storage, ClamAV, IdP JWKS, allowlists, digests) |
+| `migrate-db` | `alembic upgrade head` via `ATO_DATABASE_DSN_FILE` or `root_owned_file` DSN reference |
+| `verify-migrations` | Compare alembic head to live DB revision (`--dry-run` skips DB) |
+| `smoke` | Delegates to `scripts/smoke_service_chain.sh` |
+| `verify-audit` | HMAC audit chain verification when PostgreSQL is reachable |
+| `qualification-check` | Qualification fixture presence only (does not close HS-001..009) |
+| `print-checklist` | Operator onboarding checklist including open hard stops |
+
+Example:
+
+```text
+ato-operator validate-config --config /etc/ato-analyzer/runtime-config.json
+ato-operator preflight --config /etc/ato-analyzer/runtime-config.json
+ato-operator verify-migrations --config /etc/ato-analyzer/runtime-config.json --dry-run
+```
+
+Inactive `PROCESS_CAPABILITIES` entries are skipped during preflight. Active invalid dependencies fail fast with redacted errors.
+
+Focused tests: `tests/ato_operator/`.
+
 ## Related docs
 
 - [`deployment/README.md`](../deployment/README.md) — API-only install assets and operator flow
