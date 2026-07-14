@@ -239,7 +239,7 @@ def test_analysis_run_routes_are_mounted(
     [
         ("post", "/api/v1/systems", {"json": {"display_name": "x", "external_system_id": None, "owner_group": "owners", "viewer_groups": []}}),
         ("get", "/api/v1/systems", {}),
-        (f"get", f"/api/v1/systems/{SYSTEM_ID}", {}),
+        ("get", f"/api/v1/systems/{SYSTEM_ID}", {}),
         ("post", f"/api/v1/systems/{SYSTEM_ID}/package-revisions", {"json": {"parent_revision_id": None, "profile_id": "fisma_agency_security", "certification_class": None, "impact_level": "moderate", "data_origin": "synthetic", "sensitivity": "internal_unclassified"}}),
         ("get", f"/api/v1/systems/{SYSTEM_ID}/package-revisions", {}),
         ("get", f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}", {}),

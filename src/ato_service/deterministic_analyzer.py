@@ -19,7 +19,6 @@ from ato_service.analysis_profile import (
 )
 from ato_service.artifact_manifests import (
     ArtifactManifestCommitError,
-    GeneratedRunFile,
     write_artifact_manifest,
     write_run_output_file,
 )

@@ -543,7 +543,6 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
     )
     from ato_service.fact_proposals import (
         FactProposalNotFoundError,
-        FactProposalReviewConflictError,
     )
     from ato_service.oidc_auth import OidcAuthenticationError
     from ato_service.session_auth import SessionConfigurationError, SessionExpiredError

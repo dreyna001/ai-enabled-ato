@@ -157,7 +157,7 @@ def test_revision_version_migration_upgrade_and_downgrade_operation_order() -> N
         "create_check_constraint",
     ]
 
-    add_column_args, add_column_kwargs = upgrade_ops[0][1], upgrade_ops[0][2]
+    add_column_args = upgrade_ops[0][1]
     assert add_column_args[0] == "package_revisions"
     column = add_column_args[1]
     assert column.name == "revision_version"

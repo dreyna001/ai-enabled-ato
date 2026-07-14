@@ -116,7 +116,7 @@ def test_migration_upgrade_and_downgrade_operation_order() -> None:
     preflight_statement = upgrade_ops[1][1][0]
     assert "GROUP BY package_revision_id, sha256" in str(preflight_statement)
 
-    unique_args, unique_kwargs = upgrade_ops[2][1], upgrade_ops[2][2]
+    unique_args = upgrade_ops[2][1]
     assert unique_args[0] == "uq_source_artifacts_revision_sha256"
     assert unique_args[1] == "source_artifacts"
     assert unique_args[2] == ["package_revision_id", "sha256"]

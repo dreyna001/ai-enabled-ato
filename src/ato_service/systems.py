@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ato_service.audit import append_audit_event
 from ato_service.auth_context import (
     AuthenticatedPrincipal,
-    AuthorizationDeniedError,
     require_system_mutation_access,
     require_system_read_access,
 )

@@ -21,7 +21,6 @@ from ato_service.db.models import (
     PackageRevision,
     PackageRevisionDraft,
     SealedPackageContent,
-    SystemContextSnapshot,
 )
 from ato_service.domain_mapping import (
     map_package_revision_draft_to_domain,

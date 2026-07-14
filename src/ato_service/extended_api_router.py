@@ -43,7 +43,6 @@ from ato_service.review_revisions import (
     submit_review_revision,
     update_disposition,
 )
-from ato_service.revision_delta import compute_revision_delta
 
 IdempotencyKeyHeader = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)]
 

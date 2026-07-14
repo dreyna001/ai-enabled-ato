@@ -19,12 +19,10 @@ from ato_service.authorization_boundary import (
 )
 from ato_service.auth_context import (
     AuthenticatedPrincipal,
-    AuthorizationDeniedError,
     require_system_mutation_access,
     require_system_read_access,
 )
 from ato_service.concurrency import (
-    EtagMismatchError,
     IfMatchRequiredError,
     assert_if_match,
     format_package_revision_etag,
