@@ -21,6 +21,7 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `sufficiency-matrix-response.schema.json` | Closed structured output for `sufficiency_matrix` v1 | Published Phase 3 Workstream A contract |
 | `qualification-manifest.schema.json` | Sealed qualification corpus manifest with digests and hard-stop-safe claim metadata | Published Phase 5 qualification contract |
 | `validation-drill-record.schema.json` | Immutable customer validation drill evidence record | Published Phase 5 contract |
+| `ai-evaluation-record.schema.json` | Immutable AI qualification evaluation record | Published Phase 5 contract |
 | `openapi.json` | OpenAPI 3.1 API surface and shared HTTP contracts | Published P-1 contract (`info.version` 1.0.0) |
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
@@ -59,7 +60,7 @@ Contract fixtures live in `docs/contracts/fixtures` and use
 `package-draft-document`, `extracted-segment`, `normalize-proposal-response`,
 `normalize-proposal-fact-bundle`, `sufficiency-matrix-response`, `analysis-profile`, `content-manifest`,
 `artifact-manifest`, `export-manifest`, `preflight`, `runtime-config`, and
-`fisma-template-pack`, `qualification-manifest`, `validation-drill-record`; each has at least one valid and one invalid fixture.
+`fisma-template-pack`, `qualification-manifest`, `validation-drill-record`, `ai-evaluation-record`; each has at least one valid and one invalid fixture.
 `qualification-manifest` fixtures validate schema shape only; digest verification
 runs against `data/qualification/manifest.json` in
 `tests/test_contracts.py::test_qualification_manifest_validates_and_matches_local_bytes`.

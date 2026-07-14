@@ -58,6 +58,7 @@ FIXTURE_SCHEMA_PATHS = {
         "sufficiency-matrix-response",
         "qualification-manifest",
         "validation-drill-record",
+        "ai-evaluation-record",
     )
 }
 FIXTURE_NAME = re.compile(
