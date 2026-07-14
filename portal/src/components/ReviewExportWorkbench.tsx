@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { ApiError } from "@/api/client";
 import {
   approveExport,
   createExportDraft,
   createReviewComment,
   createReviewRevision,
   downloadExport,
+  listMatrixRows,
   listReviewComments,
   rejectExport,
   revisionEtag,
@@ -25,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
   Approval,
+  Disposition,
   ExportDraft,
   MatrixRow,
   ReviewComment,
@@ -32,8 +35,15 @@ import type {
   SessionInfo,
 } from "@/types";
 import { formatApiError } from "@/utils/formatApiError";
+import { problemMessageForCode } from "@/utils/problemMessages";
+import {
+  clearStoredReviewRevisionId,
+  loadStoredReviewRevisionId,
+  saveStoredReviewRevisionId,
+} from "@/utils/workflowStorage";
 
 const DISPOSITION_OPTIONS = [
+  "pending",
   "accepted",
   "edited",
   "rejected",
@@ -57,38 +67,78 @@ export function ReviewExportWorkbench({
   const [approval, setApproval] = useState<Approval | null>(null);
   const [comments, setComments] = useState<ReviewComment[]>([]);
   const [commentBody, setCommentBody] = useState("");
+  const [rowCommentBody, setRowCommentBody] = useState("");
+  const [activeRowCommentId, setActiveRowCommentId] = useState<string>("");
+  const [loadedMatrixRows, setLoadedMatrixRows] = useState<MatrixRow[]>(matrixRows);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const reviewEtag = useMemo(
+  const reviewEtagValue = useMemo(
     () => (review ? revisionEtag(review.version) : '"v1"'),
     [review],
   );
 
   const dispositionByRow = useMemo(() => {
-    const map = new Map<string, ReviewRevision["dispositions"][number]>();
+    const map = new Map<string, Disposition>();
     for (const item of review?.dispositions ?? []) {
       map.set(item.matrix_row_id, item);
     }
     return map;
   }, [review]);
 
+  const unresolvedCount = useMemo(
+    () =>
+      (review?.dispositions ?? []).filter((item) => item.decision === "pending").length,
+    [review],
+  );
+
   const exportBlocked =
     exportDraft?.status === "expired" ||
     exportDraft?.status === "superseded" ||
     exportDraft?.status === "rejected";
+
+  const isSubmitter = approval?.submitted_by === session.actor_id;
+
+  useEffect(() => {
+    if (matrixRows.length > 0) {
+      setLoadedMatrixRows(matrixRows);
+      return;
+    }
+    void listMatrixRows(runId, { limit: 100 })
+      .then((page) => setLoadedMatrixRows(page.items))
+      .catch(() => setLoadedMatrixRows([]));
+  }, [runId, matrixRows]);
+
+  useEffect(() => {
+    const storedId = loadStoredReviewRevisionId(runId);
+    if (storedId && !review) {
+      setMessage(`Resume review revision ${storedId.slice(0, 8)}… from this browser session.`);
+    }
+  }, [runId, review]);
 
   useEffect(() => {
     if (!review) {
       setComments([]);
       return;
     }
+    saveStoredReviewRevisionId(runId, review.review_revision_id);
     void listReviewComments(review.review_revision_id)
       .then((result) => setComments(result.items))
       .catch(() => setComments([]));
-  }, [review?.review_revision_id, review?.status]);
+  }, [review?.review_revision_id, review?.status, runId]);
+
+  const handleApiError = (err: unknown) => {
+    if (err instanceof ApiError) {
+      setError(problemMessageForCode(err.errorCode, formatApiError(err)));
+      if (err.status === 412 || err.errorCode === "etag_mismatch") {
+        setError("Review version changed on the server. Reload the page to continue.");
+      }
+      return;
+    }
+    setError(formatApiError(err));
+  };
 
   const startReview = async () => {
     setBusy(true);
@@ -98,7 +148,7 @@ export function ReviewExportWorkbench({
       setReview(created);
       setMessage("Review revision opened.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -115,29 +165,38 @@ export function ReviewExportWorkbench({
     setBusy(true);
     setError("");
     try {
-      await updateDisposition(session, review.review_revision_id, matrixRowId, reviewEtag, {
-        decision,
-        edited_summary: decision === "edited" ? editedSummary : editedSummary || null,
-        notes: null,
-      });
-      const refreshed = {
+      const updated = await updateDisposition(
+        session,
+        review.review_revision_id,
+        matrixRowId,
+        reviewEtagValue,
+        {
+          decision,
+          edited_summary: decision === "edited" ? editedSummary : editedSummary || null,
+          notes: null,
+        },
+      );
+      setReview({
         ...review,
         version: review.version + 1,
         dispositions: review.dispositions.map((item) =>
-          item.matrix_row_id === matrixRowId
-            ? {
-                ...item,
-                decision,
-                edited_summary: decision === "edited" ? editedSummary : editedSummary || null,
-                version: item.version + 1,
-              }
-            : item,
+          item.matrix_row_id === matrixRowId ? { ...item, ...updated } : item,
         ),
-      };
-      setReview(refreshed);
-      setMessage(`Disposition saved for ${matrixRowId.slice(0, 8)}…`);
+      });
+      const ids: string[] = [];
+      if (updated.evidence_request_id) {
+        ids.push(`evidence request ${updated.evidence_request_id.slice(0, 8)}…`);
+      }
+      if (updated.poam_candidate_id) {
+        ids.push(`POA&M candidate ${updated.poam_candidate_id.slice(0, 8)}…`);
+      }
+      setMessage(
+        ids.length > 0
+          ? `Disposition saved. Created ${ids.join(" and ")}.`
+          : `Disposition saved for ${matrixRowId.slice(0, 8)}…`,
+      );
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -145,6 +204,10 @@ export function ReviewExportWorkbench({
 
   const submitReview = async () => {
     if (!review) {
+      return;
+    }
+    if (unresolvedCount > 0) {
+      setError(`${unresolvedCount} disposition(s) still pending. Resolve each row before submit.`);
       return;
     }
     setBusy(true);
@@ -158,27 +221,37 @@ export function ReviewExportWorkbench({
       setReview(submitted);
       setMessage("Review submitted.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
   };
 
-  const addComment = async () => {
-    if (!review || !commentBody.trim()) {
+  const addComment = async (matrixRowId?: string | null) => {
+    if (!review) {
+      return;
+    }
+    const body = (matrixRowId ? rowCommentBody : commentBody).trim();
+    if (!body) {
       return;
     }
     setBusy(true);
     setError("");
     try {
       const created = await createReviewComment(session, review.review_revision_id, {
-        body: commentBody.trim(),
+        body,
+        matrix_row_id: matrixRowId ?? null,
       });
       setComments((current) => [created, ...current]);
-      setCommentBody("");
+      if (matrixRowId) {
+        setRowCommentBody("");
+        setActiveRowCommentId("");
+      } else {
+        setCommentBody("");
+      }
       setMessage("Comment added.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -196,7 +269,7 @@ export function ReviewExportWorkbench({
       setApproval(null);
       setMessage("Export draft created.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -214,7 +287,7 @@ export function ReviewExportWorkbench({
       setExportDraft({ ...exportDraft, status: "pending_approval" });
       setMessage("Export submitted for approval.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -234,7 +307,7 @@ export function ReviewExportWorkbench({
       );
       setMessage("Export approved.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -254,7 +327,7 @@ export function ReviewExportWorkbench({
       );
       setMessage("Export rejected.");
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
@@ -267,19 +340,27 @@ export function ReviewExportWorkbench({
     setBusy(true);
     setError("");
     try {
-      const blob = await downloadExport(session, approval.approval_id);
+      const { blob, filename } = await downloadExport(session, approval.approval_id);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `ato-export-${approval.approval_id}.zip`;
+      anchor.download = filename;
       anchor.click();
       URL.revokeObjectURL(url);
-      setMessage("Export ZIP downloaded.");
+      setMessage(`Downloaded ${filename}.`);
     } catch (err) {
-      setError(formatApiError(err));
+      handleApiError(err);
     } finally {
       setBusy(false);
     }
+  };
+
+  const resetReview = () => {
+    setReview(null);
+    setExportDraft(null);
+    setApproval(null);
+    clearStoredReviewRevisionId(runId);
+    setMessage("Review state cleared for this run.");
   };
 
   return (
@@ -304,11 +385,19 @@ export function ReviewExportWorkbench({
               <span>Review status</span>
               <Badge variant="muted">{review.status}</Badge>
               <span>· version {review.version}</span>
+              {unresolvedCount > 0 ? (
+                <Badge variant="destructive">{unresolvedCount} unresolved</Badge>
+              ) : (
+                <Badge variant="default">All dispositions resolved</Badge>
+              )}
+              <Button type="button" size="sm" variant="ghost" onClick={resetReview}>
+                Clear local resume
+              </Button>
             </div>
 
             {review.status === "draft" ? (
               <div className="space-y-4">
-                {matrixRows.map((row) => {
+                {loadedMatrixRows.map((row) => {
                   const disposition = dispositionByRow.get(row.matrix_row_id);
                   return (
                     <DispositionEditor
@@ -316,7 +405,18 @@ export function ReviewExportWorkbench({
                       row={row}
                       initialDecision={disposition?.decision ?? "pending"}
                       initialSummary={disposition?.edited_summary ?? ""}
+                      evidenceRequestId={disposition?.evidence_request_id}
+                      poamCandidateId={disposition?.poam_candidate_id}
                       disabled={busy}
+                      showRowComment={activeRowCommentId === row.matrix_row_id}
+                      rowCommentBody={rowCommentBody}
+                      onToggleRowComment={() =>
+                        setActiveRowCommentId((current) =>
+                          current === row.matrix_row_id ? "" : row.matrix_row_id,
+                        )
+                      }
+                      onRowCommentChange={setRowCommentBody}
+                      onAddRowComment={() => void addComment(row.matrix_row_id)}
                       onSave={(decision, summary) =>
                         void saveDisposition(row.matrix_row_id, decision, summary)
                       }
@@ -324,7 +424,7 @@ export function ReviewExportWorkbench({
                   );
                 })}
                 <div className="space-y-2 rounded-md border p-4">
-                  <Label htmlFor="review-comment">Review comment</Label>
+                  <Label htmlFor="review-comment">Package-level review comment</Label>
                   <Input
                     id="review-comment"
                     value={commentBody}
@@ -344,11 +444,16 @@ export function ReviewExportWorkbench({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={busy}
+                  disabled={busy || unresolvedCount > 0}
                   onClick={() => void submitReview()}
                 >
                   Submit review
                 </Button>
+                {unresolvedCount > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Pending dispositions must be explicitly resolved — they are not auto-accepted.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -360,6 +465,9 @@ export function ReviewExportWorkbench({
                     <p>{comment.body}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {comment.created_by} · {comment.created_at}
+                      {comment.matrix_row_id
+                        ? ` · row ${comment.matrix_row_id.slice(0, 8)}…`
+                        : " · package"}
                     </p>
                   </div>
                 ))}
@@ -396,6 +504,9 @@ export function ReviewExportWorkbench({
                 <Badge variant={exportDraft.status === "approved" ? "default" : "muted"}>
                   {exportDraft.status}
                 </Badge>
+                <span className="font-mono text-xs">
+                  {exportDraft.payload_manifest_sha256.slice(0, 16)}…
+                </span>
               </div>
             ) : null}
 
@@ -412,7 +523,12 @@ export function ReviewExportWorkbench({
                   <Badge variant={approval.decision === "approved" ? "default" : "muted"}>
                     {approval.decision}
                   </Badge>
-                  {approval.decision === "pending" ? (
+                  {isSubmitter ? (
+                    <span className="text-xs text-muted-foreground">
+                      You submitted this export — a different approver must approve or reject.
+                    </span>
+                  ) : null}
+                  {approval.decision === "pending" && !isSubmitter ? (
                     <>
                       <Button type="button" size="sm" disabled={busy} onClick={() => void approve()}>
                         Approve export
@@ -451,9 +567,7 @@ export function ReviewExportWorkbench({
                   <p className="text-sm text-muted-foreground">Reason: {approval.reason}</p>
                 ) : null}
                 {approval.decision === "pending" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Expires {approval.expires_at}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Expires {approval.expires_at}</p>
                 ) : null}
               </div>
             ) : null}
@@ -468,27 +582,55 @@ function DispositionEditor({
   row,
   initialDecision,
   initialSummary,
+  evidenceRequestId,
+  poamCandidateId,
   disabled,
+  showRowComment,
+  rowCommentBody,
+  onToggleRowComment,
+  onRowCommentChange,
+  onAddRowComment,
   onSave,
 }: {
   row: MatrixRow;
   initialDecision: string;
   initialSummary: string;
+  evidenceRequestId?: string;
+  poamCandidateId?: string;
   disabled: boolean;
+  showRowComment: boolean;
+  rowCommentBody: string;
+  onToggleRowComment: () => void;
+  onRowCommentChange: (value: string) => void;
+  onAddRowComment: () => void;
   onSave: (decision: string, summary: string) => void;
 }) {
-  const [decision, setDecision] = useState(
-    initialDecision === "pending" ? "accepted" : initialDecision,
-  );
+  const [decision, setDecision] = useState(initialDecision);
   const [summary, setSummary] = useState(initialSummary);
+
+  useEffect(() => {
+    setDecision(initialDecision);
+    setSummary(initialSummary);
+  }, [initialDecision, initialSummary]);
 
   return (
     <div className="rounded-md border p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs">{row.assessment_item_id}</span>
         <Badge variant="muted">{row.model_proposed_status}</Badge>
+        {decision === "pending" ? <Badge variant="destructive">pending</Badge> : null}
       </div>
       <p className="text-sm text-muted-foreground">{row.finding_summary}</p>
+      {evidenceRequestId ? (
+        <p className="text-xs font-mono text-muted-foreground">
+          Evidence request: {evidenceRequestId}
+        </p>
+      ) : null}
+      {poamCandidateId ? (
+        <p className="text-xs font-mono text-muted-foreground">
+          POA&M candidate: {poamCandidateId}
+        </p>
+      ) : null}
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor={`decision-${row.matrix_row_id}`}>Disposition</Label>
@@ -518,15 +660,43 @@ function DispositionEditor({
           />
         </div>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={disabled || (decision === "edited" && !summary.trim())}
-        onClick={() => onSave(decision, summary)}
-      >
-        Save disposition
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={
+            disabled ||
+            decision === "pending" ||
+            (decision === "edited" && !summary.trim())
+          }
+          onClick={() => onSave(decision, summary)}
+        >
+          Save disposition
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onToggleRowComment}>
+          Row comment
+        </Button>
+      </div>
+      {showRowComment ? (
+        <div className="flex flex-wrap gap-2">
+          <Input
+            aria-label={`Comment for ${row.assessment_item_id}`}
+            value={rowCommentBody}
+            disabled={disabled}
+            onChange={(event) => onRowCommentChange(event.target.value)}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={disabled || !rowCommentBody.trim()}
+            onClick={onAddRowComment}
+          >
+            Post row comment
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -10,20 +10,27 @@ import {
   getRevision,
   getRun,
   isCancelledRequest,
-  listMatrixRows,
   listRevisions,
   listRuns,
   listSystems,
   startRun,
-  startTargetedRun,
 } from "@/api/client";
+import { ChangeAnalysisPanel } from "@/components/ChangeAnalysisPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import {
+  DependencyCapabilityPanel,
+  isAssistantEnabled,
+} from "@/components/DependencyCapabilityPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { IntakeProgressPanel } from "@/components/IntakeProgressPanel";
+import { MatrixResultsPanel } from "@/components/MatrixResultsPanel";
+import { PackageAssistantPanel } from "@/components/PackageAssistantPanel";
 import { PreflightPanel } from "@/components/PreflightPanel";
 import { ReviewExportWorkbench } from "@/components/ReviewExportWorkbench";
+import { RevisionCreateForm } from "@/components/RevisionCreateForm";
+import { RunArtifactsPanel } from "@/components/RunArtifactsPanel";
+import { TerminalIntakePanel } from "@/components/TerminalIntakePanel";
 import {
-  MatrixTableSkeleton,
   RevisionWorkflowSkeleton,
   SystemsListSkeleton,
 } from "@/components/LoadingSkeletons";
@@ -39,14 +46,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { usePolling } from "@/hooks/usePolling";
 import { usePackageDraft } from "@/hooks/usePackageDraft";
 import { cn } from "@/lib/utils";
 import type {
   AnalysisRun,
-  MatrixRow,
+  CreateRevisionInput,
   PackageRevision,
+  PreflightResult,
   SessionInfo,
   System,
 } from "@/types";
@@ -58,6 +65,7 @@ import {
 import { formatApiError } from "@/utils/formatApiError";
 import {
   revisionStatusVariant,
+  runFailureMessage,
   runStatusVariant,
 } from "@/utils/statusLabels";
 
@@ -126,9 +134,17 @@ function SelectionList({
 
 type WorkflowPageProps = {
   session: SessionInfo;
+  readinessLoaded?: boolean;
+  readinessDegraded?: boolean;
+  readinessError?: string | null;
 };
 
-export function WorkflowPage({ session }: WorkflowPageProps) {
+export function WorkflowPage({
+  session,
+  readinessLoaded = true,
+  readinessDegraded = false,
+  readinessError = null,
+}: WorkflowPageProps) {
   const navigate = useNavigate();
   const params = useParams();
   const routeSystemId = params.systemId ?? "";
@@ -142,7 +158,8 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
   const [runs, setRuns] = useState<AnalysisRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [activeRun, setActiveRun] = useState<AnalysisRun | null>(null);
-  const [matrixRows, setMatrixRows] = useState<MatrixRow[]>([]);
+  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+  const [targetedItemIds, setTargetedItemIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [systemsState, setSystemsState] = useState<LoadState>("loading");
@@ -223,7 +240,7 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
         setRuns([]);
         setSelectedRunId("");
         setActiveRun(null);
-        setMatrixRows([]);
+        setPreflight(null);
         setRevisionState("empty");
         return;
       }
@@ -250,18 +267,11 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
     async (signal?: AbortSignal) => {
       if (!selectedRunId) {
         setActiveRun(null);
-        setMatrixRows([]);
         return;
       }
       try {
         const run = await getRun(selectedRunId, { signal });
         setActiveRun(run);
-        if (run.status === "succeeded") {
-          const matrix = await listMatrixRows(selectedRunId, { signal });
-          setMatrixRows(matrix.items);
-        } else {
-          setMatrixRows([]);
-        }
         setError("");
       } catch (err) {
         if (isCancelledRequest(err, signal)) {
@@ -448,7 +458,14 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
               type="button"
               size="sm"
               onClick={() => {
-                void createRevision(session, selectedSystemId)
+                void createRevision(session, selectedSystemId, {
+                  parent_revision_id: null,
+                  profile_id: "fisma_agency_security",
+                  certification_class: null,
+                  impact_level: "moderate",
+                  data_origin: "synthetic",
+                  sensitivity: "internal_unclassified",
+                })
                   .then((created) => {
                     setSelectedRevisionId(created.package_revision_id);
                     syncRoute(selectedSystemId, created.package_revision_id);
@@ -463,6 +480,19 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
             </Button>
           </CardHeader>
           <CardContent>
+            <RevisionCreateForm
+              revisions={revisions}
+              onCreate={(input: CreateRevisionInput) => {
+                void createRevision(session, selectedSystemId, input)
+                  .then((created) => {
+                    setSelectedRevisionId(created.package_revision_id);
+                    syncRoute(selectedSystemId, created.package_revision_id);
+                    return refreshRevisions();
+                  })
+                  .then(() => setMessage("Revision created."))
+                  .catch((err) => setError(formatApiError(err)));
+              }}
+            />
             {revisions.length === 0 ? (
               <EmptyState {...resolveRevisionsEmptyState()} />
             ) : (
@@ -524,6 +554,19 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
               <IntakeProgressPanel status={revision.status} />
             ) : null}
 
+            {revision.status === "invalid" ||
+            revision.status === "quarantined" ||
+            revision.status === "archived" ? (
+              <TerminalIntakePanel
+                status={revision.status}
+                reconciliationMessage={
+                  readinessError?.includes("reconciliation")
+                    ? readinessError
+                    : null
+                }
+              />
+            ) : null}
+
             {revision.status === "awaiting_confirmation" ? (
               <div className="space-y-4">
                 {packageDraft.loadState === "loading" ? (
@@ -567,7 +610,39 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
 
             {revision.status === "ready" ? (
               <div className="space-y-6">
-                <PreflightPanel revisionId={revision.package_revision_id} />
+                <DependencyCapabilityPanel
+                  readiness={{
+                    loaded: readinessLoaded,
+                    ready: !readinessDegraded && !readinessError,
+                    degraded: readinessDegraded,
+                    error: readinessError,
+                    checks: [],
+                  }}
+                  revisionReady
+                />
+                <ChangeAnalysisPanel
+                  revisionId={revision.package_revision_id}
+                  parentRevisionId={revision.parent_revision_id}
+                  onTargetedIds={setTargetedItemIds}
+                />
+                <PreflightPanel
+                  revisionId={revision.package_revision_id}
+                  onPreflightChange={setPreflight}
+                />
+                <PackageAssistantPanel
+                  session={session}
+                  revisionId={revision.package_revision_id}
+                  enabled={isAssistantEnabled(
+                    {
+                      loaded: readinessLoaded,
+                      ready: !readinessDegraded && !readinessError,
+                      degraded: readinessDegraded,
+                      error: readinessError,
+                      checks: [],
+                    },
+                    true,
+                  )}
+                />
                 <AlertBanner tone="warning">
                   Draft analysis readiness - not official status in GRC, FedRAMP, or an
                   agency authorization process.
@@ -579,6 +654,7 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
                     <Button
                       type="button"
                       size="sm"
+                      disabled={preflight !== null && !preflight.analysis_eligible}
                       onClick={() => {
                         void startRun(session, revision.package_revision_id)
                           .then((created) => {
@@ -596,15 +672,24 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={
+                        (preflight !== null && !preflight.analysis_eligible) ||
+                        targetedItemIds.length === 0
+                      }
                       onClick={() => {
-                        void startTargetedRun(session, revision.package_revision_id)
+                        void startRun(session, revision.package_revision_id, {
+                          runType: "targeted",
+                          assessmentItemIds: targetedItemIds,
+                        })
                           .then((created) => {
                             setSelectedRunId(created.run_id);
                             return refreshRevisionDetail();
                           })
                           .then(() => refreshRunDetail())
                           .then(() =>
-                            setMessage("Targeted sealed-content analysis run started."),
+                            setMessage(
+                              `Targeted run started for ${targetedItemIds.length} item(s).`,
+                            ),
                           )
                           .catch((err) => setError(formatApiError(err)));
                       }}
@@ -613,6 +698,11 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
                     </Button>
                   </div>
                 </div>
+                {preflight && !preflight.analysis_eligible ? (
+                  <p className="text-sm text-muted-foreground">
+                    Resolve preflight analysis blockers before starting runs.
+                  </p>
+                ) : null}
 
                 {runs.length === 0 ? (
                   <EmptyState {...resolveRunsEmptyState()} />
@@ -662,55 +752,24 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
                         </>
                       ) : null}
 
+                      {activeRun.status === "failed" ||
+                      activeRun.status === "cancelled" ||
+                      activeRun.status === "policy_blocked" ? (
+                        <p className="text-sm text-destructive">
+                          {runFailureMessage(activeRun.status, activeRun.error_code)}
+                        </p>
+                      ) : null}
+
                       {activeRun.status === "succeeded" ? (
-                        matrixRows.length > 0 ? (
-                          <>
-                            <p className="text-sm text-muted-foreground">
-                              Artifact manifest:{" "}
-                              {activeRun.artifact_manifest_sha256?.slice(0, 16)}…
-                            </p>
-                            <Separator />
-                            <h4 className="text-sm font-semibold">Matrix</h4>
-                            <div className="overflow-x-auto rounded-md border">
-                              <table className="w-full border-collapse text-sm">
-                                <thead>
-                                  <tr className="border-b bg-muted/50">
-                                    <th className="px-4 py-2 text-left font-medium">Item</th>
-                                    <th className="px-4 py-2 text-left font-medium">Status</th>
-                                    <th className="px-4 py-2 text-left font-medium">Summary</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {matrixRows.map((row) => (
-                                    <tr
-                                      key={row.matrix_row_id}
-                                      className="border-b border-border/60 last:border-0"
-                                    >
-                                      <td className="px-4 py-3 align-top font-mono text-xs">
-                                        {row.assessment_item_id}
-                                      </td>
-                                      <td className="px-4 py-3 align-top">
-                                        <Badge variant="muted">
-                                          {row.model_proposed_status}
-                                        </Badge>
-                                      </td>
-                                      <td className="px-4 py-3 align-top text-muted-foreground">
-                                        {row.finding_summary}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                            <ReviewExportWorkbench
-                              session={session}
-                              runId={activeRun.run_id}
-                              matrixRows={matrixRows}
-                            />
-                          </>
-                        ) : (
-                          <MatrixTableSkeleton />
-                        )
+                        <>
+                          <RunArtifactsPanel run={activeRun} />
+                          <MatrixResultsPanel run={activeRun} />
+                          <ReviewExportWorkbench
+                            session={session}
+                            runId={activeRun.run_id}
+                            matrixRows={[]}
+                          />
+                        </>
                       ) : null}
                     </CardContent>
                   </Card>
@@ -756,8 +815,25 @@ export function WorkflowPage({ session }: WorkflowPageProps) {
   );
 }
 
-export function WorkflowRoute({ session }: WorkflowPageProps) {
-  return <WorkflowPage session={session} />;
+export function WorkflowRoute({
+  session,
+  readiness,
+}: {
+  session: SessionInfo;
+  readiness?: {
+    loaded: boolean;
+    degraded: boolean;
+    error: string | null;
+  };
+}) {
+  return (
+    <WorkflowPage
+      session={session}
+      readinessLoaded={readiness?.loaded ?? true}
+      readinessDegraded={readiness?.degraded ?? false}
+      readinessError={readiness?.error ?? null}
+    />
+  );
 }
 
 export function WorkflowIndexRedirect() {
