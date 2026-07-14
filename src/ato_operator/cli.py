@@ -18,6 +18,7 @@ from sqlalchemy import create_engine
 
 from ato_operator.approval_expiry import process_approval_expiry_sync
 from ato_operator.audit_verify import verify_audit_chain_sync
+from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
 from ato_operator.checklist import build_operator_checklist, format_checklist
 from ato_operator.preflight import run_operator_preflight_sync
 from ato_service.db.dsn import require_database_dsn_from_env
@@ -226,6 +227,21 @@ def _command_expire_approvals(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_purge_auth(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    report = purge_expired_auth_artifacts_sync(config)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(
+            "purge-auth "
+            f"sessions_purged={report.sessions_purged} "
+            f"login_states_purged={report.login_states_purged} "
+            f"now={report.now}"
+        )
+    return 0
+
+
 def _command_qualification_check(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     qualification_dir = project_root / "data" / "qualification"
@@ -294,6 +310,7 @@ def _build_parser() -> argparse.ArgumentParser:
         ("migrate-db", "Apply alembic migrations to head"),
         ("verify-audit", "Verify audit hash chain integrity"),
         ("expire-approvals", "Expire pending and approved export drafts past configured deadlines"),
+        ("purge-auth", "Delete expired OIDC login states and auth sessions"),
         (
             "qualification-check",
             "Verify qualification fixture corpus presence (does not close hard stops)",
@@ -340,6 +357,7 @@ def main(argv: list[str] | None = None) -> int:
         "smoke": _command_smoke,
         "verify-audit": _command_verify_audit,
         "expire-approvals": _command_expire_approvals,
+        "purge-auth": _command_purge_auth,
         "qualification-check": _command_qualification_check,
         "print-checklist": _command_print_checklist,
     }

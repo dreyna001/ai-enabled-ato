@@ -378,6 +378,64 @@ def _check_clamav(config: RuntimeConfig) -> PreflightCheckResult:
     return _ok("clamav_ping", settings.transport.value)
 
 
+def _check_oidc_group_mapping(config: RuntimeConfig) -> PreflightCheckResult:
+    mapping = config.document.get("OIDC_GROUP_ROLE_MAPPING")
+    if not isinstance(mapping, dict) or not mapping:
+        return _fail("oidc_group_mapping", "OIDC_GROUP_ROLE_MAPPING is required")
+    empty_roles = [
+        role
+        for role, groups in mapping.items()
+        if not isinstance(groups, list) or not groups
+    ]
+    if empty_roles:
+        return _fail(
+            "oidc_group_mapping",
+            "roles with empty group lists: " + ", ".join(sorted(empty_roles)),
+        )
+    return _ok("oidc_group_mapping", f"{len(mapping)} roles configured")
+
+
+def _check_portal_origin_https(config: RuntimeConfig) -> PreflightCheckResult:
+    origin = config.document.get("PORTAL_PUBLIC_ORIGIN")
+    if not isinstance(origin, str) or not origin.strip():
+        return _fail("portal_origin_https", "PORTAL_PUBLIC_ORIGIN is required")
+    if not origin.strip().lower().startswith("https://"):
+        return _fail("portal_origin_https", "PORTAL_PUBLIC_ORIGIN must use https in production")
+    return _ok("portal_origin_https", urlsplit(origin).netloc)
+
+
+def _check_nginx_tls_certificate_paths(
+    config: RuntimeConfig,
+    *,
+    project_root: Path,
+) -> PreflightCheckResult:
+    cert_path = config.document.get("NGINX_TLS_CERTIFICATE_PATH")
+    key_path = config.document.get("NGINX_TLS_CERTIFICATE_KEY_PATH")
+    if cert_path is None and key_path is None:
+        portal_template = project_root / "deployment" / "nginx" / "ato-portal.conf"
+        if not portal_template.is_file():
+            return _skip("nginx_tls_certificates", "portal nginx template unavailable")
+        text = portal_template.read_text(encoding="utf-8")
+        for directive in ("ssl_certificate ", "ssl_certificate_key "):
+            if directive not in text:
+                return _fail("nginx_tls_certificates", f"missing {directive.strip()} directive")
+        return _ok(
+            "nginx_tls_certificates",
+            "template declares absolute certificate paths; promote after customer TLS provisioning",
+        )
+    if not isinstance(cert_path, str) or not cert_path.startswith("/"):
+        return _fail("nginx_tls_certificates", "NGINX_TLS_CERTIFICATE_PATH must be an absolute path")
+    if not isinstance(key_path, str) or not key_path.startswith("/"):
+        return _fail("nginx_tls_certificates", "NGINX_TLS_CERTIFICATE_KEY_PATH must be an absolute path")
+    cert = Path(cert_path)
+    key = Path(key_path)
+    if not cert.is_file():
+        return _fail("nginx_tls_certificates", f"certificate file not found: {cert}")
+    if not key.is_file():
+        return _fail("nginx_tls_certificates", f"certificate key file not found: {key}")
+    return _ok("nginx_tls_certificates", cert.name)
+
+
 def _check_oidc_discovery(config: RuntimeConfig) -> PreflightCheckResult:
     issuer = config.document.get("OIDC_ISSUER_URL")
     if not isinstance(issuer, str) or not issuer.strip():
@@ -501,6 +559,9 @@ async def run_operator_preflight(
 
     if capabilities is not None and capabilities.oidc_authentication:
         checks.append(_check_oidc_discovery(config))
+        if document.get("runtime_profile") == "onprem_production":
+            checks.append(_check_oidc_group_mapping(config))
+            checks.append(_check_portal_origin_https(config))
     else:
         checks.append(_skip("oidc_discovery", "oidc_authentication capability inactive"))
 
@@ -508,6 +569,12 @@ async def run_operator_preflight(
         checks.append(_check_internal_egress_allowlist(config))
         checks.append(_check_model_policy(config, capabilities))
         checks.append(_check_backup_declaration(config))
+        if capabilities is not None and capabilities.portal_static:
+            checks.append(
+                _check_nginx_tls_certificate_paths(config, project_root=project_root)
+            )
+        else:
+            checks.append(_skip("nginx_tls_certificates", "portal_static capability inactive"))
         checks.append(
             _verify_file_reference(
                 label="authority_manifest_reference",

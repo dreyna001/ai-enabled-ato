@@ -17,12 +17,14 @@ Environment=ATO_HOST=127.0.0.1
 Environment=ATO_PORT=8000
 Environment=PYTHONDONTWRITEBYTECODE=1
 
-# Protected credentials: runtime JSON references "database-dsn" and
-# "audit-hmac-key". Operators provision both files out of band.
-# Never place secret values in unit files, env examples, or repository assets.
+# Protected credentials: runtime JSON references "database-dsn",
+# "audit-hmac-key", and "oidc-client-secret". Operators provision all files
+# out of band. Never place secret values in unit files, env examples, or
+# repository assets.
 #
 LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
 LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+LoadCredential=oidc-client-secret:/etc/ato-analyzer/credentials/oidc-client-secret
 
 ExecStart=/opt/ato-analyzer/venv/bin/ato-service
 

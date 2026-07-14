@@ -15,6 +15,7 @@ from ato_service.authority_manifest import AuthorityManifestVerificationError
 from ato_service.db.dsn import DATABASE_DSN_FILE_ENV_VAR
 from ato_service.db.session import DatabaseConfigurationError
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
+from ato_service.identity_header_guard import IdentityHeaderGuardMiddleware
 from ato_service.main import (
     RUNTIME_CONFIG_PATH_ENV_VAR,
     RUNTIME_STATE_ATTR,
@@ -484,6 +485,9 @@ def test_create_app_mounts_p1_package_routes_without_runtime() -> None:
 
     assert all(not path.startswith("/api/v1") for path in paths)
     assert "/systems" in paths
+    assert "/auth/login" in paths
+    assert "/auth/logout" in paths
+    assert "/auth/session" in paths
     assert "/systems/{system_id}/package-revisions" in paths
     assert "/package-revisions/{id}" in paths
     assert "/package-revisions/{id}/files" in paths
@@ -528,3 +532,17 @@ def test_create_app_exposes_health_and_api_when_runtime_absent() -> None:
         assert api.status_code == 401
         assert api.headers["content-type"].startswith("application/problem+json")
         assert api.json()["error_code"] == "authentication_required"
+
+
+def test_create_app_wires_identity_header_guard_middleware() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+    middleware_classes = [middleware.cls for middleware in app.user_middleware]
+    assert IdentityHeaderGuardMiddleware in middleware_classes
+
+
+def test_identity_header_guard_blocks_spoofed_headers_on_api_routes() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+    with TestClient(app) as client:
+        response = client.get("/api/v1/systems", headers={"X-User-Id": "spoofed"})
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "authorization_denied"

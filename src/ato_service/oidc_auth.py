@@ -62,7 +62,12 @@ def _decode_jwt_payload(token: str) -> dict[str, Any]:
     return payload
 
 
-def _groups_from_claims(claims: dict[str, Any], *, groups_claim: str = "groups") -> tuple[str, ...]:
+def _groups_from_claims(
+    claims: dict[str, Any],
+    *,
+    groups_claim: str = "groups",
+    allow_dev_fallback: bool = False,
+) -> tuple[str, ...]:
     raw_groups = claims.get(groups_claim)
     if raw_groups is None and groups_claim != "groups":
         raw_groups = claims.get("groups")
@@ -70,7 +75,9 @@ def _groups_from_claims(claims: dict[str, Any], *, groups_claim: str = "groups")
         normalized = [value for value in raw_groups if isinstance(value, str) and value.strip()]
         if normalized:
             return tuple(normalized)
-    return DEV_OIDC_GROUPS
+    if allow_dev_fallback:
+        return DEV_OIDC_GROUPS
+    raise OidcAuthenticationError()
 
 
 def is_embedded_dev_oidc_issuer(
@@ -181,7 +188,11 @@ async def exchange_code_for_identity(
     claim_name = groups_claim if isinstance(groups_claim, str) and groups_claim.strip() else "groups"
     return OidcIdentity(
         actor_id=actor_id.strip(),
-        groups=_groups_from_claims(claims, groups_claim=claim_name),
+        groups=_groups_from_claims(
+            claims,
+            groups_claim=claim_name,
+            allow_dev_fallback=is_embedded_dev_oidc_issuer(config, settings),
+        ),
     )
 
 

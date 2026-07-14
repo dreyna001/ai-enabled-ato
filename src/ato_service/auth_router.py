@@ -6,13 +6,24 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ato_service.api_dependencies import get_db_session, get_runtime_state
-from ato_service.auth_context import AuthenticationRequiredError, require_authenticated_principal
+from ato_service.api_dependencies import get_audit_hmac_key, get_db_session, get_runtime_state
 from ato_service.app_runtime import AppRuntimeState
+from ato_service.auth_context import (
+    AuthenticationRequiredError,
+    CsrfValidationError,
+    require_authenticated_principal,
+    require_mutation_context,
+)
+from ato_service.auth_security_audit import (
+    ANONYMOUS_ACTOR_ID,
+    record_csrf_rejected,
+    record_login_succeeded,
+    record_logout_succeeded,
+)
 from ato_service.oidc_auth import (
     OidcAuthenticationError,
     build_authorization_redirect_url,
@@ -21,12 +32,10 @@ from ato_service.oidc_auth import (
 from ato_service.session_auth import (
     ResolvedSessionSettings,
     SessionConfigurationError,
-    SessionExpiredError,
     create_auth_session,
     create_oidc_login_state,
     consume_oidc_login_state,
     delete_auth_session,
-    principal_from_session,
     resolve_session_settings,
     session_cookie_attributes,
     session_cookie_name,
@@ -71,6 +80,7 @@ def create_auth_router() -> APIRouter:
         request: Request,
         session: Annotated[AsyncSession, Depends(get_db_session)],
         runtime_state: Annotated[AppRuntimeState, Depends(get_runtime_state)],
+        hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         code: str | None = None,
         state: str | None = None,
     ) -> RedirectResponse:
@@ -95,6 +105,13 @@ def create_auth_router() -> APIRouter:
             groups=list(identity.groups),
             portal_origin=settings.portal_public_origin,
             settings=settings,
+            now=_utc_now(),
+        )
+        await record_login_succeeded(
+            session,
+            hmac_key=hmac_key,
+            actor_id=identity.actor_id,
+            session_id=session_row.session_id,
             now=_utc_now(),
         )
         cookie_name = session_cookie_name(secure_cookie=settings.secure_cookie)
@@ -122,20 +139,48 @@ def create_auth_router() -> APIRouter:
     @router.post("/auth/logout", status_code=204, tags=["Auth"])
     async def post_auth_logout(
         request: Request,
-        response: Response,
         session: Annotated[AsyncSession, Depends(get_db_session)],
         runtime_state: Annotated[AppRuntimeState, Depends(get_runtime_state)],
+        hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        x_csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+        origin: Annotated[str | None, Header(alias="Origin")] = None,
     ) -> Response:
         settings = _session_settings_from_runtime(runtime_state)
         cookie_name = session_cookie_name(secure_cookie=settings.secure_cookie)
         raw_session_id = request.cookies.get(cookie_name)
+        actor_id = ANONYMOUS_ACTOR_ID
+        session_id: uuid.UUID | None = None
         if raw_session_id:
             try:
                 session_id = uuid.UUID(raw_session_id)
             except ValueError:
                 session_id = None
-            if session_id is not None:
-                await delete_auth_session(session, session_id=session_id)
+        principal = getattr(request.state, "authenticated_principal", None)
+        if principal is not None:
+            actor_id = principal.actor_id
+            try:
+                require_mutation_context(request, x_csrf_token, origin)
+            except CsrfValidationError:
+                await record_csrf_rejected(
+                    session,
+                    hmac_key=hmac_key,
+                    actor_id=actor_id,
+                    route=request.url.path,
+                    now=_utc_now(),
+                )
+                raise
+        elif session_id is not None:
+            raise AuthenticationRequiredError()
+        if session_id is not None:
+            await delete_auth_session(session, session_id=session_id)
+            if principal is not None:
+                await record_logout_succeeded(
+                    session,
+                    hmac_key=hmac_key,
+                    actor_id=actor_id,
+                    session_id=session_id,
+                    now=_utc_now(),
+                )
         response = Response(status_code=204)
         response.delete_cookie(cookie_name, path="/")
         return response

@@ -354,12 +354,26 @@
         "src/ato_service/package_rbac.py",
         "src/ato_service/oidc_auth.py",
         "src/ato_service/oidc_jwt.py",
+        "src/ato_service/session_auth.py",
+        "src/ato_service/auth_router.py",
+        "src/ato_service/auth_middleware.py",
+        "src/ato_service/identity_header_guard.py",
+        "src/ato_service/auth_security_audit.py",
+        "deployment/systemd/ato-api.service",
+        "deployment/nginx/ato-portal.conf",
         "docs/THREAT_MODEL.md"
       ],
       "test_ids": [
-        "tests/ato_service/test_oidc_auth.py"
+        "tests/ato_service/test_oidc_auth.py",
+        "tests/ato_service/test_session_auth.py",
+        "tests/ato_service/test_identity_header_guard.py",
+        "tests/ato_service/test_auth_security_audit.py",
+        "tests/ato_operator/test_auth_purge.py",
+        "tests/test_deployment_contract.py::test_systemd_unit_wires_api_consumed_credential_references",
+        "tests/test_deployment_contract.py::test_nginx_templates_strip_identity_headers",
+        "tests/test_deployment_contract.py::test_portal_nginx_template_sets_safe_download_headers"
       ],
-      "verification_type": "Authlib JWT validation plus package-scoped RBAC role matrix; production deployment also depends on HS-003 live IdP drill",
+      "verification_type": "Authlib JWT validation, fail-closed OIDC group claims, session idle/absolute expiry, identity-header stripping, CSRF/logout enforcement, auth security audit events, operator purge-auth, and hardened deployment contract; production deployment also depends on HS-003 live IdP drill",
       "status": "partial"
     },
     {
