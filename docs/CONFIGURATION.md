@@ -243,7 +243,18 @@ $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/ato_service -m
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/test_deployment_contract.py -q
 ```
 
-Optional live DB connectivity: set `ATO_TEST_DATABASE_URL` to run `tests/ato_service/test_db.py` integration cases.
+Optional live DB connectivity: set `ATO_TEST_DATABASE_URL` to run `tests/ato_service/test_db.py` integration cases and the Phase 5 workflow suites in `tests/ato_service/test_workflow_e2e_integration.py` and `tests/ato_service/test_workflow_recovery_integration.py`.
+
+Phase 5 PostgreSQL workflow integration (requires migrated schema):
+
+```powershell
+$env:ATO_DATABASE_DSN_FILE = 'C:\path\to\database.dsn'
+ato-operator migrate-db --config deployment\config\runtime-config.dev_local.json
+$env:ATO_TEST_DATABASE_URL = 'postgresql+asyncpg://ato:secret@localhost:5432/ato_test'
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/ato_service/test_workflow_e2e_integration.py tests/ato_service/test_workflow_recovery_integration.py -m integration -q
+```
+
+When `ATO_TEST_DATABASE_URL` is unset, those tests skip cleanly. CI runs them in the optional `integration-postgres` job in `.github/workflows/contracts.yml`.
 
 ## Operator CLI (`ato-operator`)
 

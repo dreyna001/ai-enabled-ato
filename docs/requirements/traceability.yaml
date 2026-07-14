@@ -218,6 +218,8 @@
         "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_schema_valid_draft_without_fact_proposals",
         "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_drafts",
         "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_draft_and_audit_atomically",
+        "tests/ato_service/test_workflow_e2e_integration.py::test_profile_workflow_reaches_exact_export_hash",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_expired_job_lease_recovery_completes_without_duplicate_rows",
         "tests/ato_service/test_legacy_proposal_compat.py::test_assemble_draft_from_compatible_legacy_proposals",
         "tests/ato_service/test_package_editor_persistence.py::test_domain_mappings_validate_against_schema",
         "tests/ato_service/test_package_editor_persistence.py::test_package_draft_document_fixtures_follow_schema",
@@ -340,7 +342,8 @@
       ],
       "test_ids": [
         "tests/ato_service/test_disposition_transitions.py",
-        "tests/ato_service/test_poam_routing_integration.py"
+        "tests/ato_service/test_poam_routing_integration.py",
+        "tests/ato_service/test_workflow_e2e_integration.py::test_profile_workflow_reaches_exact_export_hash"
       ],
       "verification_type": "Human-confirmed POA&M routing with evidence-request-only path for insufficient_evidence and idempotent persistence",
       "status": "partial"
@@ -789,7 +792,8 @@
       "test_ids": [
         "tests/ato_service/test_status_ceiling_evaluator.py",
         "tests/ato_service/test_disposition_transitions.py",
-        "tests/ato_service/test_poam_routing_integration.py"
+        "tests/ato_service/test_poam_routing_integration.py",
+        "tests/ato_service/test_workflow_e2e_integration.py::test_profile_workflow_reaches_exact_export_hash"
       ],
       "verification_type": "Deterministic status-ceiling evaluator and POA&M-routing regression class",
       "status": "partial"
@@ -820,7 +824,10 @@
         "tests/ato_service/test_ep06_security_matrix.py::test_viewer_is_denied_reviewer_export_submit",
         "tests/ato_service/test_review_export_lifecycle.py::test_mutation_context_requires_csrf_for_reject_route",
         "tests/ato_service/test_route_role_matrix.py",
-        "tests/ato_service/test_object_authorization_security.py"
+        "tests/ato_service/test_object_authorization_security.py",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_authorization_denied_without_leaking_groups",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_object_guessing_returns_not_found",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_self_approval_denied_on_submit_and_approve"
       ],
       "verification_type": "Published per-route role matrix with package-scoped enforcement, CSRF/origin mutation gate, object guessing denial, and self-approval denial unit coverage; live OIDC object-level drills remain partial under HS-003",
       "status": "partial"
@@ -1195,6 +1202,32 @@
       ],
       "verification_type": "Phase 4 Component G PostgreSQL FTS index lifecycle, bounded chat, operator rebuild command, and focused auth/refusal/injection tests; live PostgreSQL integration runs when ATO_TEST_DATABASE_URL is configured",
       "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-013",
+      "spec_section": "31",
+      "requirement_text": "Profile-parametrized PostgreSQL workflow and replay integration tests cover synthetic intake substitutes, deterministic analysis, review/export routing, tenant isolation, and recovery paths without live network or model dependencies.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "tests/integration_support/postgres.py",
+        "tests/integration_support/factories.py",
+        "tests/integration_support/workflow.py",
+        "tests/ato_service/test_workflow_e2e_integration.py",
+        "tests/ato_service/test_workflow_recovery_integration.py",
+        "src/ato_service/deterministic_analyzer.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_workflow_e2e_integration.py::test_profile_workflow_reaches_exact_export_hash",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_create_system_idempotency_replay_is_identical",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_create_system_idempotency_conflict_raises",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_confirm_rejects_stale_etag",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_expired_job_lease_recovery_completes_without_duplicate_rows",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_finalize_without_artifacts_preserves_uploading_state",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_approval_expiry_blocks_late_approve",
+        "tests/ato_service/test_workflow_recovery_integration.py::test_self_approval_denied_on_submit_and_approve"
+      ],
+      "verification_type": "Phase 5 PostgreSQL-backed profile-parametrized E2E workflow and negative/recovery integration tests using fake scanner/model/IdP boundaries; skips when ATO_TEST_DATABASE_URL is absent",
+      "status": "partial"
     }
   ]
 }

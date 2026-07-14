@@ -13,9 +13,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.analysis_profile import (
+    analysis_profile_sha256,
     assessment_item_type_for_id,
     expected_assessment_item_ids,
-    load_pinned_fisma_synthetic_profile,
+    load_pinned_profile,
 )
 from ato_service.artifact_manifests import (
     ArtifactManifestCommitError,
@@ -180,8 +181,18 @@ async def process_next_deterministic_analysis(
             error_code="illegal_state_transition",
         )
 
-    profile = load_pinned_fisma_synthetic_profile(project_root=project_root)
-    expected_ids = expected_assessment_item_ids(profile)
+    profile = load_pinned_profile(
+        profile_id=package_revision.profile_id,
+        project_root=project_root,
+    )
+    if analysis_profile_sha256(profile) != analysis_run.analysis_profile_sha256:
+        raise DeterministicAnalysisProcessingError(
+            "analysis run profile digest does not match pinned profile",
+            error_code="reconciliation_required",
+        )
+    expected_ids = tuple(analysis_run.assessment_item_ids) or expected_assessment_item_ids(
+        profile
+    )
     row_payloads = _build_matrix_rows(
         run_id=analysis_run.run_id,
         profile=profile,
