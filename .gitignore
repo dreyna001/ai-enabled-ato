@@ -7,6 +7,9 @@ __pycache__/
 .tmp-pycache/
 portal/node_modules/
 portal/dist/
+portal/test-results/
+portal/playwright-report/
+.e2e-stack/
 portal/*.tsbuildinfo
 config.local.env
 .env

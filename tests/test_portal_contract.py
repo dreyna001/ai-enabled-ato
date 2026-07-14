@@ -16,6 +16,7 @@ INTAKE_UNIT = ROOT / "deployment" / "systemd" / "ato-intake-worker.service"
 PORTAL_RUNTIME_EXAMPLE = (
     ROOT / "deployment" / "config" / "runtime-config.dev_local.portal.example.json"
 )
+E2E_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.dev_local.e2e.json"
 
 
 @pytest.mark.parametrize(
@@ -27,6 +28,7 @@ PORTAL_RUNTIME_EXAMPLE = (
         PORTAL_NGINX,
         INTAKE_UNIT,
         PORTAL_RUNTIME_EXAMPLE,
+        E2E_RUNTIME_CONFIG,
     ],
 )
 def test_portal_assets_exist(path: Path) -> None:

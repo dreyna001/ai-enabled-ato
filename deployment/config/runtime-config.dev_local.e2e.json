@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "runtime_profile": "dev_local",
+  "STORAGE_DATA_PATH": "/data/ato-storage",
+  "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": true,
+  "IDENTITY_PROVIDER_MODE": "oidc",
+  "OIDC_ISSUER_URL": "http://127.0.0.1:8000/dev-oidc",
+  "OIDC_AUDIENCE": "ato-portal-dev",
+  "OIDC_GROUPS_CLAIM": "groups",
+  "OIDC_GROUP_ROLE_MAPPING": {
+    "system_owner": ["owners"],
+    "viewer": ["viewers"]
+  },
+  "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
+    "source": "root_owned_file",
+    "path": "/absolute/private/path/e2e-oidc-client-secret"
+  },
+  "PORTAL_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+  "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+    "source": "root_owned_file",
+    "path": "/absolute/private/path/e2e-audit-hmac-key"
+  },
+  "MALWARE_SCANNER_ENABLED": true,
+  "SESSION_IDLE_TIMEOUT_MINUTES": 30,
+  "SESSION_ABSOLUTE_TIMEOUT_HOURS": 8,
+  "PROCESS_CAPABILITIES": {
+    "api": true,
+    "intake_worker": true,
+    "analyzer_worker": true,
+    "portal_static": false,
+    "malware_scanning": true,
+    "text_model_calls": false,
+    "vision_model_calls": false,
+    "oidc_authentication": true,
+    "package_search": true,
+    "package_chat": true
+  },
+  "CHAT_MAX_RETRIEVED_CHUNKS": 8
+}

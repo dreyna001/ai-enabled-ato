@@ -1,0 +1,63 @@
+{
+  "package": {
+    "profile_id": "fedramp_rev5_transition",
+    "title": "Synthetic FedRAMP Rev. 5 transition demo",
+    "prepared_for": "Portal E2E — not official authorization evidence",
+    "reporting_period": "2026-Q2"
+  },
+  "system": {
+    "display_name": "E2E Rev5 Transition System",
+    "authorization_boundary": "Synthetic SaaS boundary for portal E2E only.",
+    "mission_summary": "Deterministic portal workflow fixture.",
+    "impact_level": "moderate",
+    "authorization_path": "fedramp"
+  },
+  "contacts": {
+    "system_owner": ["demo.owner@agency.example"],
+    "isso": ["demo.isso@agency.example"]
+  },
+  "control_set": {
+    "source": {},
+    "tailoring": [],
+    "organization_defined_parameters": {},
+    "inheritance": []
+  },
+  "security_controls": {
+    "AC-2": {
+      "implementation_status": "implemented",
+      "implementation_statement": "Synthetic account management statement for E2E intake.",
+      "responsible_parties": [],
+      "evidence_links": []
+    },
+    "AU-2": {
+      "implementation_status": "partial",
+      "implementation_statement": "Audit events collected for privileged actions.",
+      "responsible_parties": [],
+      "evidence_links": []
+    }
+  },
+  "evidence": {
+    "transition_demo": {
+      "artifact_id": "transition_demo",
+      "document_type": "ssp_excerpt",
+      "revision_date": "2026-06-15",
+      "attestation": "Synthetic excerpt for local portal E2E only."
+    }
+  },
+  "findings": {},
+  "poam_candidates": {},
+  "assessor_inputs": {},
+  "privacy": {
+    "artifacts_present": false,
+    "scope_notice": "Synthetic demo only."
+  },
+  "fedramp_20x": null,
+  "fedramp_rev5_transition": {
+    "ssp": {
+      "system_name": "E2E Rev5 Transition System",
+      "imported_from": "demo-package.json"
+    }
+  },
+  "fisma_agency_security": null,
+  "extensions": {}
+}
