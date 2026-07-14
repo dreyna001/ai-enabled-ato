@@ -578,10 +578,52 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         ResourceNotFoundError as SystemResourceNotFoundError,
     )
 
+    from ato_service.app_runtime import RUNTIME_STATE_ATTR, AppRuntimeState
+    from ato_service.auth_security_audit import record_csrf_rejected
+
+    @app.exception_handler(CsrfValidationError)
+    async def handle_csrf_validation_error(
+        request: Request,
+        exc: CsrfValidationError,
+    ) -> JSONResponse:
+        runtime_state = getattr(request.app.state, RUNTIME_STATE_ATTR, None)
+        principal = getattr(request.state, "authenticated_principal", None)
+        if (
+            isinstance(runtime_state, AppRuntimeState)
+            and runtime_state.session_factory is not None
+            and runtime_state.audit_hmac_key is not None
+            and principal is not None
+        ):
+            from datetime import datetime, timezone
+
+            async with runtime_state.session_factory() as audit_session:
+                try:
+                    await record_csrf_rejected(
+                        audit_session,
+                        hmac_key=runtime_state.audit_hmac_key,
+                        actor_id=principal.actor_id,
+                        route=request.url.path,
+                        now=datetime.now(timezone.utc),
+                    )
+                    await audit_session.commit()
+                except Exception:
+                    await audit_session.rollback()
+        problem = build_problem(
+            error_code=exc.error_code,
+            status=403,
+            instance=request.url.path,
+            request_id=get_request_id(request),
+            retryable=False,
+        )
+        return problem_json_response(problem)
+
+    from ato_service.identity_header_guard import UntrustedIdentityHeaderError
+
+    _register_domain_problem_handler(app, UntrustedIdentityHeaderError)
+
     for auth_error_type in (
         AuthenticationRequiredError,
         AuthorizationDeniedError,
-        CsrfValidationError,
         OidcAuthenticationError,
         SessionExpiredError,
     ):

@@ -22,6 +22,7 @@ from ato_service.app_runtime import (
     AppRuntimeState,
 )
 from ato_service.auth_middleware import SessionAuthenticationMiddleware
+from ato_service.identity_header_guard import IdentityHeaderGuardMiddleware
 from ato_service.authority_manifest import verify_authority_manifest
 from ato_service.db.dsn import require_database_dsn_from_env
 from ato_service.db.session import (
@@ -156,6 +157,7 @@ def create_app(
     )
     register_problem_handlers(app)
     app.add_middleware(SessionAuthenticationMiddleware)
+    app.add_middleware(IdentityHeaderGuardMiddleware)
     app.include_router(create_health_router(readiness_probe))
     from ato_service.api_router import create_api_router
     from ato_service.auth_router import create_auth_router

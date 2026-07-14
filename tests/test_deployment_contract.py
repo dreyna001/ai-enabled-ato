@@ -55,6 +55,8 @@ DATABASE_DSN_CREDENTIAL_PATH = f"{CONFIG_DIR}/credentials/database-dsn"
 DATABASE_DSN_IDENTIFIER = "database-dsn"
 AUDIT_HMAC_CREDENTIAL_PATH = f"{CONFIG_DIR}/credentials/audit-hmac-key"
 AUDIT_HMAC_IDENTIFIER = "audit-hmac-key"
+OIDC_CLIENT_CREDENTIAL_PATH = f"{CONFIG_DIR}/credentials/oidc-client-secret"
+OIDC_CLIENT_IDENTIFIER = "oidc-client-secret"
 NGINX_EXAMPLE_DEST = "/etc/nginx/conf.d/ato-api.conf.example"
 PORTAL_NGINX_EXAMPLE_DEST = "/etc/nginx/conf.d/ato-portal.conf.example"
 NGINX_API_EXAMPLE_DEST = NGINX_EXAMPLE_DEST
@@ -252,8 +254,11 @@ def test_systemd_unit_wires_api_consumed_credential_references(
         f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
         in systemd_text
     )
+    assert (
+        f"LoadCredential={OIDC_CLIENT_IDENTIFIER}:{OIDC_CLIENT_CREDENTIAL_PATH}"
+        in systemd_text
+    )
     assert "CREDENTIALS_DIRECTORY" not in systemd_text
-    assert "LoadCredential=oidc" not in systemd_text.lower()
     assert "LoadCredential=backup" not in systemd_text.lower()
 
 
@@ -413,6 +418,13 @@ def test_nginx_templates_strip_identity_headers() -> None:
             "proxy_hide_header X-Forwarded-User",
         ):
             assert header in text, f"{path.name} missing identity stripping: {header}"
+
+
+def test_portal_nginx_template_sets_safe_download_headers() -> None:
+    text = _read(PORTAL_NGINX_CONF)
+    assert "X-Download-Options" in text
+    assert "default-src 'self'" in text
+    assert "'unsafe-inline'" in text
 
 
 def test_install_script_is_idempotent_and_explicit_about_side_effects(
@@ -755,7 +767,7 @@ def test_deployment_readme_matches_current_installer_contract(
     assert "requires `--start`" in deployment_readme_text
     assert "alembic.ini" in deployment_readme_text
     assert "migrations/" in deployment_readme_text
-    assert "`database-dsn` and `audit-hmac-key`" in deployment_readme_text
+    assert "`database-dsn`, `audit-hmac-key`, and `oidc-client-secret`" in deployment_readme_text
     assert '"checks":{"process":"ok"}' in deployment_readme_text
     assert "reconciliation_required" in deployment_readme_text
     assert "instance: /health/ready" in deployment_readme_text

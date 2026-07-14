@@ -11,6 +11,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from ato_service.app_runtime import RUNTIME_STATE_ATTR, AppRuntimeState
+from ato_service.auth_security_audit import record_session_revoked
 from ato_service.session_auth import (
     SessionExpiredError,
     load_valid_session,
@@ -53,8 +54,27 @@ class SessionAuthenticationMiddleware(BaseHTTPMiddleware):
                     now=datetime.now(timezone.utc),
                 )
                 await db_session.commit()
-            except SessionExpiredError:
+            except SessionExpiredError as exc:
                 await db_session.rollback()
+                if (
+                    exc.revocation_reason in {"idle_timeout", "absolute_timeout"}
+                    and runtime_state.audit_hmac_key is not None
+                    and exc.actor_id is not None
+                    and exc.session_id is not None
+                ):
+                    async with runtime_state.session_factory() as audit_session:
+                        try:
+                            await record_session_revoked(
+                                audit_session,
+                                hmac_key=runtime_state.audit_hmac_key,
+                                actor_id=exc.actor_id,
+                                session_id=exc.session_id,
+                                reason=exc.revocation_reason,
+                                now=datetime.now(timezone.utc),
+                            )
+                            await audit_session.commit()
+                        except Exception:
+                            await audit_session.rollback()
                 return await call_next(request)
             except Exception:
                 await db_session.rollback()

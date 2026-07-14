@@ -448,3 +448,55 @@ def test_exchange_code_rejects_dev_issuer_in_production_profile() -> None:
                 nonce="nonce",
             )
         )
+
+
+def test_groups_from_claims_fail_closed_in_production_exchange(
+    monkeypatch: pytest.MonkeyPatch,
+    issuer_urls,
+    signed_token_bundle,
+) -> None:
+    _patch_oidc_http(monkeypatch, issuer_urls=issuer_urls, public_jwk=signed_token_bundle["public_jwk"])
+    now = int(time.time())
+    header = {"alg": "RS256", "typ": "JWT", "kid": "test-key-1"}
+    payload = {
+        "iss": signed_token_bundle["issuer"],
+        "aud": "ato-analyzer",
+        "sub": "user-no-groups",
+        "nonce": "nonce-123",
+        "iat": now,
+        "exp": now + 300,
+    }
+    id_token = jwt.encode(header, payload, signed_token_bundle["private_jwk"])
+    if isinstance(id_token, bytes):
+        id_token = id_token.decode("ascii")
+
+    class _TokenClient:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        async def __aenter__(self) -> _TokenClient:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(self, *_args: object, **_kwargs: object) -> _FakeResponse:
+            return _FakeResponse({"id_token": id_token, "token_type": "Bearer"})
+
+    monkeypatch.setattr("ato_service.oidc_auth.httpx.AsyncClient", _TokenClient)
+    monkeypatch.setattr(
+        "ato_service.oidc_auth.resolve_oidc_client_secret",
+        lambda _config: b"client-secret",
+    )
+    settings = _settings(issuer=signed_token_bundle["issuer"])
+    config = _runtime_config(profile="onprem_production", issuer=settings.oidc_issuer_url)
+    with pytest.raises(OidcAuthenticationError):
+        _run(
+            exchange_code_for_identity(
+                config=config,
+                settings=settings,
+                code="code",
+                code_verifier="verifier",
+                nonce="nonce-123",
+            )
+        )

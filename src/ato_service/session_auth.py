@@ -34,6 +34,18 @@ class SessionExpiredError(Exception):
 
     error_code = "authentication_required"
 
+    def __init__(
+        self,
+        revocation_reason: str | None = None,
+        *,
+        actor_id: str | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> None:
+        self.revocation_reason = revocation_reason
+        self.actor_id = actor_id
+        self.session_id = session_id
+        super().__init__()
+
 
 @dataclass(frozen=True, slots=True)
 class ResolvedSessionSettings:
@@ -70,13 +82,20 @@ def resolve_session_settings(config: RuntimeConfig) -> ResolvedSessionSettings |
     if not isinstance(audience, str) or not audience.strip():
         raise SessionConfigurationError("OIDC_AUDIENCE is required for OIDC")
 
+    idle_minutes = document.get("SESSION_IDLE_TIMEOUT_MINUTES", SESSION_IDLE_TIMEOUT_MINUTES)
+    absolute_hours = document.get("SESSION_ABSOLUTE_TIMEOUT_HOURS", SESSION_ABSOLUTE_TIMEOUT_HOURS)
+    if not isinstance(idle_minutes, int) or idle_minutes <= 0:
+        raise SessionConfigurationError("SESSION_IDLE_TIMEOUT_MINUTES must be a positive integer")
+    if not isinstance(absolute_hours, int) or absolute_hours <= 0:
+        raise SessionConfigurationError("SESSION_ABSOLUTE_TIMEOUT_HOURS must be a positive integer")
+
     secure_cookie = portal_origin.startswith("https://")
     return ResolvedSessionSettings(
         portal_public_origin=portal_origin.strip(),
         oidc_issuer_url=issuer_url.strip(),
         oidc_audience=audience.strip(),
-        idle_timeout=timedelta(minutes=SESSION_IDLE_TIMEOUT_MINUTES),
-        absolute_timeout=timedelta(hours=SESSION_ABSOLUTE_TIMEOUT_HOURS),
+        idle_timeout=timedelta(minutes=idle_minutes),
+        absolute_timeout=timedelta(hours=absolute_hours),
         secure_cookie=secure_cookie,
     )
 
@@ -142,16 +161,28 @@ async def load_valid_session(
     )
     session_row = result.scalar_one_or_none()
     if session_row is None:
-        raise SessionExpiredError()
+        raise SessionExpiredError("missing_session", session_id=session_id)
 
     if validated_now >= session_row.absolute_expires_at:
+        actor_id = session_row.actor_id
         await db_session.delete(session_row)
-        raise SessionExpiredError()
+        await db_session.flush()
+        raise SessionExpiredError(
+            "absolute_timeout",
+            actor_id=actor_id,
+            session_id=session_id,
+        )
 
     idle_deadline = session_row.last_seen_at + settings.idle_timeout
     if validated_now >= idle_deadline:
+        actor_id = session_row.actor_id
         await db_session.delete(session_row)
-        raise SessionExpiredError()
+        await db_session.flush()
+        raise SessionExpiredError(
+            "idle_timeout",
+            actor_id=actor_id,
+            session_id=session_id,
+        )
 
     session_row.last_seen_at = validated_now
     await db_session.flush()
@@ -201,7 +232,7 @@ async def consume_oidc_login_state(
     )
     login_state = result.scalar_one_or_none()
     if login_state is None or validated_now >= login_state.expires_at:
-        raise SessionExpiredError()
+        raise SessionExpiredError("login_state_expired")
     await db_session.delete(login_state)
     await db_session.flush()
     return login_state
@@ -239,6 +270,8 @@ def session_cookie_attributes(
     }
     if settings.secure_cookie:
         attributes["secure"] = True
+        attributes["path"] = "/"
+        # __Host- prefix requires Secure, Path=/, and no Domain attribute.
     if max_age_seconds is not None:
         attributes["max_age"] = max_age_seconds
     return attributes

@@ -38,6 +38,7 @@ There is no model sidecar or timer in this slice. Worker systemd units ship **di
 /etc/ato-analyzer/runtime-config.json          # customer production JSON (never overwritten by installer)
 /etc/ato-analyzer/credentials/database-dsn     # root-owned DSN file (never overwritten)
 /etc/ato-analyzer/credentials/audit-hmac-key   # root-owned audit key (never overwritten)
+/etc/ato-analyzer/credentials/oidc-client-secret # root-owned OIDC client secret (never overwritten)
 /opt/ato-analyzer/                             # application venv, package, alembic.ini, migrations/, contracts
 /opt/ato-analyzer/portal/dist                  # built React portal static bundle
 /var/ato-packages/                             # mutable package storage
@@ -103,7 +104,7 @@ Upgrade drains workers, refreshes package bytes, optionally migrates, and restar
 
 ## systemd credentials
 
-The shipped `ato-api.service` wires `database-dsn` and `audit-hmac-key`, the two credentials consumed by the current API process. The audit key must contain at least 32 bytes. `ato-intake-worker.service` and `ato-analyzer-worker.service` consume the same credentials for their implemented runtime paths. Text-model, OIDC, and backup credential references remain declarations for later consumers; add matching `LoadCredential` mappings only when those processes or capabilities exist.
+The shipped `ato-api.service` wires `database-dsn`, `audit-hmac-key`, and `oidc-client-secret`, the credentials consumed by the current API process when OIDC authentication is enabled. `ato-intake-worker.service` and `ato-analyzer-worker.service` consume database and audit credentials for their implemented runtime paths. Text-model and backup credential references remain declarations for later consumers; add matching `LoadCredential` mappings only when those processes or capabilities exist.
 
 ## nginx and TLS
 
