@@ -253,6 +253,7 @@ Workstream A ships a bounded operator CLI (`pyproject.toml` entrypoint `ato-oper
 | `verify-migrations` | Compare alembic head to live DB revision (`--dry-run` skips DB) |
 | `smoke` | Delegates to `scripts/smoke_service_chain.sh` |
 | `verify-audit` | HMAC audit chain verification when PostgreSQL is reachable |
+| `expire-approvals` | Transition `pending_approval` and unexported `approved` drafts past `APPROVAL_EXPIRY_DAYS` to `expired` |
 | `qualification-check` | Qualification fixture presence only (does not close HS-001..009) |
 | `print-checklist` | Operator onboarding checklist including open hard stops |
 

@@ -295,16 +295,19 @@
       "epic": "EP-06-review-portal",
       "implementation_files": [
         "src/ato_service/export_service.py",
-        "src/ato_service/export_assembly.py",
         "src/ato_service/review_revisions.py",
         "src/ato_service/extended_api_router.py",
+        "src/ato_operator/approval_expiry.py",
+        "portal/src/components/ReviewExportWorkbench.tsx",
         "docs/contracts/export-manifest.schema.json"
       ],
       "test_ids": [
         "tests/ato_service/test_export_assembly.py::test_assemble_export_bundle_reproduces_approved_manifest_hash",
-        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied"
+        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied",
+        "tests/ato_service/test_review_export_lifecycle.py::test_reject_export_happy_path",
+        "tests/ato_service/test_review_export_lifecycle.py::test_process_approval_expiry_uses_injected_clock"
       ],
-      "verification_type": "Hash-bound export draft, approval, sanitized ZIP assembly, and download route with audit/idempotency; live customer approval drills remain partial under HS-003",
+      "verification_type": "Hash-bound export draft, approval/reject routes, supersession and expiry processing, sanitized ZIP assembly, download authorization with audit/idempotency, and portal workbench states; live customer approval drills remain partial under HS-003",
       "status": "partial"
     },
     {
@@ -688,7 +691,8 @@
         "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_allows_owner_as_reviewer",
         "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_allows_dedicated_approver_group",
         "tests/ato_service/test_ep06_security_matrix.py::test_mutation_context_requires_csrf_and_origin",
-        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied"
+        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied",
+        "tests/ato_service/test_review_export_lifecycle.py::test_mutation_context_requires_csrf_for_reject_route"
       ],
       "verification_type": "RBAC role matrix, CSRF/origin mutation gate, and self-approval denial unit coverage; live OIDC object-level drills remain partial under HS-003",
       "status": "partial"

@@ -76,6 +76,7 @@ LIMITS = RuntimeLimits(
     max_package_bytes=2_147_483_648,
     max_single_file_bytes=104_857_600,
     max_files_per_revision=500,
+    approval_expiry_days=7,
 )
 
 

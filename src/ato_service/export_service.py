@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
-from ato_service.concurrency import assert_if_match, format_package_revision_etag
+from ato_service.concurrency import assert_if_match
 from ato_service.domain_mapping import format_uuid
-from ato_service.export_assembly import AI_DISCLOSURE, ExportAssemblyError, assemble_export_bundle
+from ato_service.export_assembly import ExportAssemblyError, assemble_export_bundle
 from ato_service.export_readiness import evaluate_export_readiness
 from ato_service.idempotency import (
     IdempotencyReplay,
@@ -28,11 +28,13 @@ from ato_service.idempotency import (
 from ato_service.package_rbac import require_package_role
 from ato_service.profile_artifacts import generate_profile_artifacts
 
-APPROVAL_EXPIRY_DAYS = 7
+_DEFAULT_APPROVAL_EXPIRY_DAYS = 7
+_SUPERSEDEABLE_EXPORT_DRAFT_STATUSES = frozenset({"draft", "pending_approval", "approved"})
 
 OPERATION_CREATE_DRAFT = "export_drafts.create"
 OPERATION_SUBMIT = "export_drafts.submit"
 OPERATION_APPROVE = "approvals.approve"
+OPERATION_REJECT = "approvals.reject"
 OPERATION_DOWNLOAD = "exports.download"
 
 
@@ -49,6 +51,10 @@ class ExportValidationError(ValueError):
 
 class SelfApprovalDeniedError(Exception):
     error_code = "self_approval_denied"
+
+
+class ApprovalAlreadyDecidedError(Exception):
+    error_code = "approval_already_decided"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +74,197 @@ def _format_utc(value: datetime) -> str:
 def _manifest_sha256(manifest: dict[str, Any]) -> str:
     payload = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _approval_payload_digest(
+    *,
+    approval_id: uuid.UUID,
+    decision: str,
+    reason: str | None,
+) -> str:
+    return request_digest_from_payload(
+        {
+            "approval_id": str(approval_id).lower(),
+            "decision": decision,
+            "reason": reason,
+        }
+    )
+
+
+def _map_approval_to_domain(approval: Any) -> dict[str, Any]:
+    return {
+        "schema_version": "2.0.0",
+        "object_type": "approval",
+        "approval_id": format_uuid(approval.approval_id),
+        "export_draft_id": format_uuid(approval.export_draft_id),
+        "payload_manifest_sha256": approval.payload_manifest_sha256,
+        "submitted_by": approval.submitted_by,
+        "decided_by": approval.decided_by,
+        "decision": approval.decision,
+        "submitted_at": _format_utc(approval.submitted_at),
+        "decided_at": _format_utc(approval.decided_at) if approval.decided_at is not None else None,
+        "expires_at": _format_utc(approval.expires_at),
+        "reason": approval.reason,
+    }
+
+
+async def _supersede_stale_export_drafts(
+    session: AsyncSession,
+    *,
+    review_revision_id: uuid.UUID,
+    payload_manifest_sha256: str,
+    hmac_key: bytes,
+    actor_id: str,
+    now: datetime,
+) -> None:
+    from ato_service.db.models import ExportDraft
+
+    draft_result = await session.execute(
+        select(ExportDraft).where(ExportDraft.review_revision_id == review_revision_id)
+    )
+    for export_draft in draft_result.scalars().all():
+        if export_draft.status not in _SUPERSEDEABLE_EXPORT_DRAFT_STATUSES:
+            continue
+        if export_draft.payload_manifest_sha256 == payload_manifest_sha256:
+            continue
+        export_draft.status = "superseded"
+        await append_audit_event(
+            session,
+            hmac_key=hmac_key,
+            actor_type="user",
+            actor_id=actor_id,
+            action="export_draft.superseded",
+            object_type="export_draft",
+            object_id=str(export_draft.export_draft_id).lower(),
+            outcome="succeeded",
+            reason_code="approval_payload_mismatch",
+            metadata={
+                "review_revision_id": str(review_revision_id).lower(),
+                "payload_manifest_sha256": export_draft.payload_manifest_sha256,
+            },
+            now=now,
+        )
+
+
+async def _compute_current_payload_manifest_sha256(
+    session: AsyncSession,
+    *,
+    review_revision_id: uuid.UUID,
+    run_id: uuid.UUID,
+    revision: Any,
+    sealed: Any,
+    project_root: Path,
+    authority_manifest_id: str,
+) -> str:
+    dispositions, matrix_rows = await _load_export_bundle_inputs(
+        session,
+        review_revision_id=review_revision_id,
+        run_id=run_id,
+    )
+    artifacts = generate_profile_artifacts(
+        profile_id=revision.profile_id,
+        sealed_document=sealed.document,
+        review_revision_id=review_revision_id,
+        run_id=run_id,
+        dispositions=dispositions,
+        matrix_rows=matrix_rows,
+    )
+    manifest = {
+        "schema_version": "1.0.0",
+        "profile_id": revision.profile_id,
+        "package_revision_id": str(revision.package_revision_id).lower(),
+        "run_id": str(run_id).lower(),
+        "review_revision_id": str(review_revision_id).lower(),
+        "authority_manifest_id": authority_manifest_id,
+        "files": artifacts.files,
+    }
+    return _manifest_sha256(manifest)
+
+
+async def _assert_approval_pending_and_fresh(
+    session: AsyncSession,
+    *,
+    approval: Any,
+    export_draft: Any,
+    approval_expiry_days: int,
+    hmac_key: bytes,
+    actor_id: str,
+    now: datetime,
+) -> None:
+    if approval.decision != "pending":
+        raise ApprovalAlreadyDecidedError()
+    if export_draft.status != "pending_approval":
+        raise ExportValidationError(
+            "export draft is not pending approval",
+            error_code="illegal_state_transition",
+        )
+    pending_deadline = approval.submitted_at + timedelta(days=approval_expiry_days)
+    if now >= pending_deadline:
+        export_draft.status = "expired"
+        await append_audit_event(
+            session,
+            hmac_key=hmac_key,
+            actor_type="service",
+            actor_id=actor_id,
+            action="approval.expired",
+            object_type="approval",
+            object_id=str(approval.approval_id).lower(),
+            outcome="succeeded",
+            reason_code="approval_expired",
+            metadata={"export_draft_id": str(approval.export_draft_id).lower()},
+            now=now,
+        )
+        raise ExportValidationError("approval has expired", error_code="approval_expired")
+
+
+async def _verify_approval_payload_binding(
+    session: AsyncSession,
+    *,
+    approval: Any,
+    export_draft: Any,
+    review_revision_id: uuid.UUID,
+    run_id: uuid.UUID,
+    revision: Any,
+    sealed: Any,
+    project_root: Path,
+    authority_manifest_id: str,
+    hmac_key: bytes,
+    actor_id: str,
+    now: datetime,
+) -> None:
+    current_hash = await _compute_current_payload_manifest_sha256(
+        session,
+        review_revision_id=review_revision_id,
+        run_id=run_id,
+        revision=revision,
+        sealed=sealed,
+        project_root=project_root,
+        authority_manifest_id=authority_manifest_id,
+    )
+    if current_hash == approval.payload_manifest_sha256:
+        return
+    if export_draft.status in _SUPERSEDEABLE_EXPORT_DRAFT_STATUSES:
+        export_draft.status = "superseded"
+        await append_audit_event(
+            session,
+            hmac_key=hmac_key,
+            actor_type="user",
+            actor_id=actor_id,
+            action="export_draft.superseded",
+            object_type="export_draft",
+            object_id=str(export_draft.export_draft_id).lower(),
+            outcome="denied",
+            reason_code="approval_payload_mismatch",
+            metadata={
+                "expected_payload_manifest_sha256": approval.payload_manifest_sha256,
+                "current_payload_manifest_sha256": current_hash,
+            },
+            now=now,
+        )
+    raise ExportValidationError(
+        "approval payload hash mismatch",
+        error_code="approval_payload_mismatch",
+    )
 
 
 async def _load_review_context(session: AsyncSession, *, review_revision_id: uuid.UUID) -> tuple[Any, ...]:
@@ -216,9 +413,11 @@ async def create_export_draft(
     )
     replay = await load_idempotency_replay(
         session,
-        operation=OPERATION_CREATE_DRAFT,
-        idempotency_key=idempotency_key,
-        request_digest=request_digest,
+        principal.actor_id,
+        OPERATION_CREATE_DRAFT,
+        idempotency_key,
+        request_digest,
+        now,
     )
     if isinstance(replay, IdempotencyReplay):
         return ExportMutationResult(
@@ -227,6 +426,15 @@ async def create_export_draft(
             etag=replay.response_headers.get("ETag", '"v1"'),
             replayed=True,
         )
+
+    await _supersede_stale_export_drafts(
+        session,
+        review_revision_id=review_revision_id,
+        payload_manifest_sha256=payload_sha256,
+        hmac_key=hmac_key,
+        actor_id=principal.actor_id,
+        now=now,
+    )
 
     export_draft_id = uuid.uuid4()
     export_draft = ExportDraft(
@@ -253,6 +461,7 @@ async def create_export_draft(
     etag = '"v1"'
     await record_idempotency_outcome(
         session,
+        principal=principal.actor_id,
         operation=OPERATION_CREATE_DRAFT,
         idempotency_key=idempotency_key,
         request_digest=request_digest,
@@ -273,8 +482,28 @@ async def submit_export_draft(
     idempotency_key: str,
     hmac_key: bytes,
     now: datetime,
+    approval_expiry_days: int = _DEFAULT_APPROVAL_EXPIRY_DAYS,
 ) -> ExportMutationResult:
-    from ato_service.db.models import Approval, ExportDraft, ReviewRevision
+    from ato_service.db.models import Approval, ExportDraft
+
+    request_digest = request_digest_from_payload(
+        {"export_draft_id": str(export_draft_id).lower()}
+    )
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        OPERATION_SUBMIT,
+        idempotency_key,
+        request_digest,
+        now,
+    )
+    if isinstance(replay, IdempotencyReplay):
+        return ExportMutationResult(
+            payload=replay.response_body,
+            status=replay.response_status,
+            etag=replay.response_headers.get("ETag", '"v1"'),
+            replayed=True,
+        )
 
     draft_result = await session.execute(
         select(ExportDraft).where(ExportDraft.export_draft_id == export_draft_id)
@@ -291,10 +520,13 @@ async def submit_export_draft(
         raise
     assert_if_match(if_match=if_match, current_version=1)
     if export_draft.status != "draft":
-        raise ExportValidationError("export draft is not in draft status")
+        raise ExportValidationError(
+            "export draft is not in draft status",
+            error_code="illegal_state_transition",
+        )
 
     approval_id = uuid.uuid4()
-    expires_at = now + timedelta(days=APPROVAL_EXPIRY_DAYS)
+    expires_at = now + timedelta(days=approval_expiry_days)
     approval = Approval(
         approval_id=approval_id,
         export_draft_id=export_draft_id,
@@ -309,21 +541,33 @@ async def submit_export_draft(
     )
     export_draft.status = "pending_approval"
     session.add(approval)
-    payload = {
-        "schema_version": "2.0.0",
-        "object_type": "approval",
-        "approval_id": format_uuid(approval_id),
-        "export_draft_id": format_uuid(export_draft_id),
-        "payload_manifest_sha256": export_draft.payload_manifest_sha256,
-        "submitted_by": principal.actor_id,
-        "decided_by": None,
-        "decision": "pending",
-        "submitted_at": _format_utc(now),
-        "decided_at": None,
-        "expires_at": _format_utc(expires_at),
-        "reason": None,
-    }
-    return ExportMutationResult(payload=payload, status=201, etag='"v1"', replayed=False)
+    payload = _map_approval_to_domain(approval)
+    etag = '"v1"'
+    await append_audit_event(
+        session,
+        hmac_key=hmac_key,
+        actor_type="user",
+        actor_id=principal.actor_id,
+        action="export_draft.submit",
+        object_type="export_draft",
+        object_id=str(export_draft_id).lower(),
+        outcome="succeeded",
+        reason_code=None,
+        metadata={"approval_id": str(approval_id).lower()},
+        now=now,
+    )
+    await record_idempotency_outcome(
+        session,
+        principal=principal.actor_id,
+        operation=OPERATION_SUBMIT,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        response_status=201,
+        response_body=payload,
+        response_headers={"ETag": etag},
+        now=now,
+    )
+    return ExportMutationResult(payload=payload, status=201, etag=etag, replayed=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,19 +593,18 @@ async def deliver_export_download(
 ) -> ExportDownloadResult:
     from ato_service.db.models import (
         Approval,
-        Disposition,
         ExportDraft,
         ExportRecord,
-        MatrixRow,
-        ReviewRevision,
     )
 
     request_digest = request_digest_from_payload({"export_id": str(export_id).lower()})
     replay = await load_idempotency_replay(
         session,
-        operation=OPERATION_DOWNLOAD,
-        idempotency_key=idempotency_key,
-        request_digest=request_digest,
+        principal.actor_id,
+        OPERATION_DOWNLOAD,
+        idempotency_key,
+        request_digest,
+        now,
     )
     if isinstance(replay, IdempotencyReplay):
         stored_export_id = uuid.UUID(replay.response_body["export_id"])
@@ -431,6 +674,13 @@ async def deliver_export_download(
     export_draft = draft_result.scalar_one_or_none()
     if export_draft is None:
         raise ExportNotFoundError()
+    if export_draft.status == "superseded":
+        raise ExportValidationError(
+            "export draft has been superseded",
+            error_code="approval_payload_mismatch",
+        )
+    if export_draft.status == "expired":
+        raise ExportValidationError("export has expired", error_code="export_expired")
     if export_draft.status != "approved":
         raise ExportValidationError("export draft is not approved", error_code="illegal_state_transition")
     if export_draft.payload_manifest_sha256 != approval.payload_manifest_sha256:
@@ -448,6 +698,21 @@ async def deliver_export_download(
         raise
     if sealed is None:
         raise ExportValidationError("sealed package content is required", error_code="package_not_ready")
+
+    await _verify_approval_payload_binding(
+        session,
+        approval=approval,
+        export_draft=export_draft,
+        review_revision_id=export_draft.review_revision_id,
+        run_id=run.run_id,
+        revision=revision,
+        sealed=sealed,
+        project_root=project_root,
+        authority_manifest_id=authority_manifest_id,
+        hmac_key=hmac_key,
+        actor_id=principal.actor_id,
+        now=now,
+    )
 
     dispositions, matrix_rows = await _load_export_bundle_inputs(
         session,
@@ -513,6 +778,7 @@ async def deliver_export_download(
     )
     await record_idempotency_outcome(
         session,
+        principal=principal.actor_id,
         operation=OPERATION_DOWNLOAD,
         idempotency_key=idempotency_key,
         request_digest=request_digest,
@@ -561,8 +827,33 @@ async def approve_export(
     idempotency_key: str,
     hmac_key: bytes,
     now: datetime,
+    reason: str | None = None,
+    project_root: Path | None = None,
+    authority_manifest_id: str | None = None,
+    approval_expiry_days: int = _DEFAULT_APPROVAL_EXPIRY_DAYS,
 ) -> ExportMutationResult:
     from ato_service.db.models import Approval, ExportDraft
+
+    request_digest = _approval_payload_digest(
+        approval_id=approval_id,
+        decision="approved",
+        reason=reason,
+    )
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        OPERATION_APPROVE,
+        idempotency_key,
+        request_digest,
+        now,
+    )
+    if isinstance(replay, IdempotencyReplay):
+        return ExportMutationResult(
+            payload=replay.response_body,
+            status=replay.response_status,
+            etag=replay.response_headers.get("ETag", '"v1"'),
+            replayed=True,
+        )
 
     approval_result = await session.execute(
         select(Approval).where(Approval.approval_id == approval_id)
@@ -572,10 +863,6 @@ async def approve_export(
         raise ExportNotFoundError()
     if approval.submitted_by == principal.actor_id:
         raise SelfApprovalDeniedError()
-    if approval.decision != "pending":
-        raise ExportValidationError("approval is not pending")
-    if now >= approval.expires_at:
-        raise ExportValidationError("approval has expired", error_code="approval_expired")
 
     draft_result = await session.execute(
         select(ExportDraft).where(ExportDraft.export_draft_id == approval.export_draft_id)
@@ -591,11 +878,46 @@ async def approve_export(
     except AuthorizationDeniedError:
         raise
 
+    try:
+        await _assert_approval_pending_and_fresh(
+            session,
+            approval=approval,
+            export_draft=export_draft,
+            approval_expiry_days=approval_expiry_days,
+            hmac_key=hmac_key,
+            actor_id=principal.actor_id,
+            now=now,
+        )
+    except ApprovalAlreadyDecidedError:
+        raise ExportValidationError(
+            "approval is already decided",
+            error_code="approval_already_decided",
+        ) from None
+
+    if project_root is not None and authority_manifest_id is not None and sealed is not None:
+        await _verify_approval_payload_binding(
+            session,
+            approval=approval,
+            export_draft=export_draft,
+            review_revision_id=export_draft.review_revision_id,
+            run_id=run.run_id,
+            revision=revision,
+            sealed=sealed,
+            project_root=project_root,
+            authority_manifest_id=authority_manifest_id,
+            hmac_key=hmac_key,
+            actor_id=principal.actor_id,
+            now=now,
+        )
+
     approval.decision = "approved"
     approval.decided_by = principal.actor_id
     approval.decided_at = now
-    approval.expires_at = now + timedelta(days=APPROVAL_EXPIRY_DAYS)
+    approval.expires_at = now + timedelta(days=approval_expiry_days)
+    approval.reason = reason
     export_draft.status = "approved"
+    payload = _map_approval_to_domain(approval)
+    etag = '"v1"'
     await append_audit_event(
         session,
         hmac_key=hmac_key,
@@ -612,18 +934,235 @@ async def approve_export(
         },
         now=now,
     )
-    payload = {
-        "schema_version": "2.0.0",
-        "object_type": "approval",
-        "approval_id": format_uuid(approval_id),
-        "export_draft_id": format_uuid(approval.export_draft_id),
-        "payload_manifest_sha256": approval.payload_manifest_sha256,
-        "submitted_by": approval.submitted_by,
-        "decided_by": principal.actor_id,
-        "decision": "approved",
-        "submitted_at": _format_utc(approval.submitted_at),
-        "decided_at": _format_utc(now),
-        "expires_at": _format_utc(approval.expires_at),
-        "reason": approval.reason,
-    }
-    return ExportMutationResult(payload=payload, status=200, etag='"v1"', replayed=False)
+    await record_idempotency_outcome(
+        session,
+        principal=principal.actor_id,
+        operation=OPERATION_APPROVE,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        response_status=200,
+        response_body=payload,
+        response_headers={"ETag": etag},
+        now=now,
+    )
+    return ExportMutationResult(payload=payload, status=200, etag=etag, replayed=False)
+
+
+async def reject_export(
+    session: AsyncSession,
+    *,
+    principal: AuthenticatedPrincipal,
+    approval_id: uuid.UUID,
+    reason: str,
+    idempotency_key: str,
+    hmac_key: bytes,
+    now: datetime,
+    project_root: Path | None = None,
+    authority_manifest_id: str | None = None,
+    approval_expiry_days: int = _DEFAULT_APPROVAL_EXPIRY_DAYS,
+) -> ExportMutationResult:
+    from ato_service.db.models import Approval, ExportDraft
+
+    if not isinstance(reason, str) or not reason.strip():
+        raise ExportValidationError("reason is required", error_code="request_schema_invalid")
+
+    request_digest = _approval_payload_digest(
+        approval_id=approval_id,
+        decision="rejected",
+        reason=reason.strip(),
+    )
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        OPERATION_REJECT,
+        idempotency_key,
+        request_digest,
+        now,
+    )
+    if isinstance(replay, IdempotencyReplay):
+        return ExportMutationResult(
+            payload=replay.response_body,
+            status=replay.response_status,
+            etag=replay.response_headers.get("ETag", '"v1"'),
+            replayed=True,
+        )
+
+    approval_result = await session.execute(
+        select(Approval).where(Approval.approval_id == approval_id)
+    )
+    approval = approval_result.scalar_one_or_none()
+    if approval is None:
+        raise ExportNotFoundError()
+    if approval.submitted_by == principal.actor_id:
+        raise SelfApprovalDeniedError()
+
+    draft_result = await session.execute(
+        select(ExportDraft).where(ExportDraft.export_draft_id == approval.export_draft_id)
+    )
+    export_draft = draft_result.scalar_one_or_none()
+    if export_draft is None:
+        raise ExportNotFoundError()
+    review_revision, run, revision, system, sealed = await _load_review_context(
+        session, review_revision_id=export_draft.review_revision_id
+    )
+    try:
+        require_package_role(principal, system=system, revision=revision, role="approver")
+    except AuthorizationDeniedError:
+        raise
+
+    try:
+        await _assert_approval_pending_and_fresh(
+            session,
+            approval=approval,
+            export_draft=export_draft,
+            approval_expiry_days=approval_expiry_days,
+            hmac_key=hmac_key,
+            actor_id=principal.actor_id,
+            now=now,
+        )
+    except ApprovalAlreadyDecidedError:
+        raise ExportValidationError(
+            "approval is already decided",
+            error_code="approval_already_decided",
+        ) from None
+
+    if project_root is not None and authority_manifest_id is not None and sealed is not None:
+        await _verify_approval_payload_binding(
+            session,
+            approval=approval,
+            export_draft=export_draft,
+            review_revision_id=export_draft.review_revision_id,
+            run_id=run.run_id,
+            revision=revision,
+            sealed=sealed,
+            project_root=project_root,
+            authority_manifest_id=authority_manifest_id,
+            hmac_key=hmac_key,
+            actor_id=principal.actor_id,
+            now=now,
+        )
+
+    approval.decision = "rejected"
+    approval.decided_by = principal.actor_id
+    approval.decided_at = now
+    approval.reason = reason.strip()
+    export_draft.status = "rejected"
+    payload = _map_approval_to_domain(approval)
+    etag = '"v1"'
+    await append_audit_event(
+        session,
+        hmac_key=hmac_key,
+        actor_type="user",
+        actor_id=principal.actor_id,
+        action="approval.reject",
+        object_type="approval",
+        object_id=str(approval_id).lower(),
+        outcome="succeeded",
+        reason_code=None,
+        metadata={
+            "export_draft_id": str(approval.export_draft_id).lower(),
+            "payload_manifest_sha256": approval.payload_manifest_sha256,
+            "reason": reason.strip(),
+        },
+        now=now,
+    )
+    await record_idempotency_outcome(
+        session,
+        principal=principal.actor_id,
+        operation=OPERATION_REJECT,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        response_status=200,
+        response_body=payload,
+        response_headers={"ETag": etag},
+        now=now,
+    )
+    return ExportMutationResult(payload=payload, status=200, etag=etag, replayed=False)
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalExpiryResult:
+    pending_expired: int
+    approved_expired: int
+
+
+async def process_approval_expiry(
+    session: AsyncSession,
+    *,
+    now: datetime,
+    approval_expiry_days: int,
+    hmac_key: bytes,
+    actor_id: str = "ato-operator",
+) -> ApprovalExpiryResult:
+    from ato_service.db.models import Approval, ExportDraft, ExportRecord
+
+    pending_expired = 0
+    approved_expired = 0
+
+    pending_result = await session.execute(
+        select(Approval, ExportDraft)
+        .join(ExportDraft, ExportDraft.export_draft_id == Approval.export_draft_id)
+        .where(
+            Approval.decision == "pending",
+            ExportDraft.status == "pending_approval",
+        )
+    )
+    for approval, export_draft in pending_result.all():
+        deadline = approval.submitted_at + timedelta(days=approval_expiry_days)
+        if now < deadline:
+            continue
+        export_draft.status = "expired"
+        pending_expired += 1
+        await append_audit_event(
+            session,
+            hmac_key=hmac_key,
+            actor_type="service",
+            actor_id=actor_id,
+            action="approval.expired",
+            object_type="approval",
+            object_id=str(approval.approval_id).lower(),
+            outcome="succeeded",
+            reason_code="approval_expired",
+            metadata={"export_draft_id": str(export_draft.export_draft_id).lower()},
+            now=now,
+        )
+
+    approved_result = await session.execute(
+        select(Approval, ExportDraft)
+        .join(ExportDraft, ExportDraft.export_draft_id == Approval.export_draft_id)
+        .where(
+            Approval.decision == "approved",
+            ExportDraft.status == "approved",
+        )
+    )
+    for approval, export_draft in approved_result.all():
+        if approval.decided_at is None:
+            continue
+        record_result = await session.execute(
+            select(ExportRecord).where(ExportRecord.approval_id == approval.approval_id)
+        )
+        if record_result.scalar_one_or_none() is not None:
+            continue
+        deadline = approval.decided_at + timedelta(days=approval_expiry_days)
+        if now < deadline:
+            continue
+        export_draft.status = "expired"
+        approved_expired += 1
+        await append_audit_event(
+            session,
+            hmac_key=hmac_key,
+            actor_type="service",
+            actor_id=actor_id,
+            action="export_draft.expired",
+            object_type="export_draft",
+            object_id=str(export_draft.export_draft_id).lower(),
+            outcome="succeeded",
+            reason_code="export_expired",
+            metadata={"approval_id": str(approval.approval_id).lower()},
+            now=now,
+        )
+
+    return ApprovalExpiryResult(
+        pending_expired=pending_expired,
+        approved_expired=approved_expired,
+    )

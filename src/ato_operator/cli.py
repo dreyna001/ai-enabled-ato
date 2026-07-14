@@ -16,6 +16,7 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine
 
+from ato_operator.approval_expiry import process_approval_expiry_sync
 from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.checklist import build_operator_checklist, format_checklist
 from ato_operator.preflight import run_operator_preflight_sync
@@ -208,6 +209,21 @@ def _command_verify_audit(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
+def _command_expire_approvals(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    report = process_approval_expiry_sync(config)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(
+            "expire-approvals "
+            f"pending_expired={report.pending_expired} "
+            f"approved_expired={report.approved_expired} "
+            f"now={report.now}"
+        )
+    return 0
+
+
 def _command_qualification_check(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     qualification_dir = project_root / "data" / "qualification"
@@ -275,6 +291,7 @@ def _build_parser() -> argparse.ArgumentParser:
         ("preflight", "Run capability-aware dependency preflight checks"),
         ("migrate-db", "Apply alembic migrations to head"),
         ("verify-audit", "Verify audit hash chain integrity"),
+        ("expire-approvals", "Expire pending and approved export drafts past configured deadlines"),
         (
             "qualification-check",
             "Verify qualification fixture corpus presence (does not close hard stops)",
@@ -320,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify-migrations": _command_verify_migrations,
         "smoke": _command_smoke,
         "verify-audit": _command_verify_audit,
+        "expire-approvals": _command_expire_approvals,
         "qualification-check": _command_qualification_check,
         "print-checklist": _command_print_checklist,
     }

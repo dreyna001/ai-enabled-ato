@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   approveExport,
   createExportDraft,
+  createReviewComment,
   createReviewRevision,
   downloadExport,
+  listReviewComments,
+  rejectExport,
   revisionEtag,
   submitExportDraft,
   submitReviewRevision,
@@ -24,6 +27,7 @@ import type {
   Approval,
   ExportDraft,
   MatrixRow,
+  ReviewComment,
   ReviewRevision,
   SessionInfo,
 } from "@/types";
@@ -51,6 +55,9 @@ export function ReviewExportWorkbench({
   const [review, setReview] = useState<ReviewRevision | null>(null);
   const [exportDraft, setExportDraft] = useState<ExportDraft | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -67,6 +74,21 @@ export function ReviewExportWorkbench({
     }
     return map;
   }, [review]);
+
+  const exportBlocked =
+    exportDraft?.status === "expired" ||
+    exportDraft?.status === "superseded" ||
+    exportDraft?.status === "rejected";
+
+  useEffect(() => {
+    if (!review) {
+      setComments([]);
+      return;
+    }
+    void listReviewComments(review.review_revision_id)
+      .then((result) => setComments(result.items))
+      .catch(() => setComments([]));
+  }, [review?.review_revision_id, review?.status]);
 
   const startReview = async () => {
     setBusy(true);
@@ -95,7 +117,7 @@ export function ReviewExportWorkbench({
     try {
       await updateDisposition(session, review.review_revision_id, matrixRowId, reviewEtag, {
         decision,
-        edited_summary: editedSummary || null,
+        edited_summary: decision === "edited" ? editedSummary : editedSummary || null,
         notes: null,
       });
       const refreshed = {
@@ -106,7 +128,7 @@ export function ReviewExportWorkbench({
             ? {
                 ...item,
                 decision,
-                edited_summary: editedSummary || null,
+                edited_summary: decision === "edited" ? editedSummary : editedSummary || null,
                 version: item.version + 1,
               }
             : item,
@@ -142,6 +164,26 @@ export function ReviewExportWorkbench({
     }
   };
 
+  const addComment = async () => {
+    if (!review || !commentBody.trim()) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const created = await createReviewComment(session, review.review_revision_id, {
+        body: commentBody.trim(),
+      });
+      setComments((current) => [created, ...current]);
+      setCommentBody("");
+      setMessage("Comment added.");
+    } catch (err) {
+      setError(formatApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const createDraft = async () => {
     if (!review) {
       return;
@@ -151,6 +193,7 @@ export function ReviewExportWorkbench({
     try {
       const draft = await createExportDraft(session, review.review_revision_id);
       setExportDraft(draft);
+      setApproval(null);
       setMessage("Export draft created.");
     } catch (err) {
       setError(formatApiError(err));
@@ -168,6 +211,7 @@ export function ReviewExportWorkbench({
     try {
       const pending = await submitExportDraft(session, exportDraft.export_draft_id);
       setApproval(pending);
+      setExportDraft({ ...exportDraft, status: "pending_approval" });
       setMessage("Export submitted for approval.");
     } catch (err) {
       setError(formatApiError(err));
@@ -185,7 +229,30 @@ export function ReviewExportWorkbench({
     try {
       const approved = await approveExport(session, approval.approval_id);
       setApproval(approved);
+      setExportDraft((current) =>
+        current ? { ...current, status: "approved" } : current,
+      );
       setMessage("Export approved.");
+    } catch (err) {
+      setError(formatApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reject = async () => {
+    if (!approval || !rejectReason.trim()) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const rejected = await rejectExport(session, approval.approval_id, rejectReason.trim());
+      setApproval(rejected);
+      setExportDraft((current) =>
+        current ? { ...current, status: "rejected" } : current,
+      );
+      setMessage("Export rejected.");
     } catch (err) {
       setError(formatApiError(err));
     } finally {
@@ -256,6 +323,24 @@ export function ReviewExportWorkbench({
                     />
                   );
                 })}
+                <div className="space-y-2 rounded-md border p-4">
+                  <Label htmlFor="review-comment">Review comment</Label>
+                  <Input
+                    id="review-comment"
+                    value={commentBody}
+                    disabled={busy}
+                    onChange={(event) => setCommentBody(event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !commentBody.trim()}
+                    onClick={() => void addComment()}
+                  >
+                    Add comment
+                  </Button>
+                </div>
                 <Button
                   type="button"
                   size="sm"
@@ -264,6 +349,20 @@ export function ReviewExportWorkbench({
                 >
                   Submit review
                 </Button>
+              </div>
+            ) : null}
+
+            {comments.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Comments</p>
+                {comments.map((comment) => (
+                  <div key={comment.comment_id} className="rounded-md border p-3 text-sm">
+                    <p>{comment.body}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {comment.created_by} · {comment.created_at}
+                    </p>
+                  </div>
+                ))}
               </div>
             ) : null}
 
@@ -282,7 +381,7 @@ export function ReviewExportWorkbench({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={busy}
+                    disabled={busy || exportDraft.status !== "draft"}
                     onClick={() => void submitDraft()}
                   >
                     Submit for approval
@@ -291,26 +390,70 @@ export function ReviewExportWorkbench({
               </div>
             ) : null}
 
-            {approval ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={approval.decision === "approved" ? "default" : "muted"}>
-                  {approval.decision}
+            {exportDraft ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>Export draft</span>
+                <Badge variant={exportDraft.status === "approved" ? "default" : "muted"}>
+                  {exportDraft.status}
                 </Badge>
-                {approval.decision === "pending" ? (
-                  <Button type="button" size="sm" disabled={busy} onClick={() => void approve()}>
-                    Approve export
-                  </Button>
+              </div>
+            ) : null}
+
+            {exportBlocked ? (
+              <p className="text-sm text-destructive">
+                Export is no longer available ({exportDraft?.status}). Create a new export draft
+                after review changes.
+              </p>
+            ) : null}
+
+            {approval ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={approval.decision === "approved" ? "default" : "muted"}>
+                    {approval.decision}
+                  </Badge>
+                  {approval.decision === "pending" ? (
+                    <>
+                      <Button type="button" size="sm" disabled={busy} onClick={() => void approve()}>
+                        Approve export
+                      </Button>
+                      <Input
+                        aria-label="Reject reason"
+                        placeholder="Reject reason"
+                        value={rejectReason}
+                        disabled={busy}
+                        onChange={(event) => setRejectReason(event.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || !rejectReason.trim()}
+                        onClick={() => void reject()}
+                      >
+                        Reject export
+                      </Button>
+                    </>
+                  ) : null}
+                  {approval.decision === "approved" && exportDraft?.status === "approved" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void download()}
+                    >
+                      Download ZIP
+                    </Button>
+                  ) : null}
+                </div>
+                {approval.decision === "rejected" && approval.reason ? (
+                  <p className="text-sm text-muted-foreground">Reason: {approval.reason}</p>
                 ) : null}
-                {approval.decision === "approved" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void download()}
-                  >
-                    Download ZIP
-                  </Button>
+                {approval.decision === "pending" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Expires {approval.expires_at}
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -364,7 +507,9 @@ function DispositionEditor({
           </select>
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`summary-${row.matrix_row_id}`}>Edited summary</Label>
+          <Label htmlFor={`summary-${row.matrix_row_id}`}>
+            Edited summary{decision === "edited" ? " (required)" : ""}
+          </Label>
           <Input
             id={`summary-${row.matrix_row_id}`}
             value={summary}
@@ -377,7 +522,7 @@ function DispositionEditor({
         type="button"
         size="sm"
         variant="outline"
-        disabled={disabled}
+        disabled={disabled || (decision === "edited" && !summary.trim())}
         onClick={() => onSave(decision, summary)}
       >
         Save disposition

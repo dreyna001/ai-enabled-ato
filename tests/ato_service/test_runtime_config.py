@@ -302,6 +302,7 @@ def test_limits_apply_published_defaults_when_omitted(tmp_path: Path) -> None:
         max_package_bytes=2_147_483_648,
         max_single_file_bytes=104_857_600,
         max_files_per_revision=500,
+        approval_expiry_days=7,
     )
 
 
@@ -321,6 +322,7 @@ def test_limits_accept_lower_configured_values(tmp_path: Path) -> None:
         max_package_bytes=1_000,
         max_single_file_bytes=512,
         max_files_per_revision=25,
+        approval_expiry_days=7,
     )
 
 

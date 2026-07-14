@@ -270,6 +270,16 @@ const approvalSchema = z.object({
   decided_by: z.string().nullable(),
   decision: z.string(),
   expires_at: z.string(),
+  reason: z.string().nullable().optional(),
+});
+
+const reviewCommentSchema = z.object({
+  comment_id: z.string().uuid(),
+  review_revision_id: z.string().uuid(),
+  matrix_row_id: z.string().uuid().nullable(),
+  body: z.string().min(1),
+  created_by: z.string(),
+  created_at: z.string(),
 });
 
 export function parsePreflight(value: unknown) {
@@ -290,4 +300,16 @@ export function parseExportDraft(value: unknown) {
 
 export function parseApproval(value: unknown) {
   return parseWithSchema(approvalSchema, value);
+}
+
+export function parseReviewComment(value: unknown) {
+  return parseWithSchema(reviewCommentSchema, value);
+}
+
+export function parseReviewCommentList(value: unknown) {
+  const schema = z.object({
+    items: z.array(reviewCommentSchema),
+    next_cursor: z.string().nullable(),
+  });
+  return parseWithSchema(schema, value);
 }

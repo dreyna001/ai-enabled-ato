@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.requests import Request
@@ -113,14 +113,15 @@ def test_self_approval_is_denied() -> None:
 
     principal = _principal(actor_id="reviewer@example.test", groups=("approvers",))
 
-    with pytest.raises(SelfApprovalDeniedError):
-        _run(
-            approve_export(
-                session,
-                principal=principal,
-                approval_id=APPROVAL_ID,
-                idempotency_key="idempotency-key-01",
-                hmac_key=b"audit-test-key",
-                now=NOW,
+    with patch("ato_service.export_service.load_idempotency_replay", AsyncMock(return_value=None)):
+        with pytest.raises(SelfApprovalDeniedError):
+            _run(
+                approve_export(
+                    session,
+                    principal=principal,
+                    approval_id=APPROVAL_ID,
+                    idempotency_key="idempotency-key-01",
+                    hmac_key=b"audit-test-key",
+                    now=NOW,
+                )
             )
-        )

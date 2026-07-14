@@ -21,10 +21,29 @@ from ato_service.idempotency import (
     request_digest_from_payload,
 )
 from ato_service.package_rbac import require_package_role
+from ato_service.pagination import (
+    InvalidPaginationCursorError,
+    PaginationCursor,
+    decode_pagination_cursor,
+    encode_pagination_cursor,
+    validate_page_limit,
+)
 
 OPERATION_CREATE = "review_revisions.create"
 OPERATION_SUBMIT = "review_revisions.submit"
 OPERATION_DISPOSITION = "review_revisions.disposition"
+OPERATION_CREATE_COMMENT = "review_revisions.comment.create"
+
+_TERMINAL_REVIEW_STATUSES = frozenset({"submitted", "superseded"})
+_RESOLVED_DISPOSITION_DECISIONS = frozenset(
+    {
+        "accepted",
+        "edited",
+        "rejected",
+        "evidence_requested",
+        "weakness_confirmed",
+    }
+)
 
 
 class ReviewRevisionNotFoundError(Exception):
@@ -82,6 +101,30 @@ def map_disposition_to_domain(disposition: Any) -> dict[str, Any]:
     }
 
 
+def map_review_comment_to_domain(comment: Any) -> dict[str, Any]:
+    return {
+        "comment_id": format_uuid(comment.review_comment_id),
+        "review_revision_id": format_uuid(comment.review_revision_id),
+        "matrix_row_id": format_uuid(comment.matrix_row_id) if comment.matrix_row_id is not None else None,
+        "body": comment.body,
+        "created_by": comment.created_by,
+        "created_at": _format_utc(comment.created_at),
+    }
+
+
+def _validate_disposition_decision(*, decision: str, edited_summary: str | None) -> None:
+    if decision not in _RESOLVED_DISPOSITION_DECISIONS:
+        raise ReviewRevisionValidationError(
+            "invalid disposition decision",
+            error_code="request_schema_invalid",
+        )
+    if decision == "edited" and (edited_summary is None or not edited_summary.strip()):
+        raise ReviewRevisionValidationError(
+            "edited disposition requires edited_summary",
+            error_code="request_schema_invalid",
+        )
+
+
 async def _load_run_context(
     session: AsyncSession,
     *,
@@ -132,9 +175,11 @@ async def create_review_revision(
     request_digest = request_digest_from_payload({"run_id": str(run_id).lower()})
     replay = await load_idempotency_replay(
         session,
-        operation=OPERATION_CREATE,
-        idempotency_key=idempotency_key,
-        request_digest=request_digest,
+        principal.actor_id,
+        OPERATION_CREATE,
+        idempotency_key,
+        request_digest,
+        now,
     )
     if isinstance(replay, IdempotencyReplay):
         return ReviewRevisionMutationResult(
@@ -187,6 +232,7 @@ async def create_review_revision(
     )
     await record_idempotency_outcome(
         session,
+        principal=principal.actor_id,
         operation=OPERATION_CREATE,
         idempotency_key=idempotency_key,
         request_digest=request_digest,
@@ -279,12 +325,18 @@ async def update_disposition(
     review_revision = review_result.scalar_one_or_none()
     if review_revision is None:
         raise ReviewRevisionNotFoundError()
+    if review_revision.status in _TERMINAL_REVIEW_STATUSES:
+        raise ReviewRevisionValidationError(
+            "review revision is immutable",
+            error_code="illegal_state_transition",
+        )
     run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
     try:
         require_package_role(principal, system=system, revision=revision, role="reviewer")
     except AuthorizationDeniedError:
         raise
     assert_if_match(if_match=if_match, current_version=review_revision.version)
+    _validate_disposition_decision(decision=decision, edited_summary=edited_summary)
 
     disposition_result = await session.execute(
         select(Disposition).where(
@@ -320,3 +372,170 @@ async def update_disposition(
         now=now,
     )
     return payload, etag
+
+
+async def create_review_comment(
+    session: AsyncSession,
+    *,
+    principal: AuthenticatedPrincipal,
+    review_revision_id: uuid.UUID,
+    matrix_row_id: uuid.UUID | None,
+    body: str,
+    idempotency_key: str,
+    hmac_key: bytes,
+    now: datetime,
+) -> tuple[dict[str, Any], int, bool]:
+    from ato_service.db.models import MatrixRow, ReviewComment, ReviewRevision
+
+    if not isinstance(body, str) or not body.strip():
+        raise ReviewRevisionValidationError(
+            "comment body is required",
+            error_code="request_schema_invalid",
+        )
+
+    review_result = await session.execute(
+        select(ReviewRevision).where(ReviewRevision.review_revision_id == review_revision_id)
+    )
+    review_revision = review_result.scalar_one_or_none()
+    if review_revision is None:
+        raise ReviewRevisionNotFoundError()
+    if review_revision.status in _TERMINAL_REVIEW_STATUSES:
+        raise ReviewRevisionValidationError(
+            "review revision is immutable",
+            error_code="illegal_state_transition",
+        )
+    run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
+    try:
+        require_package_role(principal, system=system, revision=revision, role="reviewer")
+    except AuthorizationDeniedError:
+        raise
+
+    if matrix_row_id is not None:
+        matrix_result = await session.execute(
+            select(MatrixRow).where(
+                MatrixRow.run_id == run.run_id,
+                MatrixRow.matrix_row_id == matrix_row_id,
+            )
+        )
+        if matrix_result.scalar_one_or_none() is None:
+            raise ReviewRevisionNotFoundError()
+
+    request_digest = request_digest_from_payload(
+        {
+            "review_revision_id": str(review_revision_id).lower(),
+            "matrix_row_id": str(matrix_row_id).lower() if matrix_row_id is not None else None,
+            "body": body.strip(),
+        }
+    )
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        OPERATION_CREATE_COMMENT,
+        idempotency_key,
+        request_digest,
+        now,
+    )
+    if isinstance(replay, IdempotencyReplay):
+        return replay.response_body, replay.response_status, True
+
+    comment_id = uuid.uuid4()
+    comment = ReviewComment(
+        review_comment_id=comment_id,
+        review_revision_id=review_revision_id,
+        matrix_row_id=matrix_row_id,
+        body=body.strip(),
+        created_by=principal.actor_id,
+        created_at=now,
+    )
+    session.add(comment)
+    payload = map_review_comment_to_domain(comment)
+    await append_audit_event(
+        session,
+        hmac_key=hmac_key,
+        actor_type="user",
+        actor_id=principal.actor_id,
+        action="review_revision.comment",
+        object_type="review_comment",
+        object_id=str(comment_id).lower(),
+        outcome="succeeded",
+        reason_code=None,
+        metadata={"review_revision_id": str(review_revision_id).lower()},
+        now=now,
+    )
+    await record_idempotency_outcome(
+        session,
+        principal=principal.actor_id,
+        operation=OPERATION_CREATE_COMMENT,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        response_status=201,
+        response_body=payload,
+        response_headers={},
+        now=now,
+    )
+    return payload, 201, False
+
+
+async def list_review_comments(
+    session: AsyncSession,
+    *,
+    principal: AuthenticatedPrincipal,
+    review_revision_id: uuid.UUID,
+    cursor: str | None,
+    limit: int | None,
+) -> dict[str, Any]:
+    from ato_service.db.models import ReviewComment, ReviewRevision
+
+    review_result = await session.execute(
+        select(ReviewRevision).where(ReviewRevision.review_revision_id == review_revision_id)
+    )
+    review_revision = review_result.scalar_one_or_none()
+    if review_revision is None:
+        raise ReviewRevisionNotFoundError()
+    run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
+    try:
+        require_package_role(principal, system=system, revision=revision, role="viewer")
+    except AuthorizationDeniedError:
+        raise
+
+    page_limit = validate_page_limit(limit)
+    decoded_cursor: PaginationCursor | None = None
+    if cursor is not None:
+        try:
+            decoded_cursor = decode_pagination_cursor(cursor)
+        except InvalidPaginationCursorError as exc:
+            raise ReviewRevisionValidationError(
+                "invalid pagination cursor",
+                error_code=exc.error_code,
+            ) from exc
+
+    query = (
+        select(ReviewComment)
+        .where(ReviewComment.review_revision_id == review_revision_id)
+        .order_by(ReviewComment.created_at.desc(), ReviewComment.review_comment_id.desc())
+        .limit(page_limit + 1)
+    )
+    if decoded_cursor is not None:
+        query = query.where(
+            (ReviewComment.created_at < decoded_cursor.created_at)
+            | (
+                (ReviewComment.created_at == decoded_cursor.created_at)
+                & (ReviewComment.review_comment_id < decoded_cursor.item_id)
+            )
+        )
+
+    result = await session.execute(query)
+    comments = list(result.scalars().all())
+    next_cursor: str | None = None
+    if len(comments) > page_limit:
+        last = comments[page_limit - 1]
+        next_cursor = encode_pagination_cursor(
+            created_at=last.created_at,
+            item_id=last.review_comment_id,
+        )
+        comments = comments[:page_limit]
+
+    return {
+        "items": [map_review_comment_to_domain(item) for item in comments],
+        "next_cursor": next_cursor,
+    }

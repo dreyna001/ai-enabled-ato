@@ -185,6 +185,16 @@ export type Approval = {
   decided_by: string | null;
   decision: string;
   expires_at: string;
+  reason?: string | null;
+};
+
+export type ReviewComment = {
+  comment_id: string;
+  review_revision_id: string;
+  matrix_row_id: string | null;
+  body: string;
+  created_by: string;
+  created_at: string;
 };
 
 export type ReadinessCheck = {

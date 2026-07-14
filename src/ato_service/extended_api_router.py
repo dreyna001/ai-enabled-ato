@@ -28,13 +28,18 @@ from ato_service.export_service import (
     approve_export,
     create_export_draft,
     deliver_export_download,
+    reject_export,
     submit_export_draft,
 )
 from ato_service.package_chat import chat_with_package
 from ato_service.package_search import search_revision_content
 from ato_service.preflight import PreflightContext, evaluate_preflight
 from ato_service.review_revisions import (
+    ReviewRevisionNotFoundError,
+    ReviewRevisionValidationError,
+    create_review_comment,
     create_review_revision,
+    list_review_comments,
     submit_review_revision,
     update_disposition,
 )
@@ -61,6 +66,25 @@ class DispositionRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
 
 
+class CreateCommentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matrix_row_id: uuid.UUID | None = None
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class RejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class ApprovalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=2000)
+
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -70,6 +94,27 @@ class ChatRequest(BaseModel):
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _approval_expiry_days(runtime_state: Any) -> int:
+    return runtime_state.snapshot.config.limits.approval_expiry_days
+
+
+def _export_error_response(exc: ExportValidationError) -> JSONResponse:
+    status = 422
+    if exc.error_code == "illegal_state_transition":
+        status = 409
+    elif exc.error_code == "approval_already_decided":
+        status = 409
+    elif exc.error_code == "approval_expired":
+        status = 409
+    elif exc.error_code == "approval_payload_mismatch":
+        status = 412
+    elif exc.error_code == "authorization_denied":
+        status = 403
+    elif exc.error_code == "export_expired":
+        status = 410
+    return JSONResponse(status_code=status, content={"error": exc.error_code, "error_code": exc.error_code})
 
 
 def build_extended_router() -> APIRouter:
@@ -340,19 +385,77 @@ def build_extended_router() -> APIRouter:
         session: Annotated[AsyncSession, Depends(get_db_session)],
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
     ) -> JSONResponse:
-        payload, etag = await update_disposition(
-            session,
-            principal=principal,
-            review_revision_id=id,
-            matrix_row_id=row_id,
-            decision=body.decision,
-            edited_summary=body.edited_summary,
-            notes=body.notes,
-            if_match=request.headers.get("if-match"),
-            hmac_key=audit_hmac_key,
-            now=_utc_now(),
-        )
+        try:
+            payload, etag = await update_disposition(
+                session,
+                principal=principal,
+                review_revision_id=id,
+                matrix_row_id=row_id,
+                decision=body.decision,
+                edited_summary=body.edited_summary,
+                notes=body.notes,
+                if_match=request.headers.get("if-match"),
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except ReviewRevisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ReviewRevisionValidationError as exc:
+            status = 409 if exc.error_code == "illegal_state_transition" else 422
+            return JSONResponse(status_code=status, content={"error": exc.error_code, "error_code": exc.error_code})
         return JSONResponse(content=payload, headers={"ETag": etag})
+
+    @router.post("/review-revisions/{id}/comments", status_code=201, tags=["Reviews"])
+    async def post_review_comment(
+        id: uuid.UUID,
+        body: CreateCommentRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> JSONResponse:
+        try:
+            payload, status, _replayed = await create_review_comment(
+                session,
+                principal=principal,
+                review_revision_id=id,
+                matrix_row_id=body.matrix_row_id,
+                body=body.body,
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except ReviewRevisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ReviewRevisionValidationError as exc:
+            status_code = 409 if exc.error_code == "illegal_state_transition" else 422
+            return JSONResponse(
+                status_code=status_code,
+                content={"error": exc.error_code, "error_code": exc.error_code},
+            )
+        return JSONResponse(status_code=status, content=payload)
+
+    @router.get("/review-revisions/{id}/comments", tags=["Reviews"])
+    async def get_review_comments(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        cursor: str | None = None,
+        limit: int = 25,
+    ) -> JSONResponse:
+        try:
+            payload = await list_review_comments(
+                session,
+                principal=principal,
+                review_revision_id=id,
+                cursor=cursor,
+                limit=limit,
+            )
+        except ReviewRevisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ReviewRevisionValidationError as exc:
+            return JSONResponse(status_code=422, content={"error": exc.error_code, "error_code": exc.error_code})
+        return JSONResponse(content=payload)
 
     @router.post("/review-revisions/{id}/export-drafts", status_code=201, tags=["Exports"])
     async def post_export_draft(
@@ -381,25 +484,34 @@ def build_extended_router() -> APIRouter:
         request: Request,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
-        result = await submit_export_draft(
-            session,
-            principal=principal,
-            export_draft_id=id,
-            if_match=request.headers.get("if-match"),
-            idempotency_key=idempotency_key,
-            hmac_key=audit_hmac_key,
-            now=_utc_now(),
-        )
+        try:
+            result = await submit_export_draft(
+                session,
+                principal=principal,
+                export_draft_id=id,
+                if_match=request.headers.get("if-match"),
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+                approval_expiry_days=_approval_expiry_days(runtime_state),
+            )
+        except ExportNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ExportValidationError as exc:
+            return _export_error_response(exc)
         return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
 
     @router.post("/approvals/{id}/approve", tags=["Exports"])
     async def post_approval_approve(
         id: uuid.UUID,
+        body: ApprovalDecisionRequest,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
@@ -411,9 +523,48 @@ def build_extended_router() -> APIRouter:
                 idempotency_key=idempotency_key,
                 hmac_key=audit_hmac_key,
                 now=_utc_now(),
+                reason=body.reason,
+                project_root=runtime_state.snapshot.project_root,
+                authority_manifest_id=runtime_state.authority_manifest_id,
+                approval_expiry_days=_approval_expiry_days(runtime_state),
             )
         except SelfApprovalDeniedError:
-            return JSONResponse(status_code=403, content={"error": "self_approval_denied"})
+            return JSONResponse(status_code=403, content={"error": "self_approval_denied", "error_code": "self_approval_denied"})
+        except ExportNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ExportValidationError as exc:
+            return _export_error_response(exc)
+        return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
+
+    @router.post("/approvals/{id}/reject", tags=["Exports"])
+    async def post_approval_reject(
+        id: uuid.UUID,
+        body: RejectRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> JSONResponse:
+        try:
+            result = await reject_export(
+                session,
+                principal=principal,
+                approval_id=id,
+                reason=body.reason,
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+                project_root=runtime_state.snapshot.project_root,
+                authority_manifest_id=runtime_state.authority_manifest_id,
+                approval_expiry_days=_approval_expiry_days(runtime_state),
+            )
+        except SelfApprovalDeniedError:
+            return JSONResponse(status_code=403, content={"error": "self_approval_denied", "error_code": "self_approval_denied"})
+        except ExportNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ExportValidationError as exc:
+            return _export_error_response(exc)
         return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
 
     @router.get("/exports/{id}/download", tags=["Exports"])
@@ -440,14 +591,9 @@ def build_extended_router() -> APIRouter:
         except ExportNotFoundError:
             return JSONResponse(status_code=404, content={"error": "not_found"})
         except ExportValidationError as exc:
-            status = 410 if exc.error_code == "export_expired" else 422
-            if exc.error_code == "approval_payload_mismatch":
-                status = 412
-            if exc.error_code == "authorization_denied":
-                status = 403
-            return JSONResponse(status_code=status, content={"error": exc.error_code})
+            return _export_error_response(exc)
         except AuthorizationDeniedError:
-            return JSONResponse(status_code=403, content={"error": "authorization_denied"})
+            return JSONResponse(status_code=403, content={"error": "authorization_denied", "error_code": "authorization_denied"})
         return Response(
             content=result.zip_bytes,
             media_type="application/zip",

@@ -74,6 +74,7 @@ def _limits(
         max_package_bytes=max_package_bytes,
         max_single_file_bytes=max_single_file_bytes,
         max_files_per_revision=max_files_per_revision,
+        approval_expiry_days=7,
     )
 
 

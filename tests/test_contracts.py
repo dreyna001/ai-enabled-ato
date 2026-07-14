@@ -1233,7 +1233,7 @@ def test_disposition_decision_graph_is_contract_only() -> None:
     section_end = lifecycle.index("### 2.5 ExportDraft", section_start)
     section = lifecycle[section_start:section_end]
 
-    assert "implementation in EP-06" in section
+    assert "Disposition decision graph" in section
     assert "`pending`" in section
     assert "`weakness_confirmed`" in section
     assert "Route handlers" in section

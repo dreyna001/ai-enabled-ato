@@ -10,6 +10,8 @@ import {
   parsePreflight,
   parseProposalList,
   parseReadinessResponse,
+  parseReviewComment,
+  parseReviewCommentList,
   parseReviewRevision,
   parseRevisionList,
   parseRunList,
@@ -28,6 +30,7 @@ import type {
   PackageRevision,
   PackageRevisionDraft,
   PreflightResult,
+  ReviewComment,
   ReviewRevision,
   ReadinessResponse,
   SessionInfo,
@@ -740,6 +743,7 @@ export async function submitExportDraft(
 export async function approveExport(
   session: SessionInfo,
   approvalId: string,
+  reason?: string | null,
   options: ApiFetchOptions = {},
 ): Promise<Approval> {
   const response = await apiFetch(`${API_BASE}/approvals/${approvalId}/approve`, {
@@ -750,10 +754,68 @@ export async function approveExport(
       ...mutationHeaders(session),
       ...options.headers,
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ reason: reason ?? null }),
     ...options,
   });
   return readValidatedJson(response, parseApproval);
+}
+
+export async function rejectExport(
+  session: SessionInfo,
+  approvalId: string,
+  reason: string,
+  options: ApiFetchOptions = {},
+): Promise<Approval> {
+  const response = await apiFetch(`${API_BASE}/approvals/${approvalId}/reject`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session),
+      ...options.headers,
+    },
+    body: JSON.stringify({ reason }),
+    ...options,
+  });
+  return readValidatedJson(response, parseApproval);
+}
+
+export async function createReviewComment(
+  session: SessionInfo,
+  reviewRevisionId: string,
+  body: { matrix_row_id?: string | null; body: string },
+  options: ApiFetchOptions = {},
+): Promise<ReviewComment> {
+  const response = await apiFetch(
+    `${API_BASE}/review-revisions/${reviewRevisionId}/comments`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Idempotency-Key": crypto.randomUUID(),
+        ...mutationHeaders(session),
+        ...options.headers,
+      },
+      body: JSON.stringify(body),
+      ...options,
+    },
+  );
+  return readValidatedJson(response, parseReviewComment);
+}
+
+export async function listReviewComments(
+  reviewRevisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<{ items: ReviewComment[]; next_cursor: string | null }> {
+  const response = await apiFetch(
+    `${API_BASE}/review-revisions/${reviewRevisionId}/comments`,
+    {
+      credentials: "include",
+      ...options,
+    },
+  );
+  const parsed = await readValidatedJson(response, parseReviewCommentList);
+  return parsed;
 }
 
 export async function downloadExport(

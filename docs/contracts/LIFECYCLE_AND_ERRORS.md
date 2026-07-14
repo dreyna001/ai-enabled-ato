@@ -377,7 +377,7 @@ validation, exactly one disposition for every matrix row, no `pending`
 disposition, and valid row references. Export-draft creation MUST NOT silently
 perform submission and is legal only for a submitted review.
 
-#### 2.4.1 Disposition decision graph (contract only; implementation in EP-06)
+#### 2.4.1 Disposition decision graph
 
 Disposition `decision` values are not `ReviewRevision` lifecycle states. They
 describe human review intent for one matrix row while the owning review is
@@ -405,8 +405,8 @@ The following are illegal and perform no disposition change:
 - a disposition value change without a matching review ETag
 
 Route handlers, portal UX, audit writes, and timer behavior for disposition
-mutation belong to **EP-06**. This contract defines only the closed decision
-graph and submission precondition.
+mutation are implemented in the EP-06 review portal workstream. This contract
+defines the closed decision graph and submission precondition.
 
 ### 2.5 ExportDraft
 
@@ -913,8 +913,8 @@ but are not yet implemented in persistence, workers, or portal routes:
 | --- | --- | --- |
 | Job and `JobAttempt` persistence | Section 2.7; `Job`, `JobAttempt` schemas | P1 Postgres jobs foundation (partial) |
 | Claim, heartbeat, completion, lease recovery | Section 2.7.2 | P1 analyzer repository and reconciler |
-| `pending_approval -> expired` timer | Section 2.5 | EP-06 review portal |
-| Disposition mutation routes and UX | Section 2.4.1 | EP-06 review portal |
+| `pending_approval -> expired` timer | Section 2.5 | EP-06 operator CLI `expire-approvals` |
+| Disposition mutation routes and UX | Section 2.4.1 | EP-06 review/export routes and portal workbench |
 
 Implementations MUST NOT infer values, deadlines, or transitions outside this
 contract.

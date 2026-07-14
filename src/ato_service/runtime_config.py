@@ -92,6 +92,9 @@ _DOMAIN_MAX_SINGLE_FILE_BYTES = 104_857_600
 _DOMAIN_MAX_FILES_PER_REVISION = 500
 
 
+_DEFAULT_APPROVAL_EXPIRY_DAYS = 7
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeLimits:
     """Immutable configured limits resolved from runtime configuration."""
@@ -100,6 +103,7 @@ class RuntimeLimits:
     max_package_bytes: int
     max_single_file_bytes: int
     max_files_per_revision: int
+    approval_expiry_days: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -588,6 +592,11 @@ def _resolve_runtime_limits(document: dict[str, Any]) -> RuntimeLimits:
             document,
             "MAX_FILES_PER_REVISION",
             default=_DEFAULT_MAX_FILES_PER_REVISION,
+        ),
+        approval_expiry_days=_positive_limit_from_document(
+            document,
+            "APPROVAL_EXPIRY_DAYS",
+            default=_DEFAULT_APPROVAL_EXPIRY_DAYS,
         ),
     )
 
