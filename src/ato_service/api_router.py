@@ -269,6 +269,7 @@ def create_api_router() -> APIRouter:
         body: CreateSystemRequest,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
@@ -281,6 +282,7 @@ def create_api_router() -> APIRouter:
             external_system_id=body.external_system_id,
             owner_group=body.owner_group,
             viewer_groups=body.viewer_groups,
+            customer_enterprise_id=runtime_state.config.installation_customer_enterprise_id,
             now=_utc_now(),
         )
         return JSONResponse(status_code=result.status, content=result.payload)

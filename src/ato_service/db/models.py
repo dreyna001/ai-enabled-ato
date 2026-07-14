@@ -36,6 +36,7 @@ class System(Base):
     system_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     external_system_id: Mapped[str | None] = mapped_column(String(255))
+    customer_enterprise_id: Mapped[str] = mapped_column(String(128), nullable=False)
     owner_group: Mapped[str] = mapped_column(String(255), nullable=False)
     viewer_groups: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -59,7 +60,12 @@ class System(Base):
             "char_length(owner_group) >= 1",
             name="ck_systems_owner_group_min_length",
         ),
+        CheckConstraint(
+            "char_length(customer_enterprise_id) >= 1",
+            name="ck_systems_customer_enterprise_id_min_length",
+        ),
         Index("ix_systems_owner_group", "owner_group"),
+        Index("ix_systems_customer_enterprise_id", "customer_enterprise_id"),
     )
 
 
@@ -1585,6 +1591,116 @@ class Disposition(Base):
         ),
         CheckConstraint("version >= 1", name="ck_dispositions_version_positive"),
         Index("ix_dispositions_review_revision_id", "review_revision_id"),
+    )
+
+
+class EvidenceRequest(Base):
+    """Evidence request routed from an insufficient_evidence disposition."""
+
+    __tablename__ = "evidence_requests"
+
+    evidence_request_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("review_revisions.review_revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    disposition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("dispositions.disposition_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    matrix_row_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("matrix_rows.matrix_row_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    assessment_item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    assessment_item_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    system_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    finding_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "review_revision_id",
+            "matrix_row_id",
+            name="uq_evidence_requests_review_revision_id_matrix_row_id",
+        ),
+        ck.enum_check(
+            "system_status",
+            ev.MATRIX_STATUS_VALUES,
+            constraint_name="ck_evidence_requests_system_status",
+        ),
+        ck.enum_check(
+            "assessment_item_type",
+            ev.ASSESSMENT_ITEM_TYPE_VALUES,
+            constraint_name="ck_evidence_requests_assessment_item_type",
+        ),
+        Index("ix_evidence_requests_review_revision_id", "review_revision_id"),
+    )
+
+
+class PoamCandidate(Base):
+    """Human-confirmed POA&M draft candidate linked to one matrix row."""
+
+    __tablename__ = "poam_candidates"
+
+    poam_candidate_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    review_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("review_revisions.review_revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    disposition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("dispositions.disposition_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    matrix_row_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("matrix_rows.matrix_row_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    assessment_item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    assessment_item_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    system_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    weakness_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "review_revision_id",
+            "matrix_row_id",
+            name="uq_poam_candidates_review_revision_id_matrix_row_id",
+        ),
+        ck.enum_check(
+            "system_status",
+            ev.MATRIX_STATUS_VALUES,
+            constraint_name="ck_poam_candidates_system_status",
+        ),
+        ck.enum_check(
+            "assessment_item_type",
+            ev.ASSESSMENT_ITEM_TYPE_VALUES,
+            constraint_name="ck_poam_candidates_assessment_item_type",
+        ),
+        Index("ix_poam_candidates_review_revision_id", "review_revision_id"),
     )
 
 

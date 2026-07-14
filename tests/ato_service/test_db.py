@@ -100,6 +100,8 @@ EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
         "export_drafts",
         "approvals",
         "exports",
+        "evidence_requests",
+        "poam_candidates",
     }
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states"})
@@ -563,7 +565,7 @@ def test_create_session_factory_does_not_connect() -> None:
 def test_alembic_head_is_review_export_auth_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260715_0010"
+    assert script.get_current_head() == "20260716_0011"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

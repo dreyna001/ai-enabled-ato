@@ -55,6 +55,7 @@ def test_deterministic_analysis_run_completes_with_exact_matrix(tmp_path: Path) 
                             system_id=system_id,
                             display_name="Deterministic analysis integration",
                             external_system_id=None,
+                            customer_enterprise_id="dev-local-enterprise",
                             owner_group="owners",
                             viewer_groups=["viewers"],
                             created_at=now,

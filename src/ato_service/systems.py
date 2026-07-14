@@ -318,6 +318,7 @@ async def create_system(
     external_system_id: str | None,
     owner_group: str,
     viewer_groups: list[str],
+    customer_enterprise_id: str,
     now: datetime,
 ) -> CreateSystemResult:
     """Create a system with replay-safe idempotency inside the caller's transaction."""
@@ -370,6 +371,7 @@ async def create_system(
         system_id=system_id,
         display_name=validated_display_name,
         external_system_id=validated_external_system_id,
+        customer_enterprise_id=customer_enterprise_id,
         owner_group=validated_owner_group,
         viewer_groups=validated_viewer_groups,
         created_at=validated_now,

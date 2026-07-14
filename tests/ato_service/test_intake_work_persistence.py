@@ -228,7 +228,7 @@ def test_intake_attempt_unique_attempt_number_per_work() -> None:
 def test_alembic_head_is_package_revision_intake_work_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260715_0010"
+    assert script.get_current_head() == "20260716_0011"
 
 
 def test_intake_work_migration_chains_from_package_editor_persistence() -> None:

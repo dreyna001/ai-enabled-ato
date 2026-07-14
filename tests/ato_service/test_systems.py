@@ -82,6 +82,7 @@ def _make_system(
         system_id=system_id,
         display_name="Example System",
         external_system_id="EXT-1",
+        customer_enterprise_id="dev-local-enterprise",
         owner_group=owner_group,
         viewer_groups=viewer_groups if viewer_groups is not None else list(VIEWER_GROUPS),
         created_at=created_at,
@@ -194,6 +195,7 @@ def test_create_system_rejects_invalid_request_schema() -> None:
                 external_system_id="EXT-1",
                 owner_group=OWNER_GROUP,
                 viewer_groups=VIEWER_GROUPS,
+                customer_enterprise_id="dev-local-enterprise",
                 now=NOW,
             )
         )
@@ -218,6 +220,7 @@ def test_create_system_denies_non_owner_before_idempotency_lookup() -> None:
                 external_system_id="EXT-1",
                 owner_group=OWNER_GROUP,
                 viewer_groups=VIEWER_GROUPS,
+                customer_enterprise_id="dev-local-enterprise",
                 now=NOW,
             )
         )
@@ -247,6 +250,7 @@ def test_create_system_inserts_audit_and_idempotency_on_success() -> None:
             external_system_id="EXT-1",
             owner_group=OWNER_GROUP,
             viewer_groups=VIEWER_GROUPS,
+            customer_enterprise_id="dev-local-enterprise",
             now=NOW,
         )
     )
@@ -311,6 +315,7 @@ def test_create_system_replay_returns_stored_outcome_without_audit_or_insert() -
             external_system_id="EXT-1",
             owner_group=OWNER_GROUP,
             viewer_groups=VIEWER_GROUPS,
+            customer_enterprise_id="dev-local-enterprise",
             now=NOW,
         )
     )
@@ -339,6 +344,7 @@ def test_create_system_uses_matching_request_digest_for_replay_lookup() -> None:
             external_system_id="EXT-1",
             owner_group=OWNER_GROUP,
             viewer_groups=VIEWER_GROUPS,
+            customer_enterprise_id="dev-local-enterprise",
             now=NOW,
         )
     )

@@ -948,6 +948,7 @@ def test_intake_persists_draft_and_audit_atomically(tmp_path: Path) -> None:
                             system_id=SYSTEM_ID,
                             display_name="Unified intake integration",
                             external_system_id=None,
+                            customer_enterprise_id="dev-local-enterprise",
                             owner_group="owners",
                             viewer_groups=[],
                             created_at=NOW,

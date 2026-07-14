@@ -148,5 +148,6 @@
     "oidc_authentication": true,
     "package_search": false,
     "package_chat": false
-  }
+  },
+  "INSTALLATION_CUSTOMER_ENTERPRISE_ID": "customer-enterprise-example"
 }

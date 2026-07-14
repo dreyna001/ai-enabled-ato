@@ -17,6 +17,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
+from ato_service.authorization_boundary import (
+    UnsupportedAuthorizationPathError,
+    validate_system_context_authorization_path,
+)
 from ato_service.auth_context import (
     AuthenticatedPrincipal,
     require_system_mutation_access,
@@ -400,6 +404,13 @@ async def save_package_revision_draft(
 
     validate_package_draft_document(document)
     validate_draft_profile_match(document=document, profile_id=package_revision.profile_id)
+    try:
+        validate_system_context_authorization_path(document)
+    except UnsupportedAuthorizationPathError as exc:
+        raise _validation_error(
+            "authorization path is outside product scope",
+            error_code=exc.error_code,
+        ) from exc
 
     draft.document = document
     draft.updated_by = principal.actor_id

@@ -58,6 +58,7 @@ def test_synthetic_intake_persists_proposals_and_audit_atomically(
                             system_id=system_id,
                             display_name="Synthetic intake integration",
                             external_system_id=None,
+                            customer_enterprise_id="dev-local-enterprise",
                             owner_group="owners",
                             viewer_groups=[],
                             created_at=now,

@@ -733,6 +733,8 @@ the error.
 | `csrf_validation_failed` | 403 | No | Request | None. | `denied` | Yes |
 | `resource_not_found` | 404 | No | Requested resource | None. | `denied` | Yes |
 | `request_schema_invalid` | 422 | No | Request | None; populate `field_errors`. | `denied` | Yes |
+| `unsupported_authorization_path` | 422 | No | Request or `PackageRevision` | None; unsupported DoD, IC, classified, or out-of-scope authorization inputs are rejected before mutation. | `denied` | Yes |
+| `customer_enterprise_mismatch` | 422 | No | `System` | None; installation serves exactly one configured customer enterprise. | `denied` | Yes |
 | `unsupported_media_type` | 415 | No | `PackageRevision` | Reject artifact; revision remains `uploading` unless another listed invalid transition is independently established. | `denied` | Yes |
 | `source_size_limit_exceeded` | 413 | No | `PackageRevision` | Reject bytes; if the revision limit is established, legal active state -> `invalid`. | `denied` | Yes |
 | `package_limit_exceeded` | 413 | No | `PackageRevision` | Legal `uploading`, `scanning`, or `extracting` state -> `invalid`; no truncation. | `denied` | Yes |

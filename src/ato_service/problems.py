@@ -28,6 +28,7 @@ KNOWN_ERROR_CODES = frozenset(
         "classified_data_unsupported",
         "concurrent_run_limit_exceeded",
         "csrf_validation_failed",
+        "customer_enterprise_mismatch",
         "database_unavailable",
         "duplicate_canonical_id",
         "etag_mismatch",
@@ -48,8 +49,10 @@ KNOWN_ERROR_CODES = frozenset(
         "source_size_limit_exceeded",
         "source_type_mismatch",
         "state_artifact_inconsistent",
+        "status_ceiling_violated",
         "storage_unavailable",
         "unconfirmed_fact_proposals",
+        "unsupported_authorization_path",
         "unsupported_media_type",
     }
 )
@@ -62,6 +65,7 @@ ERROR_TITLES: dict[str, str] = {
     "classified_data_unsupported": "Classified data unsupported",
     "concurrent_run_limit_exceeded": "Concurrent run limit exceeded",
     "csrf_validation_failed": "CSRF validation failed",
+    "customer_enterprise_mismatch": "Customer enterprise mismatch",
     "database_unavailable": "Database unavailable",
     "duplicate_canonical_id": "Duplicate canonical id",
     "etag_mismatch": "ETag mismatch",
@@ -82,8 +86,10 @@ ERROR_TITLES: dict[str, str] = {
     "source_size_limit_exceeded": "Source size limit exceeded",
     "source_type_mismatch": "Source type mismatch",
     "state_artifact_inconsistent": "State artifact inconsistent",
+    "status_ceiling_violated": "Status ceiling violated",
     "storage_unavailable": "Storage unavailable",
     "unconfirmed_fact_proposals": "Unconfirmed fact proposals",
+    "unsupported_authorization_path": "Unsupported authorization path",
     "unsupported_media_type": "Unsupported media type",
 }
 
@@ -102,6 +108,9 @@ DEFAULT_DETAILS: dict[str, str] = {
     ),
     "csrf_validation_failed": (
         "The CSRF token or Origin validation failed for this mutation."
+    ),
+    "customer_enterprise_mismatch": (
+        "The requested system does not belong to the configured customer enterprise."
     ),
     "database_unavailable": "The database is unavailable.",
     "duplicate_canonical_id": (
@@ -149,9 +158,15 @@ DEFAULT_DETAILS: dict[str, str] = {
     "state_artifact_inconsistent": (
         "Domain state and stored artifacts are inconsistent."
     ),
+    "status_ceiling_violated": (
+        "Model-proposed status exceeds the deterministic evidence ceiling."
+    ),
     "storage_unavailable": "The storage subsystem is unavailable.",
     "unconfirmed_fact_proposals": (
         "All fact proposals must be accepted or rejected before confirmation."
+    ),
+    "unsupported_authorization_path": (
+        "The supplied authorization path is outside supported product scope."
     ),
     "unsupported_media_type": (
         "The declared media type is not supported for this upload."
@@ -166,6 +181,7 @@ ERROR_HTTP_METADATA: dict[str, tuple[int, bool]] = {
     "classified_data_unsupported": (403, False),
     "concurrent_run_limit_exceeded": (429, True),
     "csrf_validation_failed": (403, False),
+    "customer_enterprise_mismatch": (422, False),
     "database_unavailable": (503, True),
     "duplicate_canonical_id": (422, False),
     "etag_mismatch": (412, True),
@@ -186,8 +202,10 @@ ERROR_HTTP_METADATA: dict[str, tuple[int, bool]] = {
     "source_size_limit_exceeded": (413, False),
     "source_type_mismatch": (422, False),
     "state_artifact_inconsistent": (500, False),
+    "status_ceiling_violated": (422, False),
     "storage_unavailable": (503, True),
     "unconfirmed_fact_proposals": (422, False),
+    "unsupported_authorization_path": (422, False),
     "unsupported_media_type": (415, False),
 }
 

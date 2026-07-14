@@ -42,6 +42,7 @@ def map_system_to_domain(system: Any) -> dict[str, Any]:
         "system_id": format_uuid(system.system_id),
         "display_name": system.display_name,
         "external_system_id": system.external_system_id,
+        "customer_enterprise_id": system.customer_enterprise_id,
         "owner_group": system.owner_group,
         "viewer_groups": list(system.viewer_groups),
         "created_at": format_utc_datetime(system.created_at),

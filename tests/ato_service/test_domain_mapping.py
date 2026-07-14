@@ -30,6 +30,7 @@ class _SystemRow:
     system_id: UUID
     display_name: str
     external_system_id: str | None
+    customer_enterprise_id: str
     owner_group: str
     viewer_groups: list[str]
     created_at: datetime
@@ -110,6 +111,7 @@ def test_map_system_to_domain_matches_schema() -> None:
         system_id=UUID("22222222-2222-4222-8222-222222222222"),
         display_name="Example System",
         external_system_id="ext-1",
+        customer_enterprise_id="dev-local-enterprise",
         owner_group="owners",
         viewer_groups=["viewers"],
         created_at=datetime(2026, 7, 10, 20, 0, tzinfo=timezone.utc),

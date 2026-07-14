@@ -117,6 +117,12 @@
       "minLength": 1,
       "maxLength": 255
     },
+    "boundedIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
     "ProfileId": {
       "enum": [
         "fedramp_20x_program",
@@ -466,6 +472,7 @@
         "system_id",
         "display_name",
         "external_system_id",
+        "customer_enterprise_id",
         "owner_group",
         "viewer_groups",
         "created_at",
@@ -492,6 +499,9 @@
             "null"
           ],
           "maxLength": 255
+        },
+        "customer_enterprise_id": {
+          "$ref": "#/$defs/boundedIdentifier"
         },
         "owner_group": {
           "$ref": "#/$defs/GroupId"
@@ -620,7 +630,7 @@
         },
         "package_content_sha256": {
           "$ref": "#/$defs/Sha256OrNull",
-          "$comment": "Canonical package document digest sealed at confirm. Required keys are always present; values remain null until Diff 5 confirm writes sealed content. A staged invariant (not yet DB-enforced) will require non-null values for ready revisions once confirm is wired."
+          "$comment": "Canonical package document digest sealed at confirm on the package-editor draft path. Required keys are always present; values remain null until confirm writes sealed content. Legacy proposal-gated confirm without a draft row may leave this null."
         },
         "system_context_snapshot_id": {
           "anyOf": [
@@ -631,7 +641,7 @@
               "type": "null"
             }
           ],
-          "$comment": "Immutable system-context snapshot referenced by the sealed package. Null until confirm selects or creates the snapshot in Diff 5."
+          "$comment": "Immutable system-context snapshot referenced by the sealed package. Null until confirm creates the snapshot on the package-editor draft path."
         },
         "revision_version": {
           "type": "integer",
@@ -1922,6 +1932,162 @@
           "$ref": "#/$defs/UserId"
         },
         "decided_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        },
+        "evidence_request_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "poam_candidate_id": {
+          "$ref": "#/$defs/Uuid"
+        }
+      }
+    },
+    "EvidenceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "evidence_request_id",
+        "review_revision_id",
+        "disposition_id",
+        "matrix_row_id",
+        "run_id",
+        "assessment_item_id",
+        "assessment_item_type",
+        "system_status",
+        "finding_summary",
+        "provenance",
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "evidence_request"
+        },
+        "evidence_request_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "review_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "disposition_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "matrix_row_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "assessment_item_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "assessment_item_type": {
+          "enum": [
+            "nist_control",
+            "fedramp_rule",
+            "fedramp_ksi"
+          ]
+        },
+        "system_status": {
+          "enum": [
+            "supported",
+            "partial",
+            "unsupported",
+            "insufficient_evidence"
+          ]
+        },
+        "finding_summary": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "provenance": {
+          "type": "object"
+        },
+        "created_by": {
+          "$ref": "#/$defs/UserId"
+        },
+        "created_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
+    },
+    "PoamCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "poam_candidate_id",
+        "review_revision_id",
+        "disposition_id",
+        "matrix_row_id",
+        "run_id",
+        "assessment_item_id",
+        "assessment_item_type",
+        "system_status",
+        "weakness_summary",
+        "provenance",
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "poam_candidate"
+        },
+        "poam_candidate_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "review_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "disposition_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "matrix_row_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "assessment_item_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "assessment_item_type": {
+          "enum": [
+            "nist_control",
+            "fedramp_rule",
+            "fedramp_ksi"
+          ]
+        },
+        "system_status": {
+          "enum": [
+            "partial",
+            "unsupported"
+          ]
+        },
+        "weakness_summary": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "provenance": {
+          "type": "object"
+        },
+        "created_by": {
+          "$ref": "#/$defs/UserId"
+        },
+        "created_at": {
           "$ref": "#/$defs/UtcDateTime"
         }
       }

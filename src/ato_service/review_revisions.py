@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ato_service.audit import append_audit_event
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.concurrency import assert_if_match, format_package_revision_etag
+from ato_service.disposition_transitions import (
+    DispositionTransitionError,
+    require_decision_compatible_with_matrix_status,
+)
 from ato_service.domain_mapping import format_uuid
 from ato_service.idempotency import (
     IdempotencyReplay,
@@ -55,6 +59,10 @@ class ReviewRevisionValidationError(ValueError):
         self.error_code = error_code
         self.message = message
         super().__init__(message)
+
+
+class DispositionValidationError(ReviewRevisionValidationError):
+    """Raised when a disposition mutation violates routing or transition rules."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,7 +325,8 @@ async def update_disposition(
     hmac_key: bytes,
     now: datetime,
 ) -> tuple[dict[str, Any], str]:
-    from ato_service.db.models import Disposition, ReviewRevision
+    from ato_service.db.models import Disposition, MatrixRow, ReviewRevision
+    from ato_service.poam_routing import route_disposition_side_effects
 
     review_result = await session.execute(
         select(ReviewRevision).where(ReviewRevision.review_revision_id == review_revision_id)
@@ -348,6 +357,20 @@ async def update_disposition(
     if disposition is None:
         raise ReviewRevisionNotFoundError()
 
+    matrix_result = await session.execute(
+        select(MatrixRow).where(MatrixRow.matrix_row_id == matrix_row_id)
+    )
+    matrix_row = matrix_result.scalar_one_or_none()
+    if matrix_row is None:
+        raise ReviewRevisionNotFoundError()
+    try:
+        require_decision_compatible_with_matrix_status(
+            decision=decision,
+            system_status=matrix_row.system_status,
+        )
+    except DispositionTransitionError as exc:
+        raise DispositionValidationError(exc.message, error_code=exc.error_code) from exc
+
     disposition.decision = decision
     disposition.edited_summary = edited_summary
     disposition.notes = notes
@@ -356,7 +379,27 @@ async def update_disposition(
     disposition.decided_at = now
     review_revision.version += 1
 
+    routing_result = await route_disposition_side_effects(
+        session,
+        review_revision_id=review_revision_id,
+        disposition_id=disposition.disposition_id,
+        matrix_row_id=matrix_row_id,
+        run_id=review_revision.run_id,
+        assessment_item_id=matrix_row.assessment_item_id,
+        assessment_item_type=matrix_row.assessment_item_type,
+        system_status=matrix_row.system_status,
+        finding_summary=matrix_row.finding_summary,
+        decision=decision,
+        actor_id=principal.actor_id,
+        hmac_key=hmac_key,
+        now=now,
+    )
+
     payload = map_disposition_to_domain(disposition)
+    if routing_result.evidence_request_id is not None:
+        payload["evidence_request_id"] = format_uuid(routing_result.evidence_request_id)
+    if routing_result.poam_candidate_id is not None:
+        payload["poam_candidate_id"] = format_uuid(routing_result.poam_candidate_id)
     etag = format_package_revision_etag(review_revision.version)
     await append_audit_event(
         session,
@@ -368,7 +411,13 @@ async def update_disposition(
         object_id=str(disposition.disposition_id).lower(),
         outcome="succeeded",
         reason_code=None,
-        metadata={"decision": decision},
+        metadata={
+            "decision": decision,
+            "evidence_request_created": routing_result.evidence_request_id is not None
+            and routing_result.created,
+            "poam_candidate_created": routing_result.poam_candidate_id is not None
+            and routing_result.created,
+        },
         now=now,
     )
     return payload, etag

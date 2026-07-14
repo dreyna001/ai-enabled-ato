@@ -34,6 +34,10 @@ from ato_service.lifecycle_transitions import (
     require_analysis_run_transition,
 )
 from ato_service.matrix_coverage import require_exact_matrix_coverage
+from ato_service.matrix_row_persistence import (
+    StatusCeilingViolatedError,
+    apply_ceilings_to_matrix_row_payloads,
+)
 from ato_service.model_routing import EndpointProfile
 from ato_service.runtime_config import RuntimeConfig
 
@@ -184,6 +188,16 @@ async def process_next_deterministic_analysis(
         profile=profile,
         assessment_item_ids=expected_ids,
     )
+    try:
+        row_payloads = apply_ceilings_to_matrix_row_payloads(
+            row_payloads,
+            status_policy=profile.get("status_policy"),
+        )
+    except StatusCeilingViolatedError as exc:
+        raise DeterministicAnalysisProcessingError(
+            str(exc),
+            error_code=exc.error_code,
+        ) from exc
     require_exact_matrix_coverage(
         expected_ids,
         [row["assessment_item_id"] for row in row_payloads],

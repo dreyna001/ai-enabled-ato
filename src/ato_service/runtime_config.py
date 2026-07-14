@@ -144,6 +144,15 @@ class RuntimeConfig:
             )
         return provider
 
+    @property
+    def installation_customer_enterprise_id(self) -> str:
+        """Return the single customer enterprise served by this installation."""
+        from ato_service.installation_boundary import (
+            resolve_installation_customer_enterprise_id,
+        )
+
+        return resolve_installation_customer_enterprise_id(self.document)
+
 
 def _find_project_root(start: Path | None = None) -> Path:
     candidate = (start or Path(__file__)).resolve()

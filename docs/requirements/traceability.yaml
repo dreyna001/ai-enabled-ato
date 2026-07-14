@@ -19,10 +19,20 @@
       "spec_section": "32",
       "requirement_text": "Each installation serves exactly one customer enterprise.",
       "epic": "EP-02-package-foundation",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned architecture and schema review",
-      "status": "planned"
+      "implementation_files": [
+        "docs/contracts/runtime-config.schema.json",
+        "docs/contracts/domain.schema.json",
+        "src/ato_service/installation_boundary.py",
+        "src/ato_service/systems.py",
+        "src/ato_service/runtime_config.py",
+        "migrations/versions/20260716_0011_poam_routing_single_customer.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_installation_boundary.py",
+        "tests/ato_service/test_systems.py"
+      ],
+      "verification_type": "Explicit INSTALLATION_CUSTOMER_ENTERPRISE_ID runtime boundary with persisted system.customer_enterprise_id",
+      "status": "partial"
     },
     {
       "requirement_id": "R-003",
@@ -56,10 +66,18 @@
       "epic": "EP-01-core-safety",
       "implementation_files": [
         "docs/contracts/domain.schema.json",
-        "docs/contracts/fixtures/domain.invalid.profile-boundary.json"
+        "docs/contracts/fixtures/domain.invalid.profile-boundary.json",
+        "src/ato_service/authorization_boundary.py",
+        "src/ato_service/package_revisions.py",
+        "src/ato_service/package_revision_drafts.py",
+        "src/ato_service/problems.py",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md"
       ],
-      "test_ids": [],
-      "verification_type": "Code review plus planned negative authorization-path and classified-data tests",
+      "test_ids": [
+        "tests/ato_service/test_authorization_boundary.py",
+        "tests/ato_service/test_package_revisions.py::test_validate_create_input_rejects_classified_sensitivity"
+      ],
+      "verification_type": "Deterministic unsupported authorization-path and classified-sensitivity rejection at API and draft intake boundaries",
       "status": "partial"
     },
     {
@@ -266,10 +284,20 @@
       "spec_section": "32",
       "requirement_text": "A POA&M weakness is created or routed only after explicit human confirmation.",
       "epic": "EP-05-draft-artifacts",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned deterministic POA&M routing and human-confirmation tests",
-      "status": "planned"
+      "implementation_files": [
+        "src/ato_service/poam_routing.py",
+        "src/ato_service/disposition_transitions.py",
+        "src/ato_service/review_revisions.py",
+        "src/ato_service/db/models.py",
+        "docs/contracts/domain.schema.json",
+        "migrations/versions/20260716_0011_poam_routing_single_customer.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_disposition_transitions.py",
+        "tests/ato_service/test_poam_routing_integration.py"
+      ],
+      "verification_type": "Human-confirmed POA&M routing with evidence-request-only path for insufficient_evidence and idempotent persistence",
+      "status": "partial"
     },
     {
       "requirement_id": "R-014",
@@ -671,10 +699,22 @@
       "spec_section": "28.1",
       "requirement_text": "Deterministic status ceilings prevent unsupported favorable outcomes and route POA&M candidates for required human action.",
       "epic": "EP-01-core-safety",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Planned status-ceiling and POA&M-routing test class",
-      "status": "planned"
+      "implementation_files": [
+        "src/ato_service/status_ceiling_evaluator.py",
+        "src/ato_service/matrix_row_persistence.py",
+        "src/ato_service/deterministic_analyzer.py",
+        "src/ato_service/model_assisted_analyzer.py",
+        "src/ato_service/poam_routing.py",
+        "src/ato_service/problems.py",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_status_ceiling_evaluator.py",
+        "tests/ato_service/test_disposition_transitions.py",
+        "tests/ato_service/test_poam_routing_integration.py"
+      ],
+      "verification_type": "Deterministic status-ceiling evaluator and POA&M-routing regression class",
+      "status": "partial"
     },
     {
       "requirement_id": "P0-007",

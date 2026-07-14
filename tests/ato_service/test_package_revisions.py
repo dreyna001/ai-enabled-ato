@@ -27,6 +27,7 @@ from ato_service.package_revisions import (
     EmptyPackageRevisionError,
     PackageRevisionNotFoundError,
     PackageRevisionStorageError,
+    PackageRevisionValidationError,
     ParentRevisionNotFoundError,
     ProfileBoundaryError,
     SystemNotFoundError,
@@ -43,6 +44,7 @@ from ato_service.package_revisions import (
     finalize_request_digest,
     get_package_revision,
     list_package_revisions,
+    validate_create_input,
     validate_profile_boundaries,
 )
 from ato_service.runtime_config import RuntimeLimits
@@ -268,6 +270,19 @@ def test_validate_profile_boundaries_rejects_invalid_combinations(
             certification_class=certification_class,
             impact_level=impact_level,
         )
+
+
+def test_validate_create_input_rejects_classified_sensitivity() -> None:
+    with pytest.raises(PackageRevisionValidationError) as exc_info:
+        validate_create_input(
+            parent_revision_id=None,
+            profile_id="fisma_agency_security",
+            certification_class=None,
+            impact_level="moderate",
+            data_origin="synthetic",
+            sensitivity="classified",
+        )
+    assert exc_info.value.error_code == "classified_data_unsupported"
 
 
 def test_create_request_digest_is_stable() -> None:

@@ -92,6 +92,7 @@ def _system() -> System:
         system_id=SYSTEM_ID,
         display_name="Demo System",
         external_system_id=None,
+        customer_enterprise_id="dev-local-enterprise",
         owner_group=OWNER_GROUP,
         viewer_groups=[VIEWER_GROUP],
         created_at=NOW,

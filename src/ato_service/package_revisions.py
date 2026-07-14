@@ -13,6 +13,10 @@ from sqlalchemy import exists, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
+from ato_service.authorization_boundary import (
+    ClassifiedAuthorizationInputError,
+    require_unclassified_sensitivity,
+)
 from ato_service.auth_context import (
     AuthenticatedPrincipal,
     AuthorizationDeniedError,
@@ -354,6 +358,13 @@ def validate_create_input(
         field_name="sensitivity",
         allowed=ev.SENSITIVITY_VALUES,
     )
+    try:
+        require_unclassified_sensitivity(sensitivity)
+    except ClassifiedAuthorizationInputError as exc:
+        raise PackageRevisionValidationError(
+            "classified sensitivity is outside product scope",
+            error_code=exc.error_code,
+        )
     validate_profile_boundaries(
         profile_id=profile_id,
         certification_class=certification_class,

@@ -938,6 +938,7 @@ def _minimal_onprem_runtime_config() -> dict[str, Any]:
             "package_search": False,
             "package_chat": False,
         },
+        "INSTALLATION_CUSTOMER_ENTERPRISE_ID": "customer-enterprise-example",
     }
 
 

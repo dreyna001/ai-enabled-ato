@@ -20,6 +20,10 @@
         "onprem_production"
       ]
     },
+    "INSTALLATION_CUSTOMER_ENTERPRISE_ID": {
+      "$ref": "#/$defs/boundedIdentifier",
+      "$comment": "Single customer enterprise served by this installation. Required for onprem_production; dev_local defaults to dev-local-enterprise when omitted."
+    },
     "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": {
       "type": "boolean",
       "default": false,
@@ -575,7 +579,8 @@
           "OIDC_GROUP_ROLE_MAPPING",
           "INTERNAL_EGRESS_ALLOWLIST",
           "AUTHORITY_MANIFEST_FILE_REFERENCE",
-          "PROCESS_CAPABILITIES"
+          "PROCESS_CAPABILITIES",
+          "INSTALLATION_CUSTOMER_ENTERPRISE_ID"
         ],
         "properties": {
           "STORAGE_DATA_PATH": {

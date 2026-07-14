@@ -52,6 +52,7 @@ SYSTEM_PAYLOAD: dict[str, Any] = {
     "system_id": str(SYSTEM_ID).lower(),
     "display_name": "Fixture System",
     "external_system_id": None,
+    "customer_enterprise_id": "dev-local-enterprise",
     "owner_group": "owners",
     "viewer_groups": ["viewers"],
     "created_at": "2026-07-10T20:00:00Z",
@@ -207,6 +208,7 @@ def _mock_system_row() -> MagicMock:
     system.system_id = SYSTEM_ID
     system.display_name = SYSTEM_PAYLOAD["display_name"]
     system.external_system_id = None
+    system.customer_enterprise_id = SYSTEM_PAYLOAD["customer_enterprise_id"]
     system.owner_group = "owners"
     system.viewer_groups = ["viewers"]
     system.created_at = datetime(2026, 7, 10, 20, 0, tzinfo=timezone.utc)
