@@ -8,9 +8,10 @@ import json
 import re
 import zipfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from ato_service.profile_artifacts import GeneratedProfileArtifacts, generate_profile_artifacts
+from ato_service.profile_artifacts import GeneratedProfileArtifacts, build_profile_artifact_contents, generate_profile_artifacts
 
 AI_DISCLOSURE = (
     "AI Disclosure: This report was produced with machine assistance. All findings,\n"
@@ -79,54 +80,20 @@ def build_export_file_contents(
     run_id: Any,
     dispositions: list[dict[str, Any]],
     matrix_rows: list[dict[str, Any]],
+    project_root: Path | None = None,
 ) -> dict[str, bytes]:
     """Return path -> bytes for every allowlisted export artifact."""
-    artifacts = generate_profile_artifacts(
+    contents = build_profile_artifact_contents(
         profile_id=profile_id,
         sealed_document=sealed_document,
         review_revision_id=review_revision_id,
         run_id=run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        project_root=project_root,
     )
-    contents: dict[str, bytes] = {}
-    for descriptor in artifacts.files:
-        path = descriptor["path"]
+    for path in contents:
         _assert_allowed_path(path)
-        if path == "README.txt":
-            payload = (
-                "Draft export bundle. Official schema qualification remains blocked "
-                "by open hard stops."
-            )
-        elif path == "human/readiness-summary.md":
-            from ato_service.profile_artifacts import _readiness_summary
-
-            payload = _readiness_summary(profile_id=profile_id, document=sealed_document)
-        elif path == "machine/package-document.json":
-            payload = json.dumps(sealed_document, sort_keys=True)
-        elif path == "provenance/review-run.json":
-            payload = json.dumps(
-                {
-                    "review_revision_id": str(review_revision_id).lower(),
-                    "run_id": str(run_id).lower(),
-                },
-                sort_keys=True,
-            )
-        elif path == "provenance/dispositions.json":
-            payload = json.dumps({"dispositions": dispositions}, sort_keys=True)
-        elif path == "machine/assessment-matrix.json":
-            payload = json.dumps({"rows": matrix_rows}, sort_keys=True)
-        elif path.startswith("machine/") and path.endswith(".json"):
-            section_key = {
-                "machine/fedramp-20x-draft.json": "fedramp_20x",
-                "machine/fedramp-rev5-transition-draft.json": "fedramp_rev5_transition",
-                "machine/fisma-agency-security-draft.json": "fisma_agency_security",
-            }.get(path)
-            section = sealed_document.get(section_key) if section_key else None
-            payload = json.dumps(section or {}, sort_keys=True)
-        else:
-            raise ExportAssemblyError(f"unsupported export artifact path: {path}")
-        contents[path] = payload.encode("utf-8")
     return contents
 
 
@@ -145,8 +112,10 @@ def assemble_export_bundle(
     dispositions: list[dict[str, Any]],
     matrix_rows: list[dict[str, Any]],
     expected_payload_manifest_sha256: str,
+    project_root: Path | None = None,
 ) -> AssembledExportBundle:
     """Build a sanitized ZIP and verify the approved payload manifest hash."""
+    root = project_root or Path(__file__).resolve().parents[2]
     artifacts = generate_profile_artifacts(
         profile_id=profile_id,
         sealed_document=sealed_document,
@@ -154,6 +123,7 @@ def assemble_export_bundle(
         run_id=run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        project_root=root,
     )
     draft_manifest = build_draft_manifest(
         profile_id=profile_id,
@@ -170,14 +140,7 @@ def assemble_export_bundle(
             error_code="approval_payload_mismatch",
         )
 
-    file_contents = build_export_file_contents(
-        profile_id=profile_id,
-        sealed_document=sealed_document,
-        review_revision_id=review_revision_id,
-        run_id=run_id,
-        dispositions=dispositions,
-        matrix_rows=matrix_rows,
-    )
+    file_contents = dict(artifacts.contents)
     files: list[dict[str, Any]] = []
     for path, payload in sorted(file_contents.items()):
         _assert_allowed_path(path)
@@ -187,7 +150,7 @@ def assemble_export_bundle(
                 "media_type": _media_type_for_path(path),
                 "sha256": hashlib.sha256(payload).hexdigest(),
                 "size_bytes": len(payload),
-                "official_schema_id": None,
+                "official_schema_id": _official_schema_id_for_path(path, artifacts.files),
             }
         )
 
@@ -213,6 +176,13 @@ def assemble_export_bundle(
         zip_bytes=zip_bytes,
         storage_key=storage_key,
     )
+
+
+def _official_schema_id_for_path(path: str, descriptors: list[dict[str, Any]]) -> str | None:
+    for descriptor in descriptors:
+        if descriptor["path"] == path:
+            return descriptor.get("official_schema_id")
+    return None
 
 
 def _media_type_for_path(path: str) -> str:
