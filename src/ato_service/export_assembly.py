@@ -10,7 +10,7 @@ import zipfile
 from dataclasses import dataclass
 from typing import Any
 
-from ato_service.profile_artifacts import GeneratedProfileArtifacts, generate_profile_artifacts
+from ato_service.profile_artifacts import GeneratedProfileArtifacts, build_profile_file_contents, generate_profile_artifacts
 
 AI_DISCLOSURE = (
     "AI Disclosure: This report was produced with machine assistance. All findings,\n"
@@ -79,6 +79,7 @@ def build_export_file_contents(
     run_id: Any,
     dispositions: list[dict[str, Any]],
     matrix_rows: list[dict[str, Any]],
+    runtime_config_document: dict[str, Any] | None = None,
 ) -> dict[str, bytes]:
     """Return path -> bytes for every allowlisted export artifact."""
     artifacts = generate_profile_artifacts(
@@ -88,12 +89,24 @@ def build_export_file_contents(
         run_id=run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        runtime_config_document=runtime_config_document,
+    )
+    profile_contents = build_profile_file_contents(
+        profile_id=profile_id,
+        sealed_document=sealed_document,
+        review_revision_id=review_revision_id,
+        run_id=run_id,
+        dispositions=dispositions,
+        matrix_rows=matrix_rows,
+        runtime_config_document=runtime_config_document,
     )
     contents: dict[str, bytes] = {}
     for descriptor in artifacts.files:
         path = descriptor["path"]
         _assert_allowed_path(path)
-        if path == "README.txt":
+        if path in profile_contents:
+            payload = profile_contents[path]
+        elif path == "README.txt":
             payload = (
                 "Draft export bundle. Official schema qualification remains blocked "
                 "by open hard stops."
@@ -120,10 +133,13 @@ def build_export_file_contents(
             section_key = {
                 "machine/fedramp-20x-draft.json": "fedramp_20x",
                 "machine/fedramp-rev5-transition-draft.json": "fedramp_rev5_transition",
-                "machine/fisma-agency-security-draft.json": "fisma_agency_security",
             }.get(path)
             section = sealed_document.get(section_key) if section_key else None
             payload = json.dumps(section or {}, sort_keys=True)
+        elif path.startswith("human/") and path.endswith(".md"):
+            payload = profile_contents.get(path, "# Draft export artifact\n")
+        elif path.startswith("validation/") and path.endswith(".json"):
+            payload = profile_contents.get(path, "{}")
         else:
             raise ExportAssemblyError(f"unsupported export artifact path: {path}")
         contents[path] = payload.encode("utf-8")
@@ -145,6 +161,7 @@ def assemble_export_bundle(
     dispositions: list[dict[str, Any]],
     matrix_rows: list[dict[str, Any]],
     expected_payload_manifest_sha256: str,
+    runtime_config_document: dict[str, Any] | None = None,
 ) -> AssembledExportBundle:
     """Build a sanitized ZIP and verify the approved payload manifest hash."""
     artifacts = generate_profile_artifacts(
@@ -154,6 +171,7 @@ def assemble_export_bundle(
         run_id=run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        runtime_config_document=runtime_config_document,
     )
     draft_manifest = build_draft_manifest(
         profile_id=profile_id,
@@ -177,6 +195,7 @@ def assemble_export_bundle(
         run_id=run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        runtime_config_document=runtime_config_document,
     )
     files: list[dict[str, Any]] = []
     for path, payload in sorted(file_contents.items()):

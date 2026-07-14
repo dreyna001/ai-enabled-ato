@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -27,6 +28,7 @@ from ato_service.idempotency import (
 )
 from ato_service.package_rbac import require_package_role
 from ato_service.profile_artifacts import generate_profile_artifacts
+from ato_service.runtime_config import load_runtime_config
 
 _DEFAULT_APPROVAL_EXPIRY_DAYS = 7
 _SUPERSEDEABLE_EXPORT_DRAFT_STATUSES = frozenset({"draft", "pending_approval", "approved"})
@@ -146,6 +148,16 @@ async def _supersede_stale_export_drafts(
         )
 
 
+def _optional_runtime_config_document(project_root: Path) -> dict[str, Any] | None:
+    config_path = os.environ.get("ATO_RUNTIME_CONFIG_PATH")
+    if not config_path:
+        return None
+    try:
+        return load_runtime_config(Path(config_path), base_dir=project_root).document
+    except Exception:
+        return None
+
+
 async def _compute_current_payload_manifest_sha256(
     session: AsyncSession,
     *,
@@ -156,6 +168,7 @@ async def _compute_current_payload_manifest_sha256(
     project_root: Path,
     authority_manifest_id: str,
 ) -> str:
+    runtime_config_document = _optional_runtime_config_document(project_root)
     dispositions, matrix_rows = await _load_export_bundle_inputs(
         session,
         review_revision_id=review_revision_id,
@@ -168,6 +181,7 @@ async def _compute_current_payload_manifest_sha256(
         run_id=run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        runtime_config_document=runtime_config_document,
     )
     manifest = {
         "schema_version": "1.0.0",
@@ -373,10 +387,12 @@ async def create_export_draft(
     if sealed is None:
         raise ExportValidationError("sealed package content is required", error_code="package_not_ready")
 
+    runtime_config_document = _optional_runtime_config_document(project_root)
     readiness = evaluate_export_readiness(
         profile_id=revision.profile_id,
         sealed_document=sealed.document,
         project_root=project_root,
+        runtime_config_document=runtime_config_document,
     )
     if readiness.blockers:
         raise ExportValidationError(
@@ -396,6 +412,7 @@ async def create_export_draft(
         run_id=run.run_id,
         dispositions=dispositions,
         matrix_rows=matrix_rows,
+        runtime_config_document=runtime_config_document,
     )
     manifest = {
         "schema_version": "1.0.0",
@@ -720,6 +737,7 @@ async def deliver_export_download(
         run_id=run.run_id,
     )
 
+    runtime_config_document = _optional_runtime_config_document(project_root)
     created_at = _format_utc(now)
     try:
         bundle = assemble_export_bundle(
@@ -736,6 +754,7 @@ async def deliver_export_download(
             dispositions=dispositions,
             matrix_rows=matrix_rows,
             expected_payload_manifest_sha256=export_draft.payload_manifest_sha256,
+            runtime_config_document=runtime_config_document,
         )
     except ExportAssemblyError as exc:
         raise ExportValidationError(exc.message, error_code=exc.error_code) from exc
