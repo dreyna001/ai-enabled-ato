@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "rendering_mode", "agency_parity_claimed"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "rendering_mode": { "type": "string" },
+    "agency_parity_claimed": { "const": false },
+    "system_name": { "type": "string" },
+    "authorization_boundary": { "type": "string" },
+    "mission_summary": { "type": "string" },
+    "package_title": { "type": "string" }
+  }
+}

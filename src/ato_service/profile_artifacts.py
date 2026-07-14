@@ -10,6 +10,12 @@ from typing import Any
 
 from ato_service.export_readiness import evaluate_export_readiness
 from ato_service.fedramp_schema import evaluate_schema_purity
+from ato_service.fisma_generator import generate_fisma_security_artifacts
+from ato_service.fisma_template_pack import (
+    FismaTemplatePackError,
+    load_template_pack_reference,
+    load_verified_template_pack,
+)
 
 DRAFT_DISCLAIMER = (
     "DRAFT ONLY. This bundle does not constitute an official FedRAMP submission, "
@@ -41,6 +47,7 @@ def generate_profile_artifacts(
     dispositions: list[dict[str, Any]] | None = None,
     matrix_rows: list[dict[str, Any]] | None = None,
     project_root: Path | None = None,
+    runtime_config_document: dict[str, Any] | None = None,
 ) -> GeneratedProfileArtifacts:
     """Generate draft human/machine artifact descriptors without HS-001/HS-002 claims."""
     root = project_root or Path(__file__).resolve().parents[2]
@@ -48,6 +55,7 @@ def generate_profile_artifacts(
         profile_id=profile_id,
         sealed_document=sealed_document,
         project_root=root,
+        runtime_config_document=runtime_config_document,
     )
     schema_results = evaluate_schema_purity(
         profile_id=profile_id,
@@ -129,11 +137,15 @@ def generate_profile_artifacts(
             readiness=readiness,
         )
     elif profile_id == "fisma_agency_security":
-        section = sealed_document.get("fisma_agency_security") or {}
-        contents["machine/fisma-agency-security-draft.json"] = json.dumps(
-            section,
-            sort_keys=True,
-        ).encode("utf-8")
+        _add_fisma_artifacts(
+            contents=contents,
+            sealed_document=sealed_document,
+            review_revision_id=review_revision_id,
+            run_id=run_id,
+            dispositions=dispositions,
+            matrix_rows=matrix_rows,
+            runtime_config_document=runtime_config_document,
+        )
 
     files = [
         _descriptor_for_path(path=path, contents=payload, official_schema_id=None)
@@ -152,6 +164,7 @@ def build_profile_artifact_contents(
     dispositions: list[dict[str, Any]],
     matrix_rows: list[dict[str, Any]],
     project_root: Path | None = None,
+    runtime_config_document: dict[str, Any] | None = None,
 ) -> dict[str, bytes]:
     """Return path -> bytes for every generated export artifact."""
     artifacts = generate_profile_artifacts(
@@ -162,6 +175,7 @@ def build_profile_artifact_contents(
         dispositions=dispositions,
         matrix_rows=matrix_rows,
         project_root=project_root,
+        runtime_config_document=runtime_config_document,
     )
     return dict(artifacts.contents)
 
@@ -232,6 +246,39 @@ def _add_fedramp_20x_artifacts(
         independent_assessment_present=bool(independent_assessment),
         ksi_method_count=len(ksi_methods) if isinstance(ksi_methods, list) else 0,
     ).encode("utf-8")
+
+
+def _add_fisma_artifacts(
+    *,
+    contents: dict[str, bytes],
+    sealed_document: dict[str, Any],
+    review_revision_id: Any,
+    run_id: Any,
+    dispositions: list[dict[str, Any]] | None,
+    matrix_rows: list[dict[str, Any]] | None,
+    runtime_config_document: dict[str, Any] | None,
+) -> None:
+    template_pack = _load_optional_template_pack(runtime_config_document)
+    result = generate_fisma_security_artifacts(
+        sealed_document=sealed_document,
+        review_revision_id=review_revision_id,
+        run_id=run_id,
+        dispositions=dispositions,
+        matrix_rows=matrix_rows,
+        template_pack=template_pack,
+    )
+    for path, payload in result.contents.items():
+        contents[path] = payload.encode("utf-8")
+
+
+def _load_optional_template_pack(runtime_config_document: dict[str, Any] | None):
+    reference = load_template_pack_reference(runtime_config_document)
+    if reference is None:
+        return None
+    try:
+        return load_verified_template_pack(reference)
+    except FismaTemplatePackError:
+        return None
 
 
 def _add_fedramp_rev5_artifacts(
@@ -314,6 +361,26 @@ def _readiness_summary(
     document: dict[str, Any],
     readiness: Any,
 ) -> str:
+    if profile_id == "fisma_agency_security":
+        from ato_service.fisma_generator import PRIVACY_SCOPE_NOTICE
+
+        controls = document.get("security_controls")
+        control_count = len(controls) if isinstance(controls, dict) else 0
+        lines = [
+            "# Draft readiness summary",
+            "",
+            DRAFT_DISCLAIMER,
+            "",
+            f"Profile: {profile_id}",
+            f"Security controls present: {control_count}",
+            f"Privacy scope notice: {PRIVACY_SCOPE_NOTICE}",
+            "Agency field parity claimed: false",
+        ]
+        if readiness.warnings:
+            lines.extend(["", "## Warnings", ""])
+            lines.extend(f"- {warning}" for warning in readiness.warnings)
+        return "\n".join(lines) + "\n"
+
     privacy = document.get("privacy", {})
     assessor_count = len(document.get("assessor_inputs") or {})
     lines = [

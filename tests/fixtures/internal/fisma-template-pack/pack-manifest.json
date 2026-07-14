@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "pack_id": "internal-fixture-001",
+  "pack_version": "1.0.0",
+  "approval_status": "approved",
+  "description": "Internal fixture template pack for contract tests. Not a customer agency pack and does not establish agency field parity.",
+  "required_members": [
+    "pack-manifest.json",
+    "templates/ssp-security-section.md",
+    "schemas/ssp-security-draft.schema.json"
+  ],
+  "field_mappings": [
+    {
+      "mapping_id": "system_display_name",
+      "source_pointer": "/system/display_name",
+      "target_artifact": "ssp_security_draft",
+      "target_field": "system_name"
+    },
+    {
+      "mapping_id": "system_boundary",
+      "source_pointer": "/system/authorization_boundary",
+      "target_artifact": "ssp_security_draft",
+      "target_field": "authorization_boundary"
+    },
+    {
+      "mapping_id": "system_mission",
+      "source_pointer": "/system/mission_summary",
+      "target_artifact": "ssp_security_draft",
+      "target_field": "mission_summary"
+    },
+    {
+      "mapping_id": "package_title",
+      "source_pointer": "/package/title",
+      "target_artifact": "ssp_security_draft",
+      "target_field": "package_title"
+    }
+  ],
+  "artifact_templates": [
+    {
+      "artifact_id": "ssp_security_draft",
+      "human_template_member": "templates/ssp-security-section.md",
+      "machine_schema_member": "schemas/ssp-security-draft.schema.json",
+      "export_paths": {
+        "human": "human/ssp-security-draft.md",
+        "machine": "machine/ssp-security-draft.json"
+      }
+    },
+    {
+      "artifact_id": "sar_input_pack",
+      "export_paths": {
+        "human": "human/sar-input-pack.md",
+        "machine": "machine/sar-input-pack.json"
+      }
+    },
+    {
+      "artifact_id": "poam_draft",
+      "export_paths": {
+        "human": "human/poam-draft.md",
+        "machine": "machine/poam-draft.json"
+      }
+    },
+    {
+      "artifact_id": "security_readiness",
+      "export_paths": {
+        "human": "human/security-readiness.md",
+        "machine": "machine/security-readiness.json"
+      }
+    }
+  ]
+}

@@ -81,6 +81,7 @@ def build_export_file_contents(
     dispositions: list[dict[str, Any]],
     matrix_rows: list[dict[str, Any]],
     project_root: Path | None = None,
+    runtime_config_document: dict[str, Any] | None = None,
 ) -> dict[str, bytes]:
     """Return path -> bytes for every allowlisted export artifact."""
     contents = build_profile_artifact_contents(
@@ -91,6 +92,7 @@ def build_export_file_contents(
         dispositions=dispositions,
         matrix_rows=matrix_rows,
         project_root=project_root,
+        runtime_config_document=runtime_config_document,
     )
     for path in contents:
         _assert_allowed_path(path)
@@ -113,6 +115,7 @@ def assemble_export_bundle(
     matrix_rows: list[dict[str, Any]],
     expected_payload_manifest_sha256: str,
     project_root: Path | None = None,
+    runtime_config_document: dict[str, Any] | None = None,
 ) -> AssembledExportBundle:
     """Build a sanitized ZIP and verify the approved payload manifest hash."""
     root = project_root or Path(__file__).resolve().parents[2]
@@ -124,6 +127,7 @@ def assemble_export_bundle(
         dispositions=dispositions,
         matrix_rows=matrix_rows,
         project_root=root,
+        runtime_config_document=runtime_config_document,
     )
     draft_manifest = build_draft_manifest(
         profile_id=profile_id,
