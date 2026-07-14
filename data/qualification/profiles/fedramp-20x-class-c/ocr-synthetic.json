@@ -1,0 +1,9 @@
+{
+  "fixture_notice": "Synthetic OCR-shaped fixture for qualification only. Not official FedRAMP authority content.",
+  "reportPeriod": {
+    "from": "2026-01-01",
+    "to": "2026-03-31"
+  },
+  "acceptedVulnerabilities": "None reported in fixture.",
+  "reportableIncidents": {}
+}

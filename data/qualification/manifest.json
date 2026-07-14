@@ -1,0 +1,459 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "ato-qualification-corpus-2026-07-14",
+  "status": "draft",
+  "created_at": "2026-07-14T16:00:00Z",
+  "corpus_root": "data/qualification",
+  "hard_stop_notice": "This manifest seals synthetic qualification fixtures only. It does not close HS-001 through HS-009 or authorize production, AI qualification, official schema, or customer-ready release claims.",
+  "hard_stops_governed": [
+    "HS-001",
+    "HS-002",
+    "HS-003",
+    "HS-004",
+    "HS-005",
+    "HS-006",
+    "HS-007",
+    "HS-008",
+    "HS-009"
+  ],
+  "fixtures": [
+    {
+      "fixture_id": "fisma.sealed-draft",
+      "relative_path": "profiles/fisma-agency-security/sealed-draft.json",
+      "sha256": "e0d86d73aa60594b3a1dcafdb85de36ec15e9a36384c25431efb7dd9fdcb50b4",
+      "size_bytes": 1477,
+      "profile_id": "fisma_agency_security",
+      "split": "qualification",
+      "purpose": "Minimal sealed draft for agency FISMA deterministic E2E.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "deterministic_e2e_fixture_present"
+        ],
+        "blocked_claims": [
+          "agency_field_parity",
+          "customer_ready_fisma_export"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fisma.analysis-profile",
+      "relative_path": "profiles/fisma-agency-security/analysis-profile.minimal.json",
+      "sha256": "7573e31ab6514ce5835cebadc14e285d8e8d3da419c4c5bbf187ef6058b04313",
+      "size_bytes": 1946,
+      "profile_id": "fisma_agency_security",
+      "split": "qualification",
+      "purpose": "Draft analysis profile for agency FISMA deterministic E2E.",
+      "expected_behavior": "deterministic_only",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "analysis_profile_schema_valid"
+        ],
+        "blocked_claims": [
+          "official_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fisma.security-plan-md",
+      "relative_path": "profiles/fisma-agency-security/mixed-format/security-plan-excerpt.md",
+      "sha256": "2c28bed38b73d478489204a30a9e2339f472e0931d8f188fa67513b02b52d45d",
+      "size_bytes": 265,
+      "profile_id": "fisma_agency_security",
+      "split": "qualification",
+      "purpose": "Markdown excerpt for mixed-format agency FISMA intake.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "mixed_format_intake_fixture"
+        ],
+        "blocked_claims": [
+          "customer_ready_fisma_export"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fisma.control-matrix-csv",
+      "relative_path": "profiles/fisma-agency-security/mixed-format/control-matrix.csv",
+      "sha256": "26d1316cd5df2b96b842e2ed8a1c56af87fdbe05edb582e0c383baa3326effa5",
+      "size_bytes": 150,
+      "profile_id": "fisma_agency_security",
+      "split": "qualification",
+      "purpose": "CSV control matrix for mixed-format agency FISMA intake.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "mixed_format_intake_fixture"
+        ],
+        "blocked_claims": [
+          "customer_ready_fisma_export"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fisma.policy-txt",
+      "relative_path": "profiles/fisma-agency-security/mixed-format/policy-excerpt.txt",
+      "sha256": "a39be0fd31f2dc1d10e3517741a0496415e8790831df43a31f168bcffb0bc2aa",
+      "size_bytes": 122,
+      "profile_id": "fisma_agency_security",
+      "split": "qualification",
+      "purpose": "Plain-text policy excerpt for mixed-format agency FISMA intake.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "mixed_format_intake_fixture"
+        ],
+        "blocked_claims": [
+          "customer_ready_fisma_export"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fedramp20x.sealed-draft",
+      "relative_path": "profiles/fedramp-20x-class-c/sealed-draft.json",
+      "sha256": "cebb2451fbb24181ef63fbd8d6d2b8b515bfdde29ff18df081967054bba356d6",
+      "size_bytes": 3508,
+      "profile_id": "fedramp_20x_program",
+      "split": "qualification",
+      "purpose": "Minimal sealed draft for FedRAMP 20x Class C deterministic E2E.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "deterministic_e2e_fixture_present"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fedramp20x.analysis-profile",
+      "relative_path": "profiles/fedramp-20x-class-c/analysis-profile.minimal.json",
+      "sha256": "706f2051432abd6a08547556a33965a2279907faec3be4b7a048d050a09421a7",
+      "size_bytes": 1914,
+      "profile_id": "fedramp_20x_program",
+      "split": "qualification",
+      "purpose": "Draft analysis profile for FedRAMP 20x Class C deterministic E2E.",
+      "expected_behavior": "deterministic_only",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "analysis_profile_schema_valid"
+        ],
+        "blocked_claims": [
+          "official_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fedramp20x.cpo-synthetic",
+      "relative_path": "profiles/fedramp-20x-class-c/cpo-synthetic.json",
+      "sha256": "2a4798df3c6d47e19f017520f793536028183a28b3bc18521399bcf514246678",
+      "size_bytes": 492,
+      "profile_id": "fedramp_20x_program",
+      "split": "qualification",
+      "purpose": "Synthetic CPO-shaped fixture for structural validation only.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "synthetic_official_schema_fixture"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fedramp20x.sdr-synthetic",
+      "relative_path": "profiles/fedramp-20x-class-c/sdr-synthetic.json",
+      "sha256": "625519fb04a6d1e004937b1b25127cea3f91df1aa553684012973ca8628a4ef2",
+      "size_bytes": 357,
+      "profile_id": "fedramp_20x_program",
+      "split": "qualification",
+      "purpose": "Synthetic SDR-shaped fixture for structural validation only.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "synthetic_official_schema_fixture"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "fedramp20x.ocr-synthetic",
+      "relative_path": "profiles/fedramp-20x-class-c/ocr-synthetic.json",
+      "sha256": "f81fa60157d381badfbe27a371e3215588647611619d73bf97120cb30694adc4",
+      "size_bytes": 280,
+      "profile_id": "fedramp_20x_program",
+      "split": "qualification",
+      "purpose": "Synthetic OCR-shaped fixture for structural validation only.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "synthetic_official_schema_fixture"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "rev5.sealed-draft",
+      "relative_path": "profiles/fedramp-rev5-transition/sealed-draft.json",
+      "sha256": "e52d4f451ca64e2bf88f9f2ec2e241f68348a60d0ad8ac29d32d1694e8afa6f2",
+      "size_bytes": 1809,
+      "profile_id": "fedramp_rev5_transition",
+      "split": "qualification",
+      "purpose": "Minimal sealed draft for FedRAMP Rev.5 transition deterministic E2E.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "deterministic_e2e_fixture_present"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "rev5.analysis-profile",
+      "relative_path": "profiles/fedramp-rev5-transition/analysis-profile.minimal.json",
+      "sha256": "03b22a5350ac56ccc2924fe52320f8d847d68a37a4668eeff5204f5064dd1bbd",
+      "size_bytes": 1903,
+      "profile_id": "fedramp_rev5_transition",
+      "split": "qualification",
+      "purpose": "Draft analysis profile for FedRAMP Rev.5 transition deterministic E2E.",
+      "expected_behavior": "deterministic_only",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "analysis_profile_schema_valid"
+        ],
+        "blocked_claims": [
+          "official_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "rev5.ssp-import",
+      "relative_path": "profiles/fedramp-rev5-transition/ssp-import-excerpt.json",
+      "sha256": "5fdabb9f951237ef190c150911cdf59205b01bb0ee16b8f7a9e274d6bc02c0ac",
+      "size_bytes": 332,
+      "profile_id": "fedramp_rev5_transition",
+      "split": "qualification",
+      "purpose": "Imported SSP excerpt for transition gap analysis fixtures.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "transition_import_fixture"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "rev5.oscal-component",
+      "relative_path": "profiles/fedramp-rev5-transition/oscal-component-minimal.json",
+      "sha256": "5fef60f811f09dbca54a83c3a49713487041f0886279079e0703431943ed8012",
+      "size_bytes": 562,
+      "profile_id": "fedramp_rev5_transition",
+      "split": "qualification",
+      "purpose": "Minimal OSCAL-shaped component for transition structural validation.",
+      "expected_behavior": "schema_valid",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "transition_import_fixture"
+        ],
+        "blocked_claims": [
+          "official_schema_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "assessor.sar-excerpt",
+      "relative_path": "assessor-import/sar-excerpt.json",
+      "sha256": "b67d5263188efaa0916e720940580ae537b9f55d43c3bca2713eaf960e8ff77b",
+      "size_bytes": 275,
+      "profile_id": null,
+      "split": "qualification",
+      "purpose": "Synthetic assessor SAR excerpt for import-only tests.",
+      "expected_behavior": "import_only_assessor",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "assessor_import_fixture"
+        ],
+        "blocked_claims": [
+          "assessor_conclusion_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "assessor.independent-assessment",
+      "relative_path": "assessor-import/independent-assessment.json",
+      "sha256": "1c78edeadcd953d575eefe3398617a6977a3d3d6aa95555a8c2078074d1112d2",
+      "size_bytes": 326,
+      "profile_id": "fedramp_20x_program",
+      "split": "qualification",
+      "purpose": "Synthetic independent assessment import for Class C readiness fixtures.",
+      "expected_behavior": "import_only_assessor",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "assessor_import_fixture"
+        ],
+        "blocked_claims": [
+          "complete_class_c_readiness_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "hostile.nessus-xxe",
+      "relative_path": "hostile-inputs/nessus-xxe.xml",
+      "sha256": "dd98335e0adf266a5ea1b1b3e1a64398d62a841f89300a2648d069900bad5430",
+      "size_bytes": 283,
+      "profile_id": null,
+      "split": "hostile",
+      "purpose": "XXE attempt in scanner export XML for parser regression.",
+      "expected_behavior": "reject_xxe",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "hostile_parser_regression"
+        ],
+        "blocked_claims": [
+          "production_scanner_operational_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "hostile.prompt-injection",
+      "relative_path": "hostile-inputs/prompt-injection-fixtures.json",
+      "sha256": "2d369522e0c1f101936215780e27159978e3a061f9bf469962a6ec4017cee00c",
+      "size_bytes": 253,
+      "profile_id": null,
+      "split": "hostile",
+      "purpose": "Prompt injection cases for refusal regression.",
+      "expected_behavior": "refuse_injection",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "refusal_regression_fixture"
+        ],
+        "blocked_claims": [
+          "ai_qualification_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "hostile.malformed-json",
+      "relative_path": "hostile-inputs/malformed-json.txt",
+      "sha256": "81d05b3caa8b9f9e777e51fe82b81fd060219a3e69e03304a3bad7ddc9060eeb",
+      "size_bytes": 63,
+      "profile_id": null,
+      "split": "hostile",
+      "purpose": "Malformed JSON text for intake rejection regression.",
+      "expected_behavior": "parse_reject",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "hostile_parser_regression"
+        ],
+        "blocked_claims": [
+          "production_customer_extraction_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "scenario.duplicate-artifact",
+      "relative_path": "scenarios/duplicate-artifact-descriptor.json",
+      "sha256": "387045d0e223e891fe06d9c0d8a12fd26666280c3827cf43a6f760733973141a",
+      "size_bytes": 607,
+      "profile_id": null,
+      "split": "scenario",
+      "purpose": "Duplicate artifact digest scenario descriptor.",
+      "expected_behavior": "duplicate_detected",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "duplicate_detection_scenario"
+        ],
+        "blocked_claims": [
+          "release_complete_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "scenario.idempotency-replay",
+      "relative_path": "scenarios/idempotency-replay-descriptor.json",
+      "sha256": "d565c059d2b6175aae21d87f4e313d7ca45684cc8b0963653d3d16a9c660f62c",
+      "size_bytes": 354,
+      "profile_id": null,
+      "split": "scenario",
+      "purpose": "Idempotency replay scenario descriptor.",
+      "expected_behavior": "idempotent_replay",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "idempotency_replay_scenario"
+        ],
+        "blocked_claims": [
+          "release_complete_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "scenario.job-lease-recovery",
+      "relative_path": "scenarios/job-lease-recovery-descriptor.json",
+      "sha256": "cd6ee1bd3e13b39769eeaecf56115f4a1f00ba10e4ced32effa1f07ccd9383f1",
+      "size_bytes": 333,
+      "profile_id": null,
+      "split": "scenario",
+      "purpose": "Expired job lease recovery scenario descriptor.",
+      "expected_behavior": "lease_recovery",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "lease_recovery_scenario"
+        ],
+        "blocked_claims": [
+          "release_complete_claim"
+        ]
+      }
+    },
+    {
+      "fixture_id": "scenario.worker-crash",
+      "relative_path": "scenarios/worker-crash-descriptor.json",
+      "sha256": "2c3638636f064a40adba2cc1f5b6513a62fc85c81a176ac2194715ebeda9e180",
+      "size_bytes": 333,
+      "profile_id": null,
+      "split": "scenario",
+      "purpose": "Worker crash mid-step recovery scenario descriptor.",
+      "expected_behavior": "crash_safe_resume",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": [
+          "crash_recovery_scenario"
+        ],
+        "blocked_claims": [
+          "release_complete_claim"
+        ]
+      }
+    }
+  ]
+}

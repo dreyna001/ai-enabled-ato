@@ -1,0 +1,18 @@
+{
+  "fixture_notice": "Minimal OSCAL-shaped component for transition qualification only. Not official OSCAL catalog content.",
+  "component-definition": {
+    "uuid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "metadata": {
+      "title": "Fixture component definition",
+      "version": "qualification-1.0.0"
+    },
+    "components": [
+      {
+        "uuid": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "type": "software",
+        "title": "Fixture application",
+        "description": "Synthetic component for structural validation."
+      }
+    ]
+  }
+}

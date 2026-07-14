@@ -53,6 +53,7 @@ def test_verify_migrations_dry_run_reports_head() -> None:
 
 def test_qualification_check_reports_fixture_presence() -> None:
     assert main(["qualification-check"]) == 0
+    assert main(["qualification-check", "--json"]) == 0
 
 
 def test_onprem_example_loads_with_process_capabilities(

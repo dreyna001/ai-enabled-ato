@@ -1,0 +1,3 @@
+control_id,implementation_status,summary
+AC-1,implemented,Access control policy reviewed annually
+AC-2,partial,Group-based RBAC with quarterly review

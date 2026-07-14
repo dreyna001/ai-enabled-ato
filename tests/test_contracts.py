@@ -37,6 +37,7 @@ INTERNAL_SCHEMA_PATHS = tuple(sorted(CONTRACTS_DIR.glob("*.schema.json")))
 JSON_SOURCE_DIRS = (
     CONTRACTS_DIR,
     ROOT / "data" / "fixtures",
+    ROOT / "data" / "qualification",
     ROOT / "reference" / "authorities",
 )
 FIXTURE_SCHEMA_PATHS = {
@@ -55,6 +56,7 @@ FIXTURE_SCHEMA_PATHS = {
         "normalize-proposal-fact-bundle",
         "fisma-template-pack",
         "sufficiency-matrix-response",
+        "qualification-manifest",
     )
 }
 FIXTURE_NAME = re.compile(
@@ -393,6 +395,37 @@ def test_authority_manifest_validates_and_matches_local_bytes() -> None:
         assert hashlib.sha256(content).hexdigest() == source["sha256"], (
             f"{source['authority_id']} sha256 does not match {local_path}"
         )
+
+
+def test_qualification_manifest_validates_and_matches_local_bytes() -> None:
+    manifest_path = ROOT / "data" / "qualification" / "manifest.json"
+    manifest = _load_json(manifest_path)
+    _validator_for(CONTRACTS_DIR / "qualification-manifest.schema.json").validate(manifest)
+
+    fixture_ids = [fixture["fixture_id"] for fixture in manifest["fixtures"]]
+    assert len(fixture_ids) == len(set(fixture_ids)), "duplicate fixture_id"
+    relative_paths = [fixture["relative_path"] for fixture in manifest["fixtures"]]
+    assert len(relative_paths) == len(set(relative_paths)), "duplicate relative_path"
+
+    corpus_dir = (ROOT / manifest["corpus_root"]).resolve()
+    for fixture in manifest["fixtures"]:
+        relative_path = fixture["relative_path"]
+        fixture_path = (corpus_dir / relative_path).resolve()
+        try:
+            fixture_path.relative_to(corpus_dir)
+        except ValueError as error:
+            raise AssertionError(
+                f"{fixture['fixture_id']} relative_path escapes corpus_root"
+            ) from error
+        assert fixture_path.is_file(), f"missing qualification fixture: {relative_path}"
+        content = fixture_path.read_bytes()
+        assert len(content) == fixture["size_bytes"], (
+            f"{fixture['fixture_id']} size_bytes does not match {relative_path}"
+        )
+        assert hashlib.sha256(content).hexdigest() == fixture["sha256"], (
+            f"{fixture['fixture_id']} sha256 does not match {relative_path}"
+        )
+        assert fixture["claim_metadata"]["closes_hard_stops"] is False
 
 
 def test_contract_fixtures_follow_contracts() -> None:

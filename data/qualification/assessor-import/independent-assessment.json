@@ -1,0 +1,13 @@
+{
+  "summary": "Synthetic independent assessment import for qualification only.",
+  "assessor_org": "Fixture Assessor Org",
+  "import_only": true,
+  "findings": [
+    {
+      "id": "ia-1",
+      "control_id": "IA-5",
+      "status": "satisfied",
+      "statement": "Authenticator management reviewed by assessor."
+    }
+  ]
+}

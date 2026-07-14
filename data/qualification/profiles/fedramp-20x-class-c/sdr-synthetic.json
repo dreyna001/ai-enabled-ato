@@ -1,0 +1,10 @@
+{
+  "fixture_notice": "Synthetic SDR-shaped fixture for qualification only. Not official FedRAMP authority content.",
+  "certificationPackageOverviewUri": "https://example.test/fixture/cpo.json",
+  "fedRampRequirements": [
+    {
+      "requirementId": "FR-QUAL-1",
+      "summary": "Fixture requirement for deterministic structural validation."
+    }
+  ]
+}

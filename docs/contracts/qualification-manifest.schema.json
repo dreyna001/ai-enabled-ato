@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/qualification-manifest.schema.json",
+  "title": "ATO Qualification Corpus Manifest",
+  "$comment": "Semantic validation MUST recompute every fixture SHA-256 and size_bytes, enforce unique fixture_id and relative_path values, verify paths remain under corpus_root, require all three profile_id values in qualification split fixtures, and require hostile plus replay/lease/crash scenario coverage. Manifest status draft and claim_metadata.closes_hard_stops=false do not close hard stops.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "status",
+    "created_at",
+    "corpus_root",
+    "hard_stop_notice",
+    "hard_stops_governed",
+    "fixtures"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "status": {
+      "const": "draft"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "corpus_root": {
+      "const": "data/qualification"
+    },
+    "hard_stop_notice": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "hard_stops_governed": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^HS-[0-9]{3}$"
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/fixture"
+      }
+    }
+  },
+  "$defs": {
+    "profileId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "fedramp_20x_program",
+        "fedramp_rev5_transition",
+        "fisma_agency_security",
+        null
+      ]
+    },
+    "split": {
+      "enum": [
+        "development",
+        "qualification",
+        "hostile",
+        "scenario"
+      ]
+    },
+    "expectedBehavior": {
+      "enum": [
+        "schema_valid",
+        "parse_reject",
+        "refuse_injection",
+        "reject_xxe",
+        "idempotent_replay",
+        "lease_recovery",
+        "duplicate_detected",
+        "crash_safe_resume",
+        "deterministic_only",
+        "import_only_assessor"
+      ]
+    },
+    "claimMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "closes_hard_stops",
+        "allowed_claims"
+      ],
+      "properties": {
+        "closes_hard_stops": {
+          "const": false
+        },
+        "allowed_claims": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "blocked_claims": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "relative_path",
+        "sha256",
+        "size_bytes",
+        "profile_id",
+        "split",
+        "purpose",
+        "expected_behavior",
+        "claim_metadata"
+      ],
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "relative_path": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9._-]*/)*[a-z0-9][a-z0-9._-]*\\.[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "maxLength": 512
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "profile_id": {
+          "$ref": "#/$defs/profileId"
+        },
+        "split": {
+          "$ref": "#/$defs/split"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "expected_behavior": {
+          "$ref": "#/$defs/expectedBehavior"
+        },
+        "claim_metadata": {
+          "$ref": "#/$defs/claimMetadata"
+        }
+      }
+    }
+  }
+}

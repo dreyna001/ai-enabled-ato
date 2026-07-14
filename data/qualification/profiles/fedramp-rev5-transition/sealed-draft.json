@@ -1,0 +1,76 @@
+{
+  "package": {
+    "profile_id": "fedramp_rev5_transition",
+    "title": "FedRAMP Rev.5 transition fixture",
+    "prepared_for": "Fixture Customer",
+    "reporting_period": "2026-Q1"
+  },
+  "system": {
+    "display_name": "Fixture Legacy System",
+    "authorization_boundary": "Imported Rev.5 package boundary.",
+    "mission_summary": "Transition analysis fixture.",
+    "impact_level": "moderate",
+    "authorization_path": "fedramp"
+  },
+  "contacts": {
+    "system_owner": [],
+    "isso": [],
+    "issm": [],
+    "control_owners": [],
+    "assessors": [],
+    "approvers": []
+  },
+  "control_set": {
+    "source": {},
+    "tailoring": [],
+    "organization_defined_parameters": {},
+    "inheritance": []
+  },
+  "security_controls": {
+    "AC-2": {
+      "implementation_status": "implemented",
+      "implementation_statement": "Imported control statement.",
+      "responsible_parties": [],
+      "evidence_links": []
+    }
+  },
+  "evidence": {},
+  "findings": {},
+  "poam_candidates": {},
+  "assessor_inputs": {
+    "sar-import": {
+      "owner": "assessor",
+      "import_only": true,
+      "summary": "Imported SAR fixture."
+    }
+  },
+  "privacy": {
+    "artifacts_present": true,
+    "scope_notice": "External privacy review required."
+  },
+  "fedramp_20x": null,
+  "fedramp_rev5_transition": {
+    "ssp": {
+      "system_name": "Fixture Legacy System",
+      "imported_from": "customer-ssp.json"
+    },
+    "sap": {
+      "assessment_plan_id": "SAP-FIXTURE-001"
+    },
+    "sar": {
+      "owner": "assessor",
+      "import_only": true,
+      "summary": "Assessor-owned SAR import fixture."
+    },
+    "poam": {
+      "weakness_count": 1,
+      "items": []
+    },
+    "oscal": {
+      "document_type": "ssp",
+      "imported": true
+    }
+  },
+  "fisma_agency_security": null,
+  "extensions": {}
+}

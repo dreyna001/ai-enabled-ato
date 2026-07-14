@@ -1,0 +1,10 @@
+{
+  "scenario": "job_lease_recovery",
+  "description": "Expired worker lease transitions job to reconciliation_required without duplicate durable outputs.",
+  "job": {
+    "status_before": "leased",
+    "lease_expires_at": "2026-07-10T20:00:00Z",
+    "last_error_code": "job_lease_lost"
+  },
+  "expected_outcome": "lease_recovery"
+}

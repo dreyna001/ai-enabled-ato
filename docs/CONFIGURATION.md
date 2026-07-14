@@ -271,7 +271,7 @@ Workstream A ships a bounded operator CLI (`pyproject.toml` entrypoint `ato-oper
 | `verify-audit` | Ordered HMAC audit chain verification with root/checkpoint summary when PostgreSQL is reachable |
 | `expire-approvals` | Transition `pending_approval` and unexported `approved` drafts past `APPROVAL_EXPIRY_DAYS` to `expired` |
 | `rebuild-search-index` | Rebuild PostgreSQL full-text search chunks and GIN index metadata for one ready package revision |
-| `qualification-check` | Qualification fixture presence only (does not close HS-001..009) |
+| `qualification-check` | Qualification corpus manifest schema, digest, path-safety, and coverage validation (does not close HS-001..009) |
 | `print-checklist` | Operator onboarding checklist including open hard stops |
 
 Example:

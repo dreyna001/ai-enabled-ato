@@ -1,0 +1,11 @@
+{
+  "fixture_notice": "Synthetic SSP import excerpt for Rev.5 transition qualification only.",
+  "system_name": "Fixture Legacy System",
+  "impact_level": "moderate",
+  "controls": {
+    "AC-2": {
+      "implementation_status": "implemented",
+      "statement": "Imported control statement for transition gap analysis."
+    }
+  }
+}
