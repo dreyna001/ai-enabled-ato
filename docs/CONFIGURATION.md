@@ -262,6 +262,11 @@ Workstream A ships a bounded operator CLI (`pyproject.toml` entrypoint `ato-oper
 | `rebuild-search-index` | Rebuild PostgreSQL full-text search chunks and GIN index metadata for one ready package revision |
 | `qualification-check` | Qualification fixture presence only (does not close HS-001..009) |
 | `print-checklist` | Operator onboarding checklist including open hard stops |
+| `list-drills` | Published customer validation drill catalog |
+| `run-drill` | Execute one validation drill (default `dry_run`; optional `--write-record`) |
+| `list-drill-records` | List immutable drill records under `--records-root` |
+| `validate-drill-record` | Validate one drill record schema, digest binding, and redaction safety |
+| `write-drill-record` | Append one validated drill record with write-once semantics |
 
 Example:
 
@@ -269,9 +274,21 @@ Example:
 ato-operator validate-config --config /etc/ato-analyzer/runtime-config.json
 ato-operator preflight --config /etc/ato-analyzer/runtime-config.json
 ato-operator verify-migrations --config /etc/ato-analyzer/runtime-config.json --dry-run
+ato-operator list-drills --json
+ato-operator run-drill smoke-readiness --config /etc/ato-analyzer/runtime-config.json
+ato-operator run-drill model-routing-policy-block --config /etc/ato-analyzer/runtime-config.json --write-record --records-root /var/lib/ato/validation-drill-records
 ```
 
 Inactive `PROCESS_CAPABILITIES` entries are skipped during preflight. Active invalid dependencies fail fast with redacted errors.
+
+Validation drills default to `dry_run` and read-only probes. Live drills that require customer infrastructure preflight and skip explicitly when dependencies are unavailable; they never claim **HS-003**, **HS-005**, or **HS-008** closed from mocks. Destructive drills require `--isolated-target`. Immutable records are append-only JSON under an operator-supplied safe root (recommended: `/var/lib/ato/validation-drill-records`).
+
+Example drill record commands:
+
+```text
+ato-operator validate-drill-record /var/lib/ato/validation-drill-records/records/smoke-readiness/<record-id>.json
+ato-operator list-drill-records --config /etc/ato-analyzer/runtime-config.json --records-root /var/lib/ato/validation-drill-records --json
+```
 
 Focused tests: `tests/ato_operator/`.
 

@@ -120,7 +120,27 @@ Fails safely when `BACKUP_OFF_HOST_ENABLED=true` but customer target, key owners
 
 Complete the checklist items that apply to your scope; do not infer missing customer inputs.
 
-## 10. Airgap installations
+## 10. Customer validation drills
+
+After configuration and credentials are staged, run bounded validation drills and persist immutable records for customer evidence:
+
+```bash
+ato-operator list-drills --json
+ato-operator run-drill smoke-readiness --config /etc/ato-analyzer/runtime-config.json --write-record --records-root /var/lib/ato/validation-drill-records --operator-id operator@customer.local
+ato-operator run-drill model-routing-policy-block --config /etc/ato-analyzer/runtime-config.json --write-record --records-root /var/lib/ato/validation-drill-records
+```
+
+- Default mode is `dry_run`. Add `--live` only on the target host when dependencies are available.
+- Live identity, ClamAV, backup/restore, and worker crash drills skip or fail explicitly when infrastructure is missing; they do not close **HS-003**, **HS-005**, or **HS-008** from repository mocks.
+- Destructive drills require `--isolated-target` on an isolated host.
+
+Validate persisted records before submission:
+
+```bash
+ato-operator validate-drill-record /var/lib/ato/validation-drill-records/records/<drill_id>/<record_id>.json
+```
+
+## 11. Airgap installations
 
 See [`AIRGAP_PRESTAGE.md`](AIRGAP_PRESTAGE.md) for offline wheel staging and portal prebuild on a connected bastion.
 

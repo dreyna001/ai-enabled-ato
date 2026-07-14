@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "record_id": "b2c3d4e5-f6a7-4890-b123-456789abcdef",
+  "drill_id": "model-routing-policy-block",
+  "drill_version": "1.0.0",
+  "environment_type": "onprem_production",
+  "execution_mode": "dry_run",
+  "started_at_utc": "2026-07-14T16:05:00.000000Z",
+  "completed_at_utc": "2026-07-14T16:05:00.120000Z",
+  "application_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "config_digest": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "fixture_digest": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+  "operator_identifier": "security-reviewer@customer.local",
+  "approver_identifier": "approver@customer.local",
+  "outcome": "pass",
+  "hard_stop_claims": [
+    {
+      "hard_stop_id": "HS-004",
+      "claim_status": "still_open",
+      "detail": "Policy-block drill does not claim customer endpoint approval"
+    },
+    {
+      "hard_stop_id": "HS-003",
+      "claim_status": "not_claimed"
+    },
+    {
+      "hard_stop_id": "HS-005",
+      "claim_status": "not_claimed"
+    },
+    {
+      "hard_stop_id": "HS-008",
+      "claim_status": "not_claimed"
+    }
+  ],
+  "results": {
+    "summary": "Deterministic routing policy blocks classified and unapproved customer production calls",
+    "checks": [
+      {
+        "name": "classified_data_unsupported",
+        "status": "pass",
+        "detail": "classified sensitivity denied with zero-call policy"
+      },
+      {
+        "name": "customer_production_without_approval",
+        "status": "pass",
+        "detail": "endpoint_policy_approved=false denies customer_production"
+      }
+    ],
+    "detail": "No model transport invoked",
+    "exit_code": 0,
+    "preflight_status": "ready"
+  },
+  "record_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}

@@ -580,7 +580,12 @@
         "scripts/rollback.sh",
         "scripts/verify_backup_contract.sh",
         "scripts/prestage_airgap_deps.sh",
-        "scripts/smoke_service_chain.sh"
+        "scripts/smoke_service_chain.sh",
+        "docs/contracts/validation-drill-record.schema.json",
+        "src/ato_operator/drill_catalog.py",
+        "src/ato_operator/drill_handlers.py",
+        "src/ato_operator/drill_records.py",
+        "src/ato_operator/drills/dispatch.py"
       ],
       "test_ids": [
         "tests/test_deployment_contract.py::test_shell_scripts_pass_bash_syntax_check",
@@ -589,9 +594,11 @@
         "tests/test_deployment_contract.py::test_smoke_script_requires_ready_http_200_by_default",
         "tests/test_deployment_contract.py::test_operational_scripts_reference_bounded_flows",
         "tests/test_deployment_contract.py::test_nginx_templates_strip_identity_headers",
-        "tests/test_portal_contract.py::test_portal_nginx_proxies_api_and_serves_spa"
+        "tests/test_portal_contract.py::test_portal_nginx_proxies_api_and_serves_spa",
+        "tests/ato_operator/test_drill_dispatch.py::test_smoke_drill_dry_run_skips_live_probe",
+        "tests/ato_operator/test_drill_records.py::test_write_refuses_duplicate_record"
       ],
-      "verification_type": "Deployment scaffold with API, portal nginx, worker units, bounded upgrade/drain/rollback/backup-contract scripts, and deterministic asset contracts are implemented; live RHEL 9 install, upgrade, rollback, backup, restore, and smoke drills remain required",
+      "verification_type": "Deployment scaffold with API, portal nginx, worker units, bounded upgrade/drain/rollback/backup-contract scripts, deterministic asset contracts, and Phase 5 executable validation drill dispatchers with immutable append-only records are implemented; live RHEL 9 install, upgrade, rollback, backup, restore, and smoke drills on customer hosts remain required",
       "status": "partial"
     },
     {
@@ -612,6 +619,11 @@
         "src/ato_operator/preflight.py",
         "src/ato_operator/audit_verify.py",
         "src/ato_operator/checklist.py",
+        "src/ato_operator/drill_catalog.py",
+        "src/ato_operator/drill_handlers.py",
+        "src/ato_operator/drill_records.py",
+        "src/ato_operator/drills/dispatch.py",
+        "docs/contracts/validation-drill-record.schema.json",
         "deployment/config/runtime-config.onprem.example.json",
         "docs/CONFIGURATION.md",
         "docs/OPERATIONS_AND_RECOVERY.md",
@@ -653,9 +665,12 @@
         "tests/test_deployment_contract.py::test_pyproject_declares_approved_extraction_dependencies",
         "tests/test_deployment_contract.py::test_intake_worker_systemd_unit_wires_consumed_credentials_only",
         "tests/test_deployment_contract.py::test_analyzer_worker_systemd_unit_is_hardened_and_inactive_by_default",
-        "tests/test_portal_contract.py::test_intake_worker_systemd_unit_runs_long_lived_process"
+        "tests/test_portal_contract.py::test_intake_worker_systemd_unit_runs_long_lived_process",
+        "tests/ato_operator/test_drill_cli.py::test_run_drill_dry_run_model_routing",
+        "tests/ato_operator/test_drill_records.py::test_redact_drill_value_strips_bearer_tokens",
+        "tests/ato_operator/test_drill_dispatch.py::test_hard_stop_claims_never_close_hs003_in_dry_run"
       ],
-      "verification_type": "Runtime JSON capabilities, ato-operator preflight, production API/portal nginx/intake/analyzer assets, bounded operational scripts, and dev_local worker paths are contract-tested; live-host drills and customer hard-stop evidence remain partial",
+      "verification_type": "Runtime JSON capabilities, ato-operator preflight, production API/portal nginx/intake/analyzer assets, bounded operational scripts, dev_local worker paths, and Phase 5 validation drill record contract are contract-tested; live-host drills and customer hard-stop evidence remain partial",
       "status": "partial"
     },
     {
