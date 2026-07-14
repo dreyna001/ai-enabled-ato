@@ -83,7 +83,10 @@ def _contracts_dir(*, project_root: Path) -> Path:
 
 @cache
 def _drill_record_validator(*, project_root: Path) -> Draft202012Validator:
-    schema_path = _contracts_dir(project_root=project_root) / "validation-drill-record.schema.json"
+    schema_path = (
+        _contracts_dir(project_root=project_root)
+        / "validation-drill-record.schema.json"
+    )
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema, format_checker=FormatChecker())
@@ -173,7 +176,9 @@ def validate_drill_record_semantics(
     if not isinstance(actual, str) or actual != expected:
         raise DrillRecordError("record_digest does not match canonical document bytes")
     if contains_sensitive_material(document.get("results")):
-        raise DrillRecordError("results contain sensitive material that must be redacted")
+        raise DrillRecordError(
+            "results contain sensitive material that must be redacted"
+        )
 
 
 def _validate_path_part(part: str) -> str:
@@ -231,11 +236,14 @@ def _staging_path(records_root: Path) -> Path:
 
 
 def _fsync_directory(path: Path) -> None:
-    directory_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    """Persist a renamed directory entry on the Linux production target."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
     try:
-        os.fsync(directory_fd)
+        os.fsync(descriptor)
     finally:
-        os.close(directory_fd)
+        os.close(descriptor)
 
 
 def write_drill_record(

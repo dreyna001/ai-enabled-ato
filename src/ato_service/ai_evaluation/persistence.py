@@ -176,7 +176,10 @@ def _cleanup_staging_path(records_root: Path, temp_path: Path | None) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    """Persist a renamed directory entry on the Linux production target."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
     try:
         os.fsync(descriptor)
     finally:
