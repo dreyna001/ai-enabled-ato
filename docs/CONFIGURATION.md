@@ -1,10 +1,11 @@
 # Runtime Configuration
 
-**Status:** API scaffold plus bounded development synthetic-intake documentation  
-**Applies to:** Current `ato_service` API and `dev_local` synthetic-intake processes; not a production release claim  
-**Normative contract:** [`docs/contracts/runtime-config.schema.json`](contracts/runtime-config.schema.json)
+**Status:** Delivered portal/API/worker/operator configuration contract (Phase 6 reconciled)  
+**Applies to:** `ato_service` API, `ato-intake-worker`, `ato-analyzer-worker`, React portal, and `ato-operator` on `dev_local` and `onprem_production` profiles  
+**Normative contract:** [`docs/contracts/runtime-config.schema.json`](contracts/runtime-config.schema.json)  
+**Release evidence:** [`RELEASE_EVIDENCE_INDEX.md`](RELEASE_EVIDENCE_INDEX.md)
 
-This document explains how non-secret settings and secret references are loaded today. It does not claim RHEL validation, portal/worker deployment, auth implementation, production/customer extraction, model hosting, backup automation, or full P7 completion.
+This document explains how non-secret settings and secret references are loaded. It does not claim live RHEL validation, customer IdP verification (**HS-003**), production malware scanning (**HS-005**), real customer model calls (**HS-004**), or full P7 release completion.
 
 ## Canonical paths
 
@@ -77,7 +78,7 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | `BACKUP_TARGET_DECLARATION` | **Backup destination contract** | Required when `BACKUP_OFF_HOST_ENABLED=true`. Declares protocol, host, port, and export path; does not perform backup I/O. |
 | `BACKUP_*`, `AUDIT_*` backup fields | **Recovery contract** | Declarations document intended recovery posture; they do not enable backup jobs, WAL archiving, or restore automation in this slice. |
 
-Text-model endpoints are required for `onprem_production` schema validity but full model-call pipelines remain out of scope for this API-only slice.
+Text-model endpoints are required for `onprem_production` schema validity. Model-assisted analysis, package chat, and routing policy are implemented with deterministic tests; real customer model calls remain blocked by **HS-004** until customer policy is verified.
 
 ## Secrets
 
@@ -305,6 +306,6 @@ Focused tests: `tests/ato_operator/`.
 
 ## Related docs
 
-- [`deployment/README.md`](../deployment/README.md) — API-only install assets and operator flow
+- [`deployment/README.md`](../deployment/README.md) — portal/API/worker install assets and operator flow
 - [`docs/OPERATIONS_AND_RECOVERY.md`](OPERATIONS_AND_RECOVERY.md) — full P-1 operations target
 - [`README.md`](../README.md) — repository entry and current implementation scope

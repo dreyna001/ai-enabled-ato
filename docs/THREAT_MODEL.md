@@ -1,8 +1,9 @@
 # ATO Evidence Analysis Portal Threat Model
 
-**Status:** P-1 security contract  
+**Status:** P-1 security contract synchronized with delivered portal/API/worker controls (Phase 6)  
 **Applies to:** One single-customer on-prem installation  
-**Normative product contract:** [`../ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md)
+**Normative product contract:** [`../ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md)  
+**Implemented controls (code-tested):** Authlib OIDC JWT validation, package-scoped RBAC, CSRF/origin mutation gate, model routing before calls, extraction safety limits, bounded package chat refusal, audit HMAC chain verification, validation-drill record redaction. Live customer IdP, scanner, and model-policy drills remain **customer-gated**.
 
 ## 1. Security objectives
 

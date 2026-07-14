@@ -1,8 +1,8 @@
 # Customer Onboarding Checklist
 
-**Status:** Phase 1 Workstream B operator checklist  
+**Status:** Delivered operator checklist (Phase 6)  
 **Applies to:** RHEL 9-compatible single-node `onprem_production` installations  
-**Normative sources:** [`ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md), [`OPERATIONS_AND_RECOVERY.md`](OPERATIONS_AND_RECOVERY.md), [`CONFIGURATION.md`](CONFIGURATION.md)
+**Normative sources:** [`ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md), [`OPERATIONS_AND_RECOVERY.md`](OPERATIONS_AND_RECOVERY.md), [`CONFIGURATION.md`](CONFIGURATION.md), [`RELEASE_EVIDENCE_INDEX.md`](RELEASE_EVIDENCE_INDEX.md)
 
 This checklist guides customer operators through safe staging of the implemented application, portal, systemd, and nginx assets. It does not claim production readiness while open hard stops remain.
 

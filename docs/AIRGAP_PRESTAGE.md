@@ -1,7 +1,8 @@
 # Airgap Dependency Prestaging
 
-**Status:** Phase 1 Workstream B operator guide  
-**Architecture:** JSON runtime settings + out-of-band credential files (no secret bytes in bundles)
+**Status:** Delivered operator guide (Phase 6)  
+**Architecture:** JSON runtime settings + out-of-band credential files (no secret bytes in bundles)  
+**Release evidence:** [`RELEASE_EVIDENCE_INDEX.md`](RELEASE_EVIDENCE_INDEX.md)
 
 Air-gapped hosts cannot reach public package indexes during install. Prestaging on a connected staging bastion preserves the same runtime contract used by connected installs.
 

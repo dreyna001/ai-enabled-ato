@@ -28,6 +28,12 @@ OPERATIONS_PATH = ROOT / "docs" / "OPERATIONS_AND_RECOVERY.md"
 CONTRACT_INDEX_PATH = ROOT / "docs" / "contracts" / "README.md"
 P1_GATE_PATH = ROOT / "docs" / "P1_GATE_RECORD.md"
 P0_GATE_PATH = ROOT / "docs" / "P0_GATE_RECORD.md"
+RELEASE_EVIDENCE_INDEX_PATH = ROOT / "docs" / "RELEASE_EVIDENCE_INDEX.md"
+P6_GATE_PATH = ROOT / "docs" / "P6_GATE_RECORD.md"
+MIGRATION_HEAD_REVISION = "20260717_0012"
+MIGRATION_HEAD_PATH = (
+    ROOT / "migrations" / "versions" / "20260717_0012_package_search_index.py"
+)
 RUNTIME_DEPLOYMENT_RULE_PATH = (
     ROOT / ".cursor" / "rules" / "ato-runtime-deployment-contract.mdc"
 )
@@ -646,20 +652,23 @@ def test_runtime_deployment_contract_is_persistent_across_active_plans() -> None
             "Every future phase must preserve the cross-cutting "
             "runtime/deployment contract",
             "not proof of RHEL validation or production release",
+            "RELEASE_EVIDENCE_INDEX.md",
+            MIGRATION_HEAD_REVISION,
         ),
         CONFIGURATION_PATH: (
             "Every new capability flag must be added with its schema",
             "Each future process receives only the credential mappings",
             "There is no `config.env`",
         ),
-        OPERATIONS_PATH: (
-            "This table is the target topology.",
-            "The current scaffold ships only `ato-api.service`",
-            "Completing upgrade, rollback, backup, restore",
-        ),
+            OPERATIONS_PATH: (
+                "This table is the target topology.",
+                "ato-intake-worker.service",
+                "environment-not-run",
+            ),
         CONTRACT_INDEX_PATH: (
             "Runtime/deployment values and behavior form one contract",
             "python -m pytest tests/test_deployment_contract.py",
+            "RELEASE_EVIDENCE_INDEX.md",
         ),
         TRACEABILITY_PATH: (
             '"requirement_id": "R-023"',
@@ -1375,3 +1384,73 @@ def test_p11_system_package_revision_api_contract() -> None:
     ]["content"]["multipart/form-data"]["schema"]["properties"]["artifact_kind"]
     assert "application/json" in upload_schema["description"]
     assert "text/plain" in upload_schema["description"]
+
+
+def test_phase6_documentation_reconciliation_contract() -> None:
+    assert RELEASE_EVIDENCE_INDEX_PATH.is_file(), "missing docs/RELEASE_EVIDENCE_INDEX.md"
+    assert P6_GATE_PATH.is_file(), "missing docs/P6_GATE_RECORD.md"
+    assert MIGRATION_HEAD_PATH.is_file(), "missing package search index migration"
+
+    release_index = RELEASE_EVIDENCE_INDEX_PATH.read_text(encoding="utf-8")
+    readme = README_PATH.read_text(encoding="utf-8")
+    configuration = CONFIGURATION_PATH.read_text(encoding="utf-8")
+    technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
+    epics = EPICS_PATH.read_text(encoding="utf-8")
+
+    for fragment in (
+        MIGRATION_HEAD_REVISION,
+        "tests/test_contracts.py",
+        "integration-postgres",
+        "environment-not-run",
+        "customer-gated",
+        "HS-006",
+        "P6_GATE_RECORD.md",
+        "P7_GATE_RECORD.md",
+    ):
+        assert fragment in release_index, f"release evidence index missing: {fragment}"
+
+    forbidden_readme_claims = (
+        "Not implemented yet: analyzer worker",
+        "portal UI, OIDC/session runtime",
+        "proposals/runs API",
+        "Deployment scaffold (API only)",
+    )
+    for claim in forbidden_readme_claims:
+        assert claim not in readme, f"README still contains stale claim: {claim}"
+
+    required_readme_fragments = (
+        "ato-intake-worker",
+        "ato-analyzer-worker",
+        "RELEASE_EVIDENCE_INDEX.md",
+        MIGRATION_HEAD_REVISION,
+        "package search",
+    )
+    for fragment in required_readme_fragments:
+        assert fragment in readme, f"README missing delivered-state fragment: {fragment}"
+
+    assert MIGRATION_HEAD_REVISION in technical_spec
+    assert "RELEASE_EVIDENCE_INDEX.md" in technical_spec
+    assert "RELEASE_EVIDENCE_INDEX.md" in epics
+    assert "Phase 6 reconciled" in epics or "Phase 6" in epics
+
+    assert "API-only slice" not in configuration
+    assert "portal/API/worker" in configuration or "portal/API/worker/operator" in configuration
+
+    gate_records = (
+        ROOT / "docs" / "P2_GATE_RECORD.md",
+        ROOT / "docs" / "P3_GATE_RECORD.md",
+        ROOT / "docs" / "P4_GATE_RECORD.md",
+        ROOT / "docs" / "P5_GATE_RECORD.md",
+        ROOT / "docs" / "P6_ANALYSIS_GATE_RECORD.md",
+        ROOT / "docs" / "P7_GATE_RECORD.md",
+    )
+    for gate_path in gate_records:
+        assert gate_path.is_file(), f"missing gate record: {gate_path.relative_to(ROOT)}"
+        gate_text = gate_path.read_text(encoding="utf-8")
+        assert "customer-gated" in gate_text or "environment-not-run" in gate_text or "blocked" in gate_text, (
+            f"{gate_path.name} must distinguish code-complete from live/customer evidence"
+        )
+
+    traceability = TRACEABILITY_PATH.read_text(encoding="utf-8")
+    assert "RELEASE_EVIDENCE_INDEX.md" in traceability
+    assert "test_phase6_documentation_reconciliation_contract" in traceability

@@ -1,7 +1,8 @@
 # ATO Evidence Analysis Portal Functionality and Epics
 
-**Status:** User-facing workflow and delivery map
-**Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)
+**Status:** User-facing workflow and delivery map (Phase 6 reconciled 2026-07-14)  
+**Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)  
+**Release evidence:** [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md)
 
 This document describes what users do and receive. It does not override technical schemas, state transitions, security rules, or release gates.
 
@@ -375,7 +376,9 @@ For each row, an authorized reviewer may:
 
 ## 13. Epic acceptance map
 
-### EP-00 - Contract freeze
+**Legend:** ✅ code-complete (deterministic tests) · 🟡 partial / environment-not-run · ⛔ blocked by hard stop
+
+### EP-00 - Contract freeze — ✅
 
 Done when:
 
@@ -383,7 +386,9 @@ Done when:
 - Official authority snapshots are pinned and hashed.
 - Internal schemas, OpenAPI, threat model, AI evaluation guide, operations/config contracts, traceability, and deployment-contract tests exist.
 
-### EP-01 - Core safety
+**Recorded:** [`docs/P1_GATE_RECORD.md`](docs/P1_GATE_RECORD.md), [`docs/P6_GATE_RECORD.md`](docs/P6_GATE_RECORD.md)
+
+### EP-01 - Core safety — 🟡 partial
 
 Done when:
 
@@ -392,9 +397,11 @@ Done when:
 - Matrix rows and citations are exact and stable.
 - Runs are immutable and crash-safe.
 - Invalid, blocked, quarantined, retryable, failed, cancelled, and succeeded outcomes are distinct.
-- Runtime JSON, secret references, explicit capability flags, semantic startup validation, and the API-only deployment scaffold satisfy their deterministic contract tests.
+- Runtime JSON, secret references, explicit capability flags, semantic startup validation, and deployment scaffold satisfy deterministic contract tests.
 
-### EP-02 - Package foundation
+**Delivered:** P0 gate helpers, model gateway/routing, matrix coverage, job lease recovery, deployment contracts. **Residual:** live quarantine production routes; portal XSS suite (**P0-008** planned).
+
+### EP-02 - Package foundation — 🟡 partial
 
 Done when:
 
@@ -404,52 +411,31 @@ Done when:
 - One FISMA synthetic package completes the full backend flow.
 - Worker units and worker credential/config projections are added only with the implemented worker runtime and its replay/readiness tests.
 
-### EP-03 - FedRAMP 20x Program
+**Delivered:** full API, draft editor, intake workers, workflow integration tests (CI optional). **Residual:** production customer extraction (**HS-005**).
 
-Done when:
+### EP-03 - FedRAMP 20x Program — 🟡 partial
 
-- A Class C synthetic package produces schema-valid CPO, SDR, and OCR drafts.
-- SCG, KSI, assessor-input, freshness, cadence, and package completeness rules are tested.
-- Missing operational obligations are blockers, not generated facts.
+**Delivered:** Class C generators, vendored schema validation, qualification fixtures. **Residual:** qualified authority review (**HS-001**), assessor inputs (**HS-009**). Gate: [`docs/P2_GATE_RECORD.md`](docs/P2_GATE_RECORD.md)
 
-### EP-04 - Secure intake
+### EP-04 - Secure intake — 🟡 partial
 
-Done when:
+**Delivered:** extraction library, hostile fixtures, intake work leases. **Residual:** production scanner (**HS-005**). Gate: [`docs/P3_GATE_RECORD.md`](docs/P3_GATE_RECORD.md)
 
-- Each supported format has positive and malicious fixtures.
-- Extraction runs without network or privilege.
-- Source hashes and locators survive normalization.
+### EP-05 - Draft artifacts — 🟡 partial
 
-### EP-05 - Draft artifacts
+**Delivered:** FedRAMP/FISMA generators, export assembly, assessor import boundaries. **Residual:** agency template parity (**HS-002**). Gate: [`docs/P4_GATE_RECORD.md`](docs/P4_GATE_RECORD.md)
 
-Done when:
+### EP-06 - Review portal — 🟡 partial
 
-- FedRAMP and FISMA paired outputs agree.
-- Official payloads contain no invalid product extensions.
-- Missing, assessor-owned, privacy, and POA&M fields follow their boundaries.
+**Delivered:** OIDC sessions, RBAC matrix, review/export API, React portal, Playwright asset contracts. **Residual:** live browser E2E on managed stack (environment-not-run); customer IdP (**HS-003**). Gate: [`docs/P5_GATE_RECORD.md`](docs/P5_GATE_RECORD.md)
 
-### EP-06 - Review portal
+### EP-07 - Advanced analysis — 🟡 partial / ⛔ qualification
 
-Done when:
+**Delivered:** search, chat, model-assisted analyzer unit paths, refusal/injection tests. **Blocked:** adjudicated AI qualification (**HS-006**). Gate: [`docs/P6_ANALYSIS_GATE_RECORD.md`](docs/P6_ANALYSIS_GATE_RECORD.md)
 
-- OIDC, package access, dispositions, comments, approval, export, audit, and all UI error states pass API and browser tests.
-- Self-approval, stale edits, replay, and unauthorized object access are denied.
-- Portal/static nginx routes and portal credentials are activated only with the implemented authenticated portal.
+### EP-08 - On-prem release — 🟡 partial
 
-### EP-07 - Advanced analysis
-
-Done when:
-
-- Delta, targeted analysis, KSI/OCR summaries, consistency analysis, and assistant contracts pass deterministic tests.
-- The adjudicated AI qualification gates pass.
-
-### EP-08 - On-prem release
-
-Done when:
-
-- Versioned config examples, systemd/nginx assets, installer actions, smoke checks, operator docs, and deployment-contract tests remain synchronized.
-- RHEL install, migration, start, smoke, upgrade, rollback, backup, restore, purge, incident, and audit-verification drills pass on the target host.
-- Security and operational readiness gates permit approved real customer data.
+**Delivered:** systemd/nginx/install scripts, operator docs, drill dispatchers, qualification manifest. **Residual:** live RHEL drills (environment-not-run); **HS-005**, **HS-008**. Gate: [`docs/P7_GATE_RECORD.md`](docs/P7_GATE_RECORD.md)
 
 ## 14. Delivery rule
 
