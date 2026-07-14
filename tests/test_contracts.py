@@ -55,6 +55,7 @@ FIXTURE_SCHEMA_PATHS = {
         "normalize-proposal-fact-bundle",
         "fisma-template-pack",
         "sufficiency-matrix-response",
+        "ai-evaluation-record",
     )
 }
 FIXTURE_NAME = re.compile(

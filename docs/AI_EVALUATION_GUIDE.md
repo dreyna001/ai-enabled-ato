@@ -374,7 +374,9 @@ If `E=1`, kappa is undefined and the evaluation is invalid. No metric may be sub
 
 ## 14. Immutable evaluation record
 
-Every live qualification attempt creates a new immutable record. A retry or rerun MUST use a new `evaluation_id`; no prior record is overwritten. The record MUST contain:
+Every live qualification attempt creates a new immutable record. A retry or rerun MUST use a new `evaluation_id`; no prior record is overwritten. The machine contract is `docs/contracts/ai-evaluation-record.schema.json`. Operator validation and append-only persistence are available through `ato-operator validate-evaluation-record` and `ato-operator write-evaluation-record`; they do not close **HS-006** or infer a passing outcome.
+
+The record MUST contain:
 
 ```text
 evaluation_id

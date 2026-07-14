@@ -1,0 +1,761 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/ai-evaluation-record.schema.json",
+  "title": "ATO Immutable AI Qualification Evaluation Record",
+  "$comment": "Semantic validation MUST verify digest fields, reject secret or customer payload fields, enforce HS-006 guardrails, and refuse append-only collisions. Protected evaluation artifacts MUST NOT appear in this record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evaluation_id",
+    "evaluation_schema_version",
+    "guide_version",
+    "guide_sha256",
+    "created_at_utc",
+    "started_at_utc",
+    "completed_at_utc",
+    "outcome",
+    "qualification_scope",
+    "candidate",
+    "dataset",
+    "adjudicators",
+    "execution",
+    "results",
+    "blockers",
+    "hard_stop_status"
+  ],
+  "properties": {
+    "evaluation_id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "evaluation_schema_version": {
+      "const": "1.0.0"
+    },
+    "guide_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "guide_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "created_at_utc": {
+      "$ref": "#/$defs/utcDateTime"
+    },
+    "started_at_utc": {
+      "$ref": "#/$defs/utcDateTime"
+    },
+    "completed_at_utc": {
+      "$ref": "#/$defs/utcDateTime"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "invalid"
+      ]
+    },
+    "qualification_scope": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/qualificationScopeEntry"
+      }
+    },
+    "candidate": {
+      "$ref": "#/$defs/candidate"
+    },
+    "dataset": {
+      "$ref": "#/$defs/dataset"
+    },
+    "adjudicators": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/adjudicator"
+      }
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    },
+    "results": {
+      "$ref": "#/$defs/results"
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/blocker"
+      }
+    },
+    "hard_stop_status": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/hardStopStatus"
+      }
+    }
+  },
+  "$defs": {
+    "uuidV4": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "utcDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "modelStep": {
+      "type": "string",
+      "enum": [
+        "sufficiency_matrix",
+        "normalize_proposal",
+        "prompt_injection_suite",
+        "package_chat"
+      ]
+    },
+    "adjudicatorRole": {
+      "type": "string",
+      "enum": [
+        "holdout_labeler",
+        "holdout_custodian",
+        "evaluation_operator"
+      ]
+    },
+    "hardStopId": {
+      "type": "string",
+      "pattern": "^HS-[0-9]{3}$"
+    },
+    "hardStopState": {
+      "type": "string",
+      "enum": [
+        "unresolved",
+        "resolved"
+      ]
+    },
+    "blockerSeverity": {
+      "type": "string",
+      "enum": [
+        "qualification_gate",
+        "integrity",
+        "execution",
+        "policy"
+      ]
+    },
+    "gateOutcome": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "invalid"
+      ]
+    },
+    "qualificationScopeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_version",
+        "model_step"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "profile_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "model_step": {
+          "$ref": "#/$defs/modelStep"
+        }
+      }
+    },
+    "schemaDigestEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id",
+        "sha256"
+      ],
+      "properties": {
+        "schema_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_or_code_revision",
+        "model_snapshot_id",
+        "model_snapshot_digest",
+        "endpoint_profile",
+        "endpoint_host",
+        "endpoint_behavior_fingerprint",
+        "model_requested",
+        "model_reported",
+        "prompt_bundle_sha256",
+        "output_schema_ids_and_sha256",
+        "authority_manifest_id",
+        "authority_manifest_sha256",
+        "context_selection_algorithm_id",
+        "context_selection_algorithm_sha256",
+        "status_policy_id",
+        "status_policy_sha256",
+        "configuration_fingerprint",
+        "temperature",
+        "input_limit",
+        "output_limit",
+        "timeout_seconds",
+        "retry_limit"
+      ],
+      "properties": {
+        "release_or_code_revision": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "model_snapshot_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model_snapshot_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "endpoint_profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "endpoint_host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
+        },
+        "endpoint_behavior_fingerprint": {
+          "$ref": "#/$defs/sha256"
+        },
+        "model_requested": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model_reported": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "prompt_bundle_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "output_schema_ids_and_sha256": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/schemaDigestEntry"
+          }
+        },
+        "authority_manifest_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+          "maxLength": 128
+        },
+        "authority_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "context_selection_algorithm_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "context_selection_algorithm_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "status_policy_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "status_policy_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "configuration_fingerprint": {
+          "$ref": "#/$defs/sha256"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "input_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "output_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "retry_limit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        }
+      }
+    },
+    "profileCountMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 16,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9._-]*$": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        }
+      }
+    },
+    "statusDistributionMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 16,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9._-]*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "supported",
+            "partial",
+            "unsupported",
+            "insufficient_evidence"
+          ],
+          "properties": {
+            "supported": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "partial": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "unsupported": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "insufficient_evidence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
+        }
+      }
+    },
+    "injectionDistributionMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 16,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9._-]*$": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "holdoutIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "split",
+        "holdout_manifest_id",
+        "holdout_manifest_sha256",
+        "development_split_excluded"
+      ],
+      "properties": {
+        "split": {
+          "const": "holdout"
+        },
+        "holdout_manifest_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "holdout_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "development_split_excluded": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "holdout_identity",
+        "holdout_manifest_sha256",
+        "corpus_digest_sha256",
+        "fixture_count",
+        "package_count_by_profile",
+        "assessment_item_count_by_profile",
+        "status_distribution_by_profile",
+        "injection_distribution_by_category",
+        "first_sme_labels_sha256",
+        "second_sme_labels_sha256",
+        "adjudication_manifest_sha256"
+      ],
+      "properties": {
+        "holdout_identity": {
+          "$ref": "#/$defs/holdoutIdentity"
+        },
+        "holdout_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "corpus_digest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fixture_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "package_count_by_profile": {
+          "$ref": "#/$defs/profileCountMap"
+        },
+        "assessment_item_count_by_profile": {
+          "$ref": "#/$defs/profileCountMap"
+        },
+        "status_distribution_by_profile": {
+          "$ref": "#/$defs/statusDistributionMap"
+        },
+        "injection_distribution_by_category": {
+          "$ref": "#/$defs/injectionDistributionMap"
+        },
+        "first_sme_labels_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "second_sme_labels_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "adjudication_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "adjudicator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adjudicator_id",
+        "role",
+        "qualification_ref"
+      ],
+      "properties": {
+        "adjudicator_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "role": {
+          "$ref": "#/$defs/adjudicatorRole"
+        },
+        "qualification_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        }
+      }
+    },
+    "caseAttemptMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "model_step",
+        "attempt_index",
+        "prompt_sha256",
+        "fact_bundle_sha256",
+        "response_sha256"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "model_step": {
+          "$ref": "#/$defs/modelStep"
+        },
+        "attempt_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "prompt_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fact_bundle_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "response_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluator_revision",
+        "evaluator_artifact_sha256",
+        "run_ids",
+        "per_case_attempt_metadata",
+        "request_manifest_sha256",
+        "response_manifest_sha256",
+        "failure_codes"
+      ],
+      "properties": {
+        "evaluator_revision": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "evaluator_artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "run_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuidV4"
+          }
+        },
+        "per_case_attempt_metadata": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/caseAttemptMetadata"
+          }
+        },
+        "request_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "response_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "failure_codes": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      }
+    },
+    "gateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "outcome",
+        "numerator",
+        "denominator",
+        "threshold"
+      ],
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "outcome": {
+          "$ref": "#/$defs/gateOutcome"
+        },
+        "numerator": {
+          "type": "number",
+          "minimum": 0
+        },
+        "denominator": {
+          "type": "number",
+          "minimum": 0
+        },
+        "threshold": {
+          "type": "number"
+        }
+      }
+    },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_metric_counts",
+        "metric_values",
+        "gate_results",
+        "critical_false_supported_case_ids",
+        "failed_case_ids",
+        "artifact_manifest_sha256"
+      ],
+      "properties": {
+        "raw_metric_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9._-]*$": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        },
+        "metric_values": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9._-]*$": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "gate_results": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/gateResult"
+          }
+        },
+        "critical_false_supported_case_ids": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        },
+        "failed_case_ids": {
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        },
+        "artifact_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blocker_id",
+        "severity",
+        "message"
+      ],
+      "properties": {
+        "blocker_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "severity": {
+          "$ref": "#/$defs/blockerSeverity"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "hardStopStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hard_stop_id",
+        "status",
+        "blockers"
+      ],
+      "properties": {
+        "hard_stop_id": {
+          "$ref": "#/$defs/hardStopId"
+        },
+        "status": {
+          "$ref": "#/$defs/hardStopState"
+        },
+        "blockers": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      }
+    }
+  }
+}

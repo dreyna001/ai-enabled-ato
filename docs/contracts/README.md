@@ -19,6 +19,7 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `normalize-proposal-fact-bundle.schema.json` | Canonical `FactBundle.prompt_payload` user prompt for `normalize_proposal` v1 | Published Component A Diff 4 contract |
 | `fisma-template-pack.schema.json` | Digest-verified agency FISMA template pack manifest inside customer archives | Published Phase 3 Workstream B contract |
 | `sufficiency-matrix-response.schema.json` | Closed structured output for `sufficiency_matrix` v1 | Published Phase 3 Workstream A contract |
+| `ai-evaluation-record.schema.json` | Immutable AI qualification evaluation record | Published Phase 5 contract |
 | `openapi.json` | OpenAPI 3.1 API surface and shared HTTP contracts | Published P-1 contract (`info.version` 1.0.0) |
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
@@ -57,7 +58,7 @@ Contract fixtures live in `docs/contracts/fixtures` and use
 `package-draft-document`, `extracted-segment`, `normalize-proposal-response`,
 `normalize-proposal-fact-bundle`, `sufficiency-matrix-response`, `analysis-profile`, `content-manifest`,
 `artifact-manifest`, `export-manifest`, `preflight`, `runtime-config`, and
-`fisma-template-pack`; each has at least one valid and one invalid fixture.
+`fisma-template-pack`, `ai-evaluation-record`; each has at least one valid and one invalid fixture.
 
 The suite parses repository contract, fixture, and vendored-reference JSON;
 validates each internal schema against its declared metaschema; verifies the

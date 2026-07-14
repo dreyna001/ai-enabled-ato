@@ -21,6 +21,10 @@ from ato_operator.approval_expiry import process_approval_expiry_sync
 from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
 from ato_operator.checklist import build_operator_checklist, format_checklist
+from ato_operator.evaluation_record import (
+    command_validate_evaluation_record,
+    command_write_evaluation_record,
+)
 from ato_operator.preflight import run_operator_preflight_sync
 from ato_operator.search_index import rebuild_package_search_index_sync
 from ato_service.db.dsn import require_database_dsn_from_env
@@ -291,6 +295,29 @@ def _command_rebuild_search_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_validate_evaluation_record(args: argparse.Namespace) -> int:
+    project_root = _find_project_root()
+    return command_validate_evaluation_record(
+        record_path=Path(args.record).resolve(),
+        project_root=project_root,
+        digest_root=Path(args.digest_root).resolve() if args.digest_root else None,
+        verify_digests=args.verify_digests,
+        emit_json=args.json,
+    )
+
+
+def _command_write_evaluation_record(args: argparse.Namespace) -> int:
+    project_root = _find_project_root()
+    return command_write_evaluation_record(
+        record_path=Path(args.record).resolve(),
+        records_root=Path(args.records_root).resolve(),
+        project_root=project_root,
+        digest_root=Path(args.digest_root).resolve() if args.digest_root else None,
+        verify_digests=args.verify_digests,
+        emit_json=args.json,
+    )
+
+
 def _command_print_checklist(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     items = build_operator_checklist(project_root=project_root)
@@ -374,6 +401,36 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Package revision UUID to rebuild",
     )
 
+    for name, help_text in (
+        (
+            "validate-evaluation-record",
+            "Validate one immutable AI qualification evaluation record JSON file",
+        ),
+        (
+            "write-evaluation-record",
+            "Validate and write one immutable AI qualification evaluation record",
+        ),
+    ):
+        parser_entry = subparsers.add_parser(name, parents=[parent], help=help_text)
+        parser_entry.add_argument(
+            "--record",
+            required=True,
+            help="Path to evaluation record JSON",
+        )
+        parser_entry.add_argument(
+            "--records-root",
+            help="Safe root for append-only evaluation record storage (write only)",
+        )
+        parser_entry.add_argument(
+            "--digest-root",
+            help="Optional root for digest verification source files",
+        )
+        parser_entry.add_argument(
+            "--verify-digests",
+            action="store_true",
+            help="Verify declared digests against files under --digest-root",
+        )
+
     return parser
 
 
@@ -393,9 +450,13 @@ def main(argv: list[str] | None = None) -> int:
         "qualification-check": _command_qualification_check,
         "print-checklist": _command_print_checklist,
         "rebuild-search-index": _command_rebuild_search_index,
+        "validate-evaluation-record": _command_validate_evaluation_record,
+        "write-evaluation-record": _command_write_evaluation_record,
     }
     handler = commands[args.command]
     try:
+        if args.command == "write-evaluation-record" and not args.records_root:
+            raise RuntimeConfigError("--records-root is required for write-evaluation-record")
         return handler(args)
     except RuntimeConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)

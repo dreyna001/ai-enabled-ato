@@ -1,0 +1,73 @@
+{
+  "evaluation_id": "not-a-uuid",
+  "evaluation_schema_version": "1.0.0",
+  "guide_version": "P-1",
+  "guide_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "created_at_utc": "2026-07-10T18:00:00Z",
+  "started_at_utc": "2026-07-10T18:05:00Z",
+  "completed_at_utc": "2026-07-10T20:00:00Z",
+  "outcome": "failed",
+  "qualification_scope": [],
+  "candidate": {
+    "release_or_code_revision": "3ac348a",
+    "model_snapshot_id": "text-llm.v1.mock",
+    "model_snapshot_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "endpoint_profile": "dev_local_fake",
+    "endpoint_host": "localhost",
+    "endpoint_behavior_fingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+    "model_requested": "fake-text-model",
+    "model_reported": "fake-text-model",
+    "prompt_bundle_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "output_schema_ids_and_sha256": [],
+    "authority_manifest_id": "authority.v2",
+    "authority_manifest_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+    "context_selection_algorithm_id": "context.v1",
+    "context_selection_algorithm_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+    "status_policy_id": "status.v1",
+    "status_policy_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+    "configuration_fingerprint": "9999999999999999999999999999999999999999999999999999999999999999",
+    "temperature": 0,
+    "input_limit": 8192,
+    "output_limit": 4096,
+    "timeout_seconds": 60,
+    "retry_limit": 1
+  },
+  "dataset": {
+    "holdout_identity": {
+      "split": "development",
+      "holdout_manifest_id": "holdout.v1",
+      "holdout_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "development_split_excluded": false
+    },
+    "holdout_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "corpus_digest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "fixture_count": 0,
+    "package_count_by_profile": {},
+    "assessment_item_count_by_profile": {},
+    "status_distribution_by_profile": {},
+    "injection_distribution_by_category": {},
+    "first_sme_labels_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "second_sme_labels_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "adjudication_manifest_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "adjudicators": [],
+  "execution": {
+    "evaluator_revision": "3ac348a",
+    "evaluator_artifact_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "run_ids": [],
+    "per_case_attempt_metadata": [],
+    "request_manifest_sha256": "4040404040404040404040404040404040404040404040404040404040404040",
+    "response_manifest_sha256": "5050505050505050505050505050505050505050505050505050505050505050",
+    "failure_codes": []
+  },
+  "results": {
+    "raw_metric_counts": {},
+    "metric_values": {},
+    "gate_results": [],
+    "critical_false_supported_case_ids": [],
+    "failed_case_ids": [],
+    "artifact_manifest_sha256": "6060606060606060606060606060606060606060606060606060606060606060"
+  },
+  "blockers": [],
+  "hard_stop_status": []
+}

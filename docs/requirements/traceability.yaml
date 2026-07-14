@@ -542,9 +542,20 @@
       "spec_section": "32",
       "requirement_text": "AI behavior passes the qualification gates and produces an immutable evaluation record.",
       "epic": "EP-07-advanced-analysis",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Blocked by HS-006; planned adjudicated-holdout evaluation",
+      "implementation_files": [
+        "docs/contracts/ai-evaluation-record.schema.json",
+        "docs/AI_EVALUATION_GUIDE.md",
+        "src/ato_service/ai_evaluation/record.py",
+        "src/ato_service/ai_evaluation/persistence.py",
+        "src/ato_service/ai_evaluation/runner.py",
+        "src/ato_operator/evaluation_record.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ai_evaluation_record.py::test_valid_failed_fixture_passes_schema_and_semantic_validation",
+        "tests/ato_service/test_ai_evaluation_record.py::test_write_evaluation_record_is_write_once",
+        "tests/ato_operator/test_evaluation_record_cli.py::test_write_evaluation_record_persists_under_safe_root"
+      ],
+      "verification_type": "Blocked by HS-006; schema, semantic validation, append-only persistence, and bounded operator tooling are contract-tested; live adjudicated holdout evaluation remains pending",
       "status": "blocked"
     },
     {

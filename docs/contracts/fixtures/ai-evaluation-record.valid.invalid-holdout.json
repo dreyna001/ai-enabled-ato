@@ -1,0 +1,150 @@
+{
+  "evaluation_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "evaluation_schema_version": "1.0.0",
+  "guide_version": "P-1",
+  "guide_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "created_at_utc": "2026-07-11T18:00:00Z",
+  "started_at_utc": "2026-07-11T18:05:00Z",
+  "completed_at_utc": "2026-07-11T18:10:00Z",
+  "outcome": "invalid",
+  "qualification_scope": [
+    {
+      "profile_id": "fedramp_20x_class_c",
+      "profile_version": "1.0.0",
+      "model_step": "sufficiency_matrix"
+    }
+  ],
+  "candidate": {
+    "release_or_code_revision": "3ac348a",
+    "model_snapshot_id": "text-llm.v1.mock",
+    "model_snapshot_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "endpoint_profile": "dev_local_fake",
+    "endpoint_host": "localhost",
+    "endpoint_behavior_fingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+    "model_requested": "fake-text-model",
+    "model_reported": "fake-text-model",
+    "prompt_bundle_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "output_schema_ids_and_sha256": [
+      {
+        "schema_id": "sufficiency-matrix-response.v1",
+        "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    ],
+    "authority_manifest_id": "authority.v2",
+    "authority_manifest_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+    "context_selection_algorithm_id": "context.v1",
+    "context_selection_algorithm_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+    "status_policy_id": "status.v1",
+    "status_policy_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+    "configuration_fingerprint": "9999999999999999999999999999999999999999999999999999999999999999",
+    "temperature": 0,
+    "input_limit": 8192,
+    "output_limit": 4096,
+    "timeout_seconds": 60,
+    "retry_limit": 1
+  },
+  "dataset": {
+    "holdout_identity": {
+      "split": "holdout",
+      "holdout_manifest_id": "holdout.v1",
+      "holdout_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "development_split_excluded": true
+    },
+    "holdout_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "corpus_digest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "fixture_count": 120,
+    "package_count_by_profile": {
+      "fedramp_20x_class_c": 3
+    },
+    "assessment_item_count_by_profile": {
+      "fedramp_20x_class_c": 120
+    },
+    "status_distribution_by_profile": {
+      "fedramp_20x_class_c": {
+        "supported": 30,
+        "partial": 30,
+        "unsupported": 30,
+        "insufficient_evidence": 30
+      }
+    },
+    "injection_distribution_by_category": {
+      "direct": 2,
+      "indirect": 2,
+      "encoded": 2,
+      "multilingual": 2,
+      "role_spoofing": 2,
+      "data_exfiltration": 2,
+      "fake_citation": 2
+    },
+    "first_sme_labels_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "second_sme_labels_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "adjudication_manifest_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "adjudicators": [
+    {
+      "adjudicator_id": "sme-alpha",
+      "role": "holdout_labeler",
+      "qualification_ref": "fedramp-c-sme-2026"
+    },
+    {
+      "adjudicator_id": "sme-beta",
+      "role": "holdout_labeler",
+      "qualification_ref": "fedramp-c-sme-2026"
+    },
+    {
+      "adjudicator_id": "holdout-custodian",
+      "role": "holdout_custodian",
+      "qualification_ref": "evaluation-custodian-v1"
+    }
+  ],
+  "execution": {
+    "evaluator_revision": "3ac348a",
+    "evaluator_artifact_sha256": "1010101010101010101010101010101010101010101010101010101010101010",
+    "run_ids": [
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    ],
+    "per_case_attempt_metadata": [],
+    "request_manifest_sha256": "2020202020202020202020202020202020202020202020202020202020202020",
+    "response_manifest_sha256": "3030303030303030303030303030303030303030303030303030303030303030",
+    "failure_codes": [
+      "metric_denominator_zero"
+    ]
+  },
+  "results": {
+    "raw_metric_counts": {
+      "expected_rows": 120
+    },
+    "metric_values": {
+      "weighted_status_agreement": 0
+    },
+    "gate_results": [
+      {
+        "gate_id": "weighted_status_agreement",
+        "outcome": "invalid",
+        "numerator": 0,
+        "denominator": 0,
+        "threshold": 0.7
+      }
+    ],
+    "critical_false_supported_case_ids": [],
+    "failed_case_ids": [],
+    "artifact_manifest_sha256": "4040404040404040404040404040404040404040404040404040404040404040"
+  },
+  "blockers": [
+    {
+      "blocker_id": "metric_denominator_zero",
+      "severity": "integrity",
+      "message": "Weighted status agreement denominator was zero; kappa is undefined."
+    }
+  ],
+  "hard_stop_status": [
+    {
+      "hard_stop_id": "HS-006",
+      "status": "unresolved",
+      "blockers": [
+        "metric_denominator_zero",
+        "no_passing_live_evaluation"
+      ]
+    }
+  ]
+}
