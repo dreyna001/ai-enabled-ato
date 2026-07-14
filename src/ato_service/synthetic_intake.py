@@ -8,7 +8,6 @@ independently observable and replay-safe.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import uuid
 from dataclasses import dataclass
@@ -20,7 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
 from ato_service.blobs import BlobStore
-from ato_service.db.models import FactProposal, PackageRevision, SourceArtifact
+from ato_service.db.models import PackageRevision, PackageRevisionDraft, SourceArtifact, System
+from ato_service.draft_builder import DOCUMENT_SCHEMA_VERSION, DraftBuildError, build_initial_draft
+from ato_service.extraction import ExtractionContext, ExtractionLimits, VisionPolicy, extract_content
+from ato_service.extraction.errors import ExtractionError
 from ato_service.lifecycle_transitions import (
     PackageRevisionStatus,
     PackageRevisionTransitionCondition,
@@ -35,6 +37,17 @@ from ato_service.source_artifacts import (
 SYNTHETIC_INTAKE_ACTOR_ID = "synthetic-intake-worker"
 SYNTHETIC_DATA_ORIGIN = "synthetic"
 JSON_MEDIA_TYPE = "application/json"
+_SYNTHETIC_EXTRACTION_LIMITS = ExtractionLimits(
+    max_pdf_pages_per_file=200,
+    max_extracted_text_characters_per_file=2_000_000,
+    max_zip_members_per_archive=500,
+    max_zip_uncompressed_bytes_per_archive=104_857_600,
+    max_zip_decompression_ratio=100,
+    max_xml_depth=64,
+    max_xml_elements=100_000,
+    max_xml_attributes_per_element=128,
+    max_xml_text_node_characters=1_048_576,
+)
 
 
 class SyntheticIntakeConfigurationError(RuntimeConfigError):
@@ -63,6 +76,7 @@ class SyntheticIntakeResult:
     revision_version: int
     artifact_count: int
     proposal_count: int
+    draft_inserted: bool = False
 
 
 def require_synthetic_intake_runtime(config: RuntimeConfig) -> None:
@@ -106,10 +120,14 @@ def _source_artifacts_statement(package_revision_id: uuid.UUID) -> Any:
     )
 
 
-def _fact_proposals_exist_statement(package_revision_id: uuid.UUID) -> Any:
+def _draft_exists_statement(package_revision_id: uuid.UUID) -> Any:
     return select(
-        exists().where(FactProposal.package_revision_id == package_revision_id)
+        exists().where(PackageRevisionDraft.package_revision_id == package_revision_id)
     )
+
+
+def _load_system_statement(system_id: uuid.UUID) -> Any:
+    return select(System).where(System.system_id == system_id)
 
 
 async def process_next_synthetic_scan(
@@ -180,7 +198,7 @@ async def process_next_synthetic_extraction(
     hmac_key: bytes,
     now: datetime,
 ) -> SyntheticIntakeResult | None:
-    """Extract one eligible synthetic JSON revision into pending proposals."""
+    """Extract one eligible synthetic JSON revision into a package draft."""
     validated_now = _require_aware_utc(now)
     revision_result = await session.execute(
         _eligible_revision_statement(PackageRevisionStatus.EXTRACTING)
@@ -190,11 +208,18 @@ async def process_next_synthetic_extraction(
         return None
 
     existing_result = await session.execute(
-        _fact_proposals_exist_statement(revision.package_revision_id)
+        _draft_exists_statement(revision.package_revision_id)
     )
     if existing_result.scalar_one():
         raise SyntheticIntakeInvariantError(
-            "extracting revision already contains fact proposals"
+            "extracting revision already contains a package revision draft"
+        )
+
+    system_result = await session.execute(_load_system_statement(revision.system_id))
+    system = system_result.scalar_one_or_none()
+    if system is None:
+        raise SyntheticIntakeInvariantError(
+            "extracting revision is missing its owning system"
         )
 
     artifacts = await _load_artifacts(session, revision.package_revision_id)
@@ -209,48 +234,13 @@ async def process_next_synthetic_extraction(
                 "extracting revision contains a non-pending extraction result"
             )
 
-    proposals: list[FactProposal] = []
-    seen_pointers: set[str] = set()
     try:
-        for artifact in artifacts:
-            facts = await asyncio.to_thread(
-                _extract_json_facts,
-                blob_store,
-                artifact,
-            )
-            for json_pointer, proposed_value in facts:
-                if json_pointer in seen_pointers:
-                    raise SyntheticJsonExtractionError(
-                        "synthetic artifacts propose the same canonical JSON pointer",
-                        error_code="duplicate_canonical_id",
-                    )
-                seen_pointers.add(json_pointer)
-                proposals.append(
-                    FactProposal(
-                        fact_proposal_id=uuid.uuid5(
-                            artifact.artifact_id,
-                            json_pointer,
-                        ),
-                        package_revision_id=revision.package_revision_id,
-                        json_pointer=json_pointer,
-                        proposed_value=proposed_value,
-                        source_artifact_id=artifact.artifact_id,
-                        source_sha256=artifact.sha256,
-                        source_locator={
-                            "kind": "json_pointer",
-                            "json_pointer": json_pointer,
-                        },
-                        extraction_method="deterministic",
-                        model_step_id=None,
-                        review_status="pending",
-                        reviewed_by=None,
-                        reviewed_at=None,
-                    )
-                )
-        if not proposals:
-            raise SyntheticJsonExtractionError(
-                "synthetic JSON contains no addressable facts"
-            )
+        aggregated = _build_synthetic_draft(
+            revision=revision,
+            system=system,
+            artifacts=artifacts,
+            blob_store=blob_store,
+        )
     except SyntheticJsonExtractionError as exc:
         return await _invalidate_extraction(
             session,
@@ -269,14 +259,31 @@ async def process_next_synthetic_extraction(
             now=validated_now,
             reason_code="source_type_mismatch",
         )
+    except DraftBuildError as exc:
+        return await _invalidate_extraction(
+            session,
+            revision=revision,
+            artifacts=artifacts,
+            hmac_key=hmac_key,
+            now=validated_now,
+            reason_code=exc.error_code,
+        )
 
     require_package_revision_transition(
         PackageRevisionStatus.EXTRACTING,
         PackageRevisionStatus.AWAITING_CONFIRMATION,
         condition=PackageRevisionTransitionCondition.NORMAL_PROGRESSION,
     )
-    for proposal in proposals:
-        session.add(proposal)
+    session.add(
+        PackageRevisionDraft(
+            package_revision_id=revision.package_revision_id,
+            document_schema_version=DOCUMENT_SCHEMA_VERSION,
+            document=aggregated.document,
+            field_provenance=aggregated.field_provenance,
+            updated_by=SYNTHETIC_INTAKE_ACTOR_ID,
+            updated_at=validated_now,
+        )
+    )
     for artifact in artifacts:
         artifact.extraction_status = "succeeded"
     revision.status = PackageRevisionStatus.AWAITING_CONFIRMATION.value
@@ -294,7 +301,7 @@ async def process_next_synthetic_extraction(
         reason_code=None,
         metadata={
             "artifact_count": len(artifacts),
-            "proposal_count": len(proposals),
+            "segment_count": aggregated.segment_count,
             "revision_version": revision.revision_version,
         },
         occurred_at=validated_now,
@@ -303,7 +310,8 @@ async def process_next_synthetic_extraction(
         revision,
         previous_status=PackageRevisionStatus.EXTRACTING,
         artifact_count=len(artifacts),
-        proposal_count=len(proposals),
+        proposal_count=0,
+        draft_inserted=True,
     )
 
 
@@ -366,63 +374,52 @@ def _require_revision_foundation(
         )
 
 
-def _extract_json_facts(
+def _build_synthetic_draft(
+    *,
+    revision: PackageRevision,
+    system: System,
+    artifacts: list[SourceArtifact],
     blob_store: BlobStore,
-    artifact: SourceArtifact,
-) -> tuple[tuple[str, Any], ...]:
-    raw_bytes = read_source_artifact_bytes(blob_store, artifact)
-    try:
-        document = json.loads(raw_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise SyntheticJsonExtractionError(
-            "synthetic artifact is not valid UTF-8 JSON"
-        ) from exc
-
-    facts = tuple(_iter_json_facts(document))
-    if not facts:
-        raise SyntheticJsonExtractionError(
-            "synthetic JSON contains no addressable facts"
-        )
-    return facts
-
-
-def _iter_json_facts(document: Any) -> Any:
-    stack: list[tuple[str, Any]] = [("", document)]
-    while stack:
-        pointer, value = stack.pop()
-        if isinstance(value, dict):
-            if not value:
-                if pointer:
-                    yield pointer, {}
-                continue
-            for key in sorted(value, reverse=True):
-                escaped_key = key.replace("~", "~0").replace("/", "~1")
-                child_pointer = f"{pointer}/{escaped_key}"
-                _require_json_pointer_length(child_pointer)
-                stack.append((child_pointer, value[key]))
-            continue
-        if isinstance(value, list):
-            if not value:
-                if pointer:
-                    yield pointer, []
-                continue
-            for index in range(len(value) - 1, -1, -1):
-                child_pointer = f"{pointer}/{index}"
-                _require_json_pointer_length(child_pointer)
-                stack.append((child_pointer, value[index]))
-            continue
-        if not pointer:
+) -> Any:
+    outcomes: list[tuple[SourceArtifact, Any]] = []
+    for artifact in artifacts:
+        raw_bytes = read_source_artifact_bytes(blob_store, artifact)
+        try:
+            json.loads(raw_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise SyntheticJsonExtractionError(
-                "synthetic JSON root must be an object or array"
+                "synthetic artifact is not valid UTF-8 JSON"
+            ) from exc
+        try:
+            outcome = extract_content(
+                content_bytes=raw_bytes,
+                sha256=artifact.sha256,
+                limits=_SYNTHETIC_EXTRACTION_LIMITS,
+                context=ExtractionContext(
+                    declared_media_type=artifact.declared_media_type,
+                    detected_media_type=artifact.detected_media_type,
+                    declared_format="json",
+                    artifact_kind=artifact.artifact_kind,
+                    filename=artifact.display_filename,
+                ),
+                vision_policy=VisionPolicy(vision_allowed=False),
             )
-        yield pointer, value
-
-
-def _require_json_pointer_length(json_pointer: str) -> None:
-    if len(json_pointer) > 2000:
-        raise SyntheticJsonExtractionError(
-            "synthetic JSON pointer exceeds the domain limit"
-        )
+        except ExtractionError as exc:
+            raise SyntheticJsonExtractionError(
+                str(exc),
+                error_code=exc.error_code,
+            ) from exc
+        if not outcome.segments:
+            raise SyntheticJsonExtractionError(
+                "synthetic JSON contains no addressable facts"
+            )
+        outcomes.append((artifact, outcome))
+    return build_initial_draft(
+        revision=revision,
+        system=system,
+        artifacts=artifacts,
+        artifact_outcomes=outcomes,
+    )
 
 
 async def _invalidate_extraction(
@@ -473,6 +470,7 @@ def _result(
     previous_status: PackageRevisionStatus,
     artifact_count: int,
     proposal_count: int,
+    draft_inserted: bool = False,
 ) -> SyntheticIntakeResult:
     return SyntheticIntakeResult(
         package_revision_id=revision.package_revision_id,
@@ -481,6 +479,7 @@ def _result(
         revision_version=revision.revision_version,
         artifact_count=artifact_count,
         proposal_count=proposal_count,
+        draft_inserted=draft_inserted,
     )
 
 

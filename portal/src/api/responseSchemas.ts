@@ -27,13 +27,6 @@ const packageRevisionSchema = z.object({
   sensitivity: z.string().min(1),
 });
 
-const factProposalSchema = z.object({
-  fact_proposal_id: z.string().uuid(),
-  json_pointer: z.string().min(1),
-  proposed_value: z.any(),
-  review_status: z.string().min(1),
-});
-
 const analysisRunSchema = z.object({
   run_id: z.string().uuid(),
   package_revision_id: z.string().uuid(),
@@ -157,10 +150,6 @@ export function parsePackageRevision(value: unknown) {
   return parseWithSchema(packageRevisionSchema, value);
 }
 
-export function parseFactProposal(value: unknown) {
-  return parseWithSchema(factProposalSchema, value);
-}
-
 export function parseAnalysisRun(value: unknown) {
   return parseWithSchema(analysisRunSchema, value);
 }
@@ -177,12 +166,6 @@ export function parseSystemList(value: unknown) {
 
 export function parseRevisionList(value: unknown) {
   const schema = z.object({ items: z.array(packageRevisionSchema) });
-  const parsed = parseWithSchema(schema, value);
-  return parsed?.items ?? null;
-}
-
-export function parseProposalList(value: unknown) {
-  const schema = z.object({ items: z.array(factProposalSchema) });
   const parsed = parseWithSchema(schema, value);
   return parsed?.items ?? null;
 }

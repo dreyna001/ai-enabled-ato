@@ -43,6 +43,7 @@ from ato_service.domain_mapping import (
     map_package_revision_draft_to_domain,
 )
 from ato_service.draft_builder import validate_package_draft_document
+from ato_service.legacy_proposal_compat import ensure_legacy_draft_for_read
 from ato_service.idempotency import (
     IdempotencyReplay,
     canonical_json_bytes,
@@ -314,6 +315,7 @@ async def get_package_revision_draft(
     *,
     principal: AuthenticatedPrincipal,
     package_revision_id: uuid.UUID,
+    hmac_key: bytes | None = None,
 ) -> PackageRevisionDraftViewResult:
     """Load one package revision draft after read authorization."""
     result = await session.execute(
@@ -328,6 +330,13 @@ async def get_package_revision_draft(
 
     draft_result = await session.execute(_load_draft_statement(package_revision_id))
     draft = draft_result.scalar_one_or_none()
+    if draft is None:
+        draft = await ensure_legacy_draft_for_read(
+            session,
+            revision=package_revision,
+            system=system,
+            hmac_key=hmac_key,
+        )
     if draft is None:
         raise PackageRevisionDraftNotFoundError(package_revision_id=package_revision_id)
 

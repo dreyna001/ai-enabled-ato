@@ -17,8 +17,8 @@ from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.blobs import BlobStore
 from ato_service.db.models import (
     AuditEvent,
-    FactProposal,
     PackageRevision,
+    PackageRevisionDraft,
     SourceArtifact,
     System,
 )
@@ -30,7 +30,7 @@ from ato_service.synthetic_intake import (
 
 
 @pytest.mark.integration
-def test_synthetic_intake_persists_proposals_and_audit_atomically(
+def test_synthetic_intake_persists_draft_and_audit_atomically(
     tmp_path: Path,
 ) -> None:
     url = os.environ.get("ATO_TEST_DATABASE_URL")
@@ -44,7 +44,10 @@ def test_synthetic_intake_persists_proposals_and_audit_atomically(
         artifact_id = uuid.uuid4()
         blob_store = BlobStore(tmp_path)
         stored = blob_store.store_stream(
-            io.BytesIO(b'{"system":{"name":"Synthetic FISMA"}}'),
+            io.BytesIO(
+                b'{"package":{"title":"Synthetic FISMA","profile_id":"fisma_agency_security"},'
+                b'"system":{"name":"Synthetic FISMA","description":"Demo system"}}'
+            ),
             max_bytes=1024 * 1024,
         )
         engine = create_async_engine_from_url(url)
@@ -122,9 +125,9 @@ def test_synthetic_intake_persists_proposals_and_audit_atomically(
 
                     await session.refresh(revision)
                     await session.refresh(artifact)
-                    proposal_count = await session.scalar(
-                        select(func.count(FactProposal.fact_proposal_id)).where(
-                            FactProposal.package_revision_id == revision_id
+                    draft_count = await session.scalar(
+                        select(func.count(PackageRevisionDraft.package_revision_id)).where(
+                            PackageRevisionDraft.package_revision_id == revision_id
                         )
                     )
                     audit_count = await session.scalar(
@@ -137,7 +140,7 @@ def test_synthetic_intake_persists_proposals_and_audit_atomically(
                     assert revision.revision_version == 4
                     assert artifact.malware_scan_status == "clean"
                     assert artifact.extraction_status == "succeeded"
-                    assert proposal_count == 1
+                    assert draft_count == 1
                     assert audit_count == 2
                 finally:
                     await session.close()

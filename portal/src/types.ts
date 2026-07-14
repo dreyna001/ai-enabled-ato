@@ -22,13 +22,6 @@ export type PackageRevision = {
   sensitivity: string;
 };
 
-export type FactProposal = {
-  fact_proposal_id: string;
-  json_pointer: string;
-  proposed_value: unknown;
-  review_status: string;
-};
-
 export type ProfileId =
   | "fedramp_20x_program"
   | "fedramp_rev5_transition"

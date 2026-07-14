@@ -185,25 +185,28 @@
         "src/ato_service/api_router.py",
         "src/ato_service/source_artifacts.py",
         "src/ato_service/synthetic_intake.py",
+        "src/ato_service/legacy_proposal_compat.py",
         "docs/contracts/package-draft-document.schema.json",
         "docs/contracts/openapi.json",
         "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "portal/src/api/client.ts",
         "migrations/versions/20260713_0007_package_editor_persistence.py"
       ],
       "test_ids": [
         "tests/ato_service/test_draft_builder.py::test_maps_synthetic_agency_security_plan_excerpt_to_canonical_draft",
         "tests/ato_service/test_draft_builder.py::test_duplicate_draft_pointer_conflict_from_two_manifests",
         "tests/ato_service/test_draft_builder.py::test_assembled_document_validates_against_package_draft_schema",
-        "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_deterministic_pending_proposals_with_provenance",
-        "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_proposals",
-        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_proposals_and_audit_atomically",
+        "tests/ato_service/test_synthetic_intake.py::test_extraction_creates_schema_valid_draft_without_fact_proposals",
+        "tests/ato_service/test_synthetic_intake.py::test_duplicate_canonical_pointers_invalidate_without_partial_drafts",
+        "tests/ato_service/test_synthetic_intake_integration.py::test_synthetic_intake_persists_draft_and_audit_atomically",
+        "tests/ato_service/test_legacy_proposal_compat.py::test_assemble_draft_from_compatible_legacy_proposals",
         "tests/ato_service/test_package_editor_persistence.py::test_domain_mappings_validate_against_schema",
         "tests/ato_service/test_package_editor_persistence.py::test_package_draft_document_fixtures_follow_schema",
         "tests/ato_service/test_package_revision_drafts.py::test_save_draft_persists_document_and_increments_revision_version",
         "tests/ato_service/test_package_revision_drafts.py::test_confirm_with_draft_seals_content_without_fact_proposal_check",
         "tests/ato_service/test_package_revision_drafts.py::test_confirm_without_draft_still_requires_non_pending_proposals"
       ],
-      "verification_type": "Component A Diff 5 adds authenticated GET/PUT draft APIs with schema validation and ETag/idempotency semantics; package-level confirm seals PackageRevisionDraft into SealedPackageContent, binds package_content_sha256 and system_context_snapshot_id, and transitions awaiting_confirmation -> ready without per-leaf FactProposal decisions when a draft exists; legacy proposal-gated confirm remains for revisions without a draft row",
+      "verification_type": "Component A Diff 5 adds authenticated GET/PUT draft APIs with schema validation and ETag/idempotency semantics; package-level confirm seals PackageRevisionDraft into SealedPackageContent, binds package_content_sha256 and system_context_snapshot_id, and transitions awaiting_confirmation -> ready without per-leaf FactProposal decisions when a draft exists; legacy proposal-gated confirm and deprecated proposal routes remain for bounded read/migration compatibility; synthetic intake creates drafts instead of new default-path FactProposal rows",
       "status": "partial"
     },
     {
@@ -437,16 +440,29 @@
       "implementation_files": [
         "src/ato_service/db/models.py",
         "src/ato_service/audit.py",
+        "src/ato_service/audit_chain_verify.py",
+        "src/ato_operator/audit_verify.py",
         "src/ato_service/api_dependencies.py",
         "src/ato_service/main.py",
-        "src/ato_service/runtime_config.py"
+        "src/ato_service/runtime_config.py",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "docs/CONFIGURATION.md"
       ],
       "test_ids": [
         "tests/ato_service/test_audit.py::test_require_audit_hmac_key_rejects_missing_or_short_keys",
+        "tests/ato_service/test_audit.py::test_compute_and_verify_audit_event_hash_round_trip",
+        "tests/ato_service/test_audit_chain_verify.py::test_verify_valid_chain_includes_root_and_checkpoints",
+        "tests/ato_service/test_audit_chain_verify.py::test_verify_detects_chain_break_on_missing_link",
+        "tests/ato_service/test_audit_chain_verify.py::test_verify_detects_hmac_mismatch_tamper",
+        "tests/ato_service/test_audit_chain_verify.py::test_verify_detects_wrong_key_at_genesis",
+        "tests/ato_service/test_audit_chain_verify.py::test_verify_detects_deletion_gap_as_chain_break",
+        "tests/ato_service/test_audit_chain_verify.py::test_verify_detects_reordered_events",
+        "tests/ato_service/test_audit_chain_verify.py::test_filter_summary_does_not_change_global_passed",
+        "tests/ato_service/test_audit_chain_verify.py::test_redacted_output_omits_metadata_secrets",
         "tests/ato_service/test_api_dependencies.py::test_get_audit_hmac_key_returns_configured_key",
         "tests/ato_service/test_main.py::test_resolve_audit_hmac_key_for_startup_reads_credential_reference"
       ],
-      "verification_type": "Append-only audit events on P1.1 mutations with HMAC-SHA-256 when AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE resolves at startup (no env override); chain verification, tamper drills, and backup-root replication remain planned/partial",
+      "verification_type": "Append-only audit events on P1.1 mutations with HMAC-SHA-256 when AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE resolves at startup (no env override); ordered chain verification with explicit tamper/break/wrong-key outcomes, bounded batch reads, redacted operator reporting, and backup-root replication drills remain planned/partial",
       "status": "partial"
     },
     {

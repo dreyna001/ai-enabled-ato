@@ -8,7 +8,6 @@ import {
   parsePackageRevision,
   parsePackageRevisionDraft,
   parsePreflight,
-  parseProposalList,
   parseReadinessResponse,
   parseReviewComment,
   parseReviewCommentList,
@@ -24,7 +23,6 @@ import type {
   Approval,
   Disposition,
   ExportDraft,
-  FactProposal,
   MatrixRow,
   PackageDraftDocument,
   PackageRevision,
@@ -462,66 +460,6 @@ export async function saveRevisionDraft(
     draft: data,
     etag: responseEtag ?? revisionEtag(data.revision_version),
   };
-}
-
-export async function listProposals(
-  revisionId: string,
-  options: ApiFetchOptions = {},
-): Promise<FactProposal[]> {
-  const response = await apiFetch(
-    `${API_BASE}/package-revisions/${revisionId}/proposals`,
-    { credentials: "include", ...options },
-  );
-  const items = await readValidatedJson(response, parseProposalList);
-  return items.map((item) => ({
-    ...item,
-    proposed_value: item.proposed_value ?? null,
-  }));
-}
-
-export async function acceptProposal(
-  session: SessionInfo,
-  proposalId: string,
-  etag: string,
-  options: ApiFetchOptions = {},
-): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/proposals/${proposalId}/accept`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...mutationHeaders(session, { "If-Match": etag }),
-      ...options.headers,
-    },
-    body: JSON.stringify({ edited_value: null }),
-    ...options,
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, response.statusText);
-  }
-}
-
-export async function rejectProposal(
-  session: SessionInfo,
-  proposalId: string,
-  etag: string,
-  reason: string,
-  options: ApiFetchOptions = {},
-): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/proposals/${proposalId}/reject`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...mutationHeaders(session, { "If-Match": etag }),
-      ...options.headers,
-    },
-    body: JSON.stringify({ reason }),
-    ...options,
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, response.statusText);
-  }
 }
 
 export async function confirmRevision(

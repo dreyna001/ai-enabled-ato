@@ -305,7 +305,13 @@ unreadable storage remains `extracting`, rolls back all attempted side effects,
 and fails visibly as `storage_unavailable`; it MUST NOT be mislabeled invalid
 or quarantined.
 
-### 2.2 FactProposal review
+### 2.2 FactProposal review (deprecated default path)
+
+Legacy per-leaf `FactProposal` review remains available for bounded read and
+migration compatibility on published revisions. The default package editor path
+uses `PackageRevisionDraft` GET/PUT and package-level confirm. Proposal list,
+accept, and reject routes are deprecated in OpenAPI and are not called by the
+portal default workflow.
 
 A proposal decision is legal only while its owning `PackageRevision` is
 `awaiting_confirmation`.

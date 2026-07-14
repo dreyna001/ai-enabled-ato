@@ -458,11 +458,13 @@ def create_api_router() -> APIRouter:
         id: uuid.UUID,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
     ) -> JSONResponse:
         result = await get_package_revision_draft(
             session,
             principal=principal,
             package_revision_id=id,
+            hmac_key=audit_hmac_key,
         )
         return _draft_json_response(result)
 
@@ -513,7 +515,11 @@ def create_api_router() -> APIRouter:
         )
         return _package_revision_json_response(result)
 
-    @router.get("/package-revisions/{id}/proposals", tags=["Packages"])
+    @router.get(
+        "/package-revisions/{id}/proposals",
+        tags=["Packages"],
+        deprecated=True,
+    )
     async def get_package_revision_proposals(
         id: uuid.UUID,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
@@ -533,7 +539,7 @@ def create_api_router() -> APIRouter:
             next_cursor=page.next_cursor,
         )
 
-    @router.post("/proposals/{id}/accept", tags=["Packages"])
+    @router.post("/proposals/{id}/accept", tags=["Packages"], deprecated=True)
     async def post_proposal_accept(
         id: uuid.UUID,
         body: AcceptProposalRequest,
@@ -557,7 +563,7 @@ def create_api_router() -> APIRouter:
             headers={"ETag": result.etag},
         )
 
-    @router.post("/proposals/{id}/reject", tags=["Packages"])
+    @router.post("/proposals/{id}/reject", tags=["Packages"], deprecated=True)
     async def post_proposal_reject(
         id: uuid.UUID,
         body: RejectProposalRequest,

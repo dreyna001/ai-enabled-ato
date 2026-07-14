@@ -200,12 +200,14 @@ def _command_smoke(args: argparse.Namespace) -> int:
 
 
 def _command_verify_audit(args: argparse.Namespace) -> int:
+    from ato_operator.audit_verify import format_verify_audit_report
+
     config = _load_config(args)
     report = verify_audit_chain_sync(config)
     if args.json:
-        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(report.to_redacted_dict(), indent=2, sort_keys=True))
     else:
-        print(f"verify-audit passed={report.passed} events={report.verified_events} detail={report.detail}")
+        print(format_verify_audit_report(report))
     return 0 if report.passed else 1
 
 

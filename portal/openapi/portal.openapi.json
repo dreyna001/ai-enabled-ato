@@ -505,6 +505,7 @@
     },
     "/package-revisions/{id}/proposals": {
       "get": {
+        "deprecated": true,
         "tags": [
           "Packages"
         ],
@@ -564,6 +565,7 @@
     },
     "/proposals/{id}/accept": {
       "post": {
+        "deprecated": true,
         "tags": [
           "Packages"
         ],
@@ -622,6 +624,7 @@
     },
     "/proposals/{id}/reject": {
       "post": {
+        "deprecated": true,
         "tags": [
           "Packages"
         ],

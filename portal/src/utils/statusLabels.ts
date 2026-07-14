@@ -42,18 +42,3 @@ export function runStatusVariant(
       return "muted";
   }
 }
-
-export function proposalStatusVariant(
-  status: string,
-): NonNullable<BadgeProps["variant"]> {
-  switch (status) {
-    case "accepted":
-      return "success";
-    case "pending":
-      return "warning";
-    case "rejected":
-      return "destructive";
-    default:
-      return "muted";
-  }
-}

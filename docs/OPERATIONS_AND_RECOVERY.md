@@ -203,6 +203,8 @@ Operational logs go to journald. They include correlation identifiers, bounded e
 
 Audit writes use an insert-only application role. Events form an HMAC-SHA-256 chain using a protected deployment credential. A daily chain root and artifact-manifest index are copied to protected backup. An operator command and runbook must verify both event-chain and artifact integrity.
 
+Quarterly restore drills must include `ato-operator verify-audit --config /etc/ato-analyzer/runtime-config.json --json` against the recovered database. Treat `chain_break`, `hmac_mismatch`, `ordering_violation`, and `wrong_key` outcomes as integrity failures requiring reconciliation before promotion. Filter parameters, when used, report matching-event counts only; global chain verification remains authoritative.
+
 Required metrics cover:
 
 - Queue depth and oldest age.
@@ -233,7 +235,7 @@ The restore runbook must:
 1. Restore to an isolated or approved recovery host using the customer-owned keys.
 2. Select a PostgreSQL recovery point and matching package-filesystem snapshot according to the qualified backup technology.
 3. Apply WAL recovery, then run database/filesystem reconciliation before accepting writes.
-4. Verify blob and artifact-manifest hashes, the audit chain, the daily chain root, and the manifest index.
+4. Verify blob and artifact-manifest hashes, the audit chain (`ato-operator verify-audit`), the daily chain root, and the manifest index.
 5. Verify liveness, readiness, authorized reads, queue state, and duplicate-side-effect protections.
 6. Record achieved RPO and RTO before promotion.
 

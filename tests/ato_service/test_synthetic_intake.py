@@ -16,7 +16,7 @@ from sqlalchemy.dialects import postgresql
 
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.blobs import BlobStore
-from ato_service.db.models import FactProposal, PackageRevision, SourceArtifact
+from ato_service.db.models import PackageRevision, PackageRevisionDraft, SourceArtifact, System
 from ato_service.lifecycle_transitions import PackageRevisionStatus
 from ato_service.runtime_config import load_runtime_config_from_dict
 from ato_service.source_artifacts import SourceArtifactStorageError
@@ -82,6 +82,18 @@ def _compile_sql(statement: Any) -> str:
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
         )
+    )
+
+
+def _system() -> System:
+    return System(
+        system_id=SYSTEM_ID,
+        display_name="Synthetic System",
+        external_system_id=None,
+        owner_group="owners",
+        viewer_groups=[],
+        created_at=NOW,
+        archived_at=None,
     )
 
 
@@ -195,7 +207,7 @@ def test_scan_marks_artifacts_clean_and_advances_one_transition(
 
 
 @patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
-def test_extraction_creates_deterministic_pending_proposals_with_provenance(
+def test_extraction_creates_schema_valid_draft_without_fact_proposals(
     mock_audit: AsyncMock,
     tmp_path: Path,
 ) -> None:
@@ -204,8 +216,10 @@ def test_extraction_creates_deterministic_pending_proposals_with_provenance(
     artifact = _artifact(
         BlobStore(tmp_path),
         (
-            b'{"a/b~c":true,"empty":{},'
-            b'"system":{"name":"Synthetic FISMA","tags":["a","b"]}}'
+            b'{"package":{"title":"Synthetic FISMA Package","profile_id":"fisma_agency_security"},'
+            b'"system":{"name":"Synthetic FISMA","description":"Demo system"},'
+            b'"security_controls":{"AC-1":{"implementation_status":"implemented",'
+            b'"summary":"Access control policy reviewed annually."}}}'
         ),
         scan_status="clean",
     )
@@ -213,6 +227,7 @@ def test_extraction_creates_deterministic_pending_proposals_with_provenance(
         [
             _scalar_optional(revision),
             _scalar(False),
+            _scalar_optional(_system()),
             _scalars([artifact]),
         ]
     )
@@ -230,34 +245,19 @@ def test_extraction_creates_deterministic_pending_proposals_with_provenance(
     assert result.previous_status == "extracting"
     assert result.status == "awaiting_confirmation"
     assert result.revision_version == 4
-    assert result.proposal_count == 5
+    assert result.proposal_count == 0
+    assert result.draft_inserted is True
     assert revision.status == "awaiting_confirmation"
     assert artifact.extraction_status == "succeeded"
 
-    proposals = [item for item in session.added if isinstance(item, FactProposal)]
-    assert [item.json_pointer for item in proposals] == [
-        "/a~1b~0c",
-        "/empty",
-        "/system/name",
-        "/system/tags/0",
-        "/system/tags/1",
-    ]
-    for proposal in proposals:
-        assert proposal.review_status == "pending"
-        assert proposal.extraction_method == "deterministic"
-        assert proposal.model_step_id is None
-        assert proposal.source_artifact_id == ARTIFACT_ID
-        assert proposal.source_sha256 == artifact.sha256
-        assert proposal.source_locator == {
-            "kind": "json_pointer",
-            "json_pointer": proposal.json_pointer,
-        }
-        assert proposal.fact_proposal_id == uuid.uuid5(
-            ARTIFACT_ID,
-            proposal.json_pointer,
-        )
+    drafts = [item for item in session.added if isinstance(item, PackageRevisionDraft)]
+    assert len(drafts) == 1
+    assert drafts[0].document["system"]["display_name"] == "Synthetic FISMA"
+    assert drafts[0].document["security_controls"]["AC-1"]["implementation_statement"].startswith(
+        "Access control"
+    )
     mock_audit.assert_awaited_once()
-    assert mock_audit.await_args.kwargs["metadata"]["proposal_count"] == 5
+    assert mock_audit.await_args.kwargs["metadata"]["segment_count"] >= 1
 
 
 @patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
@@ -276,6 +276,7 @@ def test_invalid_json_transitions_to_invalid_without_partial_proposals(
         [
             _scalar_optional(revision),
             _scalar(False),
+            _scalar_optional(_system()),
             _scalars([artifact]),
         ]
     )
@@ -301,7 +302,7 @@ def test_invalid_json_transitions_to_invalid_without_partial_proposals(
 
 
 @patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
-def test_duplicate_canonical_pointers_invalidate_without_partial_proposals(
+def test_duplicate_canonical_pointers_invalidate_without_partial_drafts(
     mock_audit: AsyncMock,
     tmp_path: Path,
 ) -> None:
@@ -310,12 +311,12 @@ def test_duplicate_canonical_pointers_invalidate_without_partial_proposals(
     blob_store = BlobStore(tmp_path)
     first = _artifact(
         blob_store,
-        b'{"name":"first"}',
+        b'{"system":{"name":"first"}}',
         scan_status="clean",
     )
     second = _artifact(
         blob_store,
-        b'{"name":"second"}',
+        b'{"system":{"name":"second"}}',
         artifact_id=uuid.UUID("55555555-5555-4555-8555-555555555555"),
         scan_status="clean",
     )
@@ -323,6 +324,7 @@ def test_duplicate_canonical_pointers_invalidate_without_partial_proposals(
         [
             _scalar_optional(revision),
             _scalar(False),
+            _scalar_optional(_system()),
             _scalars([first, second]),
         ]
     )
@@ -365,6 +367,7 @@ def test_corrupt_blob_transitions_to_invalid_as_source_type_mismatch(
         [
             _scalar_optional(revision),
             _scalar(False),
+            _scalar_optional(_system()),
             _scalars([artifact]),
         ]
     )
@@ -403,6 +406,7 @@ def test_missing_blob_fails_visibly_without_changing_extraction_state(
         [
             _scalar_optional(revision),
             _scalar(False),
+            _scalar_optional(_system()),
             _scalars([artifact]),
         ]
     )
@@ -424,7 +428,7 @@ def test_missing_blob_fails_visibly_without_changing_extraction_state(
     mock_audit.assert_not_awaited()
 
 
-@pytest.mark.parametrize("content", [b"42", b"{}", b"[]"])
+@pytest.mark.parametrize("content", [b"{}", b"[]"])
 @patch("ato_service.synthetic_intake.append_audit_event", new_callable=AsyncMock)
 def test_json_without_addressable_fact_transitions_to_invalid(
     mock_audit: AsyncMock,
@@ -439,6 +443,7 @@ def test_json_without_addressable_fact_transitions_to_invalid(
         [
             _scalar_optional(revision),
             _scalar(False),
+            _scalar_optional(_system()),
             _scalars([artifact]),
         ]
     )
@@ -488,7 +493,7 @@ def test_defense_in_depth_rejects_non_synthetic_claim_without_mutation(
     mock_audit.assert_not_awaited()
 
 
-def test_extraction_refuses_existing_proposals_for_replay_safety(
+def test_extraction_refuses_existing_draft_for_replay_safety(
     tmp_path: Path,
 ) -> None:
     revision = _revision(status="extracting", version=3)
@@ -499,7 +504,7 @@ def test_extraction_refuses_existing_proposals_for_replay_safety(
         ]
     )
 
-    with pytest.raises(SyntheticIntakeInvariantError):
+    with pytest.raises(SyntheticIntakeInvariantError, match="draft"):
         _run(
             process_next_synthetic_extraction(
                 session,
