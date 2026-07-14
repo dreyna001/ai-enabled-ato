@@ -1,1 +1,30 @@
+# Shell scripts invoked by deployment and packaging contracts must stay LF.
 *.sh text eol=lf
+
+# Qualification corpus fixtures are digest-sealed; CRLF from autocrlf breaks verification.
+data/qualification/**/*.json text eol=lf
+data/qualification/**/*.md text eol=lf
+data/qualification/**/*.csv text eol=lf
+data/qualification/**/*.txt text eol=lf
+data/qualification/**/*.xml text eol=lf
+data/qualification/**/*.yaml text eol=lf
+data/qualification/**/*.yml text eol=lf
+
+# Contract schemas, manifests, and fixtures are validated against pinned bytes.
+docs/contracts/**/*.json text eol=lf
+docs/contracts/**/*.md text eol=lf
+docs/contracts/**/*.yaml text eol=lf
+docs/contracts/**/*.yml text eol=lf
+
+# Authority reference sources are digest-sealed in authority-manifest.json.
+reference/authorities/**/*.json text eol=lf
+
+# Deployment runtime JSON is compared byte-for-byte in contract tests.
+deployment/config/*.json text eol=lf
+
+# Requirements YAML is parsed in traceability contract tests.
+docs/requirements/*.yaml text eol=lf
+
+# Test fixtures referenced by schema and profile artifact checks.
+tests/fixtures/**/*.json text eol=lf
+tests/fixtures/**/*.md text eol=lf
