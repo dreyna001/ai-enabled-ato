@@ -51,7 +51,60 @@ def _runtime_config(tmp_path: Path) -> object:
     )
 
 
-def test_start_run_rejects_full_run_type(tmp_path: Path) -> None:
+def test_start_run_allows_full_run_type_in_dev_local(tmp_path: Path) -> None:
+    session = AsyncMock()
+    package_revision = MagicMock()
+    package_revision.package_revision_id = REVISION_ID
+    package_revision.profile_id = "fisma_agency_security"
+    package_revision.data_origin = "synthetic"
+    package_revision.status = "ready"
+    package_revision.package_content_sha256 = "a" * 64
+    system = MagicMock()
+    system.owner_group = "owners"
+    system.viewer_groups = ["viewers"]
+    result = MagicMock()
+    result.one_or_none.return_value = (package_revision, system)
+    session.execute = AsyncMock(return_value=result)
+    session.scalar = AsyncMock(return_value=0)
+    session.add_all = MagicMock()
+
+    with (
+        patch(
+            "ato_service.analysis_runs.load_idempotency_replay",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "ato_service.analysis_runs.append_audit_event",
+            new=AsyncMock(),
+        ),
+        patch(
+            "ato_service.analysis_runs.record_idempotency_outcome",
+            new=AsyncMock(),
+        ),
+    ):
+        response = _run(
+            start_run(
+                session,
+                principal=_principal(),
+                package_revision_id=REVISION_ID,
+                request=StartRunInput(
+                    run_type="full",
+                    parent_run_id=None,
+                    assessment_item_ids=(),
+                ),
+                config=_runtime_config(tmp_path),
+                authority_manifest_id="authority.v2",
+                project_root=ROOT,
+                idempotency_key="idempotency-key-01234567",
+                hmac_key=b"x" * MIN_AUDIT_HMAC_KEY_BYTES,
+                now=NOW,
+            )
+        )
+    assert response.status == 202
+    assert response.payload["run_type"] == "full"
+
+
+def test_start_run_rejects_full_run_type_outside_dev_local(tmp_path: Path) -> None:
     session = AsyncMock()
     package_revision = MagicMock()
     package_revision.package_revision_id = REVISION_ID
@@ -63,6 +116,8 @@ def test_start_run_rejects_full_run_type(tmp_path: Path) -> None:
     result = MagicMock()
     result.one_or_none.return_value = (package_revision, system)
     session.execute = AsyncMock(return_value=result)
+    config = MagicMock()
+    config.runtime_profile = "onprem_production"
 
     with (
         patch(
@@ -81,7 +136,7 @@ def test_start_run_rejects_full_run_type(tmp_path: Path) -> None:
                     parent_run_id=None,
                     assessment_item_ids=(),
                 ),
-                config=_runtime_config(tmp_path),
+                config=config,
                 authority_manifest_id="authority.v2",
                 project_root=ROOT,
                 idempotency_key="idempotency-key-01234567",

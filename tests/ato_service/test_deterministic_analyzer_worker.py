@@ -59,6 +59,7 @@ def test_drain_stops_when_no_job_claimed(mock_process: AsyncMock, tmp_path: Path
                 storage_root=tmp_path,
                 project_root=tmp_path,
                 hmac_key=b"audit-test-key",
+                config=_config(tmp_path),
                 now_factory=lambda: NOW,
             )
 

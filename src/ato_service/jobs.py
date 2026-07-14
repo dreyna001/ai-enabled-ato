@@ -260,6 +260,33 @@ def _transition_run_to_failed(
     run.completed_at = now
 
 
+def transition_run_to_policy_blocked(
+    run: AnalysisRun,
+    *,
+    now: datetime,
+    error_code: str,
+) -> None:
+    """Terminalize an analysis run denied by routing before any model call."""
+    current = AnalysisRunStatus(run.status)
+    if analysis_run_status_is_terminal(current):
+        return
+    condition = (
+        AnalysisRunTransitionCondition.POLICY_DENIED_BEFORE_EXECUTION
+        if current is AnalysisRunStatus.QUEUED
+        else AnalysisRunTransitionCondition.POLICY_DENIED_BEFORE_MODEL
+    )
+    require_analysis_run_transition(
+        current,
+        AnalysisRunStatus.POLICY_BLOCKED,
+        condition=condition,
+    )
+    run.status = AnalysisRunStatus.POLICY_BLOCKED.value
+    run.error_code = error_code
+    run.error_retryable = False
+    run.completed_at = now
+    run.llm_call_count = 0
+
+
 async def claim_next_eligible_job(
     session: AsyncSession,
     *,

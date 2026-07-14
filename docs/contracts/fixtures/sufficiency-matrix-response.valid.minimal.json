@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "rows": [
+    {
+      "assessment_item_id": "FR-1",
+      "model_proposed_status": "insufficient_evidence",
+      "finding_summary": "No usable evidence linked.",
+      "gaps": ["No linked evidence."],
+      "assessor_questions": [],
+      "citations": [],
+      "context_complete": false
+    }
+  ]
+}

@@ -237,8 +237,12 @@
         "src/ato_service/matrix_coverage.py",
         "src/ato_service/deterministic_analyzer.py",
         "src/ato_service/model_assisted_analyzer.py",
+        "src/ato_service/sufficiency_matrix/runner.py",
+        "src/ato_service/sufficiency_matrix/client.py",
         "src/ato_service/deterministic_analyzer_worker.py",
         "src/ato_service/analysis_runs.py",
+        "src/ato_service/run_fingerprints.py",
+        "src/ato_service/jobs.py",
         "migrations/versions/20260711_0006_matrix_rows.py"
       ],
       "test_ids": [
@@ -247,9 +251,19 @@
         "tests/ato_service/test_matrix_coverage.py::test_extra_rows_reports_sorted_extra_ids",
         "tests/ato_service/test_matrix_coverage.py::test_simultaneous_missing_duplicate_and_extra_mismatch",
         "tests/ato_service/test_deterministic_analyzer.py::test_build_matrix_rows_covers_all_profile_items_with_zero_llm_status",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_happy_targeted_run_persists_rows_with_one_llm_call",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_happy_full_run_covers_all_profile_items",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_routing_denial_makes_zero_llm_calls",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_malformed_response_uses_one_repair_then_fails",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_timeout_is_retryable_and_surfaces_model_timeout",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_citation_mismatch_rejects_row",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_missing_duplicate_and_extra_rows_fail_coverage",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_status_ceiling_rejects_supported_without_evidence",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_start_run_replay_returns_same_payload",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_partial_rollback_leaves_no_matrix_rows_on_failure",
         "tests/ato_service/test_analysis_run_api_routes.py::test_get_matrix_returns_envelope"
       ],
-      "verification_type": "Deterministic and targeted sealed-content analyzer workers persist exact-coverage matrix rows; production customer model calls remain blocked by HS-004",
+      "verification_type": "Routed sufficiency_matrix analyzer persists exact-coverage matrix rows for targeted and full runs in dev_local; production customer model calls remain blocked by HS-004",
       "status": "partial"
     },
     {
@@ -259,13 +273,16 @@
       "epic": "EP-01-core-safety",
       "implementation_files": [
         "src/ato_service/citation_validation.py",
-        "src/ato_service/model_assisted_analyzer.py"
+        "src/ato_service/model_assisted_analyzer.py",
+        "src/ato_service/sufficiency_matrix/parse.py",
+        "src/ato_service/sufficiency_matrix/runner.py"
       ],
       "test_ids": [
         "tests/ato_service/test_citation_validation.py::test_validate_evidence_citation_accepts_matching_offsets",
-        "tests/ato_service/test_citation_validation.py::test_validate_evidence_citation_rejects_out_of_bounds_offsets"
+        "tests/ato_service/test_citation_validation.py::test_validate_evidence_citation_rejects_out_of_bounds_offsets",
+        "tests/ato_service/test_model_assisted_analyzer.py::test_citation_mismatch_rejects_row"
       ],
-      "verification_type": "Sealed-source citation hash and offset validation on model-assisted matrix rows; production customer model calls remain blocked by HS-004",
+      "verification_type": "Sealed-source citation hash and offset validation on routed sufficiency_matrix rows; production customer model calls remain blocked by HS-004",
       "status": "partial"
     },
     {

@@ -9,13 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
-from jsonschema.exceptions import ValidationError
 
 from ato_service.idempotency import canonical_json_bytes
 
-_PROFILE_FILENAME = "analysis-profile.valid.fisma-synthetic.json"
 _SCHEMA_RELATIVE_PATH = Path("docs/contracts/analysis-profile.schema.json")
-_FIXTURE_RELATIVE_PATH = Path("docs/contracts/fixtures") / _PROFILE_FILENAME
+_FIXTURES_RELATIVE_DIR = Path("docs/contracts/fixtures")
+_PROFILE_FIXTURE_FILENAMES: dict[str, str] = {
+    "fisma_agency_security": "analysis-profile.valid.fisma-synthetic.json",
+    "fedramp_20x_program": "analysis-profile.valid.fedramp-class-c.json",
+    "fedramp_rev5_transition": "analysis-profile.valid.fedramp-rev5.json",
+}
 _FORMAT_CHECKER = FormatChecker()
 
 
@@ -30,25 +33,45 @@ def _analysis_profile_validator(*, project_root: Path) -> Draft202012Validator:
     return Draft202012Validator(schema, format_checker=_FORMAT_CHECKER)
 
 
+def profile_fixture_path(*, profile_id: str, project_root: Path) -> Path:
+    """Return the pinned fixture path for one supported analysis profile."""
+    filename = _PROFILE_FIXTURE_FILENAMES.get(profile_id)
+    if filename is None:
+        raise AnalysisProfileError(f"unsupported analysis profile id: {profile_id}")
+    return (project_root / _FIXTURES_RELATIVE_DIR / filename).resolve()
+
+
 def default_fisma_synthetic_profile_path(*, project_root: Path) -> Path:
     """Return the pinned FISMA synthetic analysis profile fixture path."""
-    return (project_root / _FIXTURE_RELATIVE_PATH).resolve()
+    return profile_fixture_path(
+        profile_id="fisma_agency_security",
+        project_root=project_root,
+    )
 
 
-def load_pinned_fisma_synthetic_profile(*, project_root: Path) -> dict[str, Any]:
-    """Load and schema-validate the pinned FISMA synthetic analysis profile."""
-    profile_path = default_fisma_synthetic_profile_path(project_root=project_root)
+def load_pinned_profile(*, profile_id: str, project_root: Path) -> dict[str, Any]:
+    """Load and schema-validate one pinned analysis profile fixture."""
+    profile_path = profile_fixture_path(profile_id=profile_id, project_root=project_root)
     try:
         document = json.loads(profile_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise AnalysisProfileError("pinned analysis profile is unreadable") from exc
 
+    if document.get("profile_id") != profile_id:
+        raise AnalysisProfileError("pinned analysis profile id does not match request")
+
     validator = _analysis_profile_validator(project_root=project_root)
     error = next(validator.iter_errors(document), None)
     if error is not None:
-        raise AnalysisProfileError(f"pinned analysis profile failed schema validation: {error.message}")
-
+        raise AnalysisProfileError(
+            f"pinned analysis profile failed schema validation: {error.message}"
+        )
     return document
+
+
+def load_pinned_fisma_synthetic_profile(*, project_root: Path) -> dict[str, Any]:
+    """Load and schema-validate the pinned FISMA synthetic analysis profile."""
+    return load_pinned_profile(profile_id="fisma_agency_security", project_root=project_root)
 
 
 def analysis_profile_sha256(profile: dict[str, Any]) -> str:

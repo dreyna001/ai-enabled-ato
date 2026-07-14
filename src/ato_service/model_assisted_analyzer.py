@@ -1,4 +1,4 @@
-"""Model-assisted analysis using sealed package content (dev_local mock route)."""
+"""Model-assisted analysis using sealed package content and routed gateway calls."""
 
 from __future__ import annotations
 
@@ -9,52 +9,49 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ato_service.analysis_profile import (
-    assessment_item_type_for_id,
-    expected_assessment_item_ids,
-    load_pinned_fisma_synthetic_profile,
-)
+from ato_service.analysis_profile import analysis_profile_sha256
 from ato_service.artifact_manifests import (
     ArtifactManifestCommitError,
     write_artifact_manifest,
     write_run_output_file,
 )
 from ato_service.audit import append_audit_event
-from ato_service.citation_validation import (
-    CitationValidationError,
-    build_evidence_citation,
-    build_sealed_citable_sources,
-    validate_citations,
-)
 from ato_service.db.models import AnalysisRun, MatrixRow, PackageRevision, RunStep, SealedPackageContent
 from ato_service.domain_mapping import format_uuid
 from ato_service.idempotency import canonical_json_bytes
-from ato_service.jobs import ClaimedJob, complete_job
+from ato_service.jobs import ClaimedJob, complete_job, transition_run_to_policy_blocked
 from ato_service.lifecycle_transitions import (
     AnalysisRunStatus,
     AnalysisRunTransitionCondition,
     require_analysis_run_transition,
 )
-from ato_service.matrix_coverage import require_exact_matrix_coverage
-from ato_service.matrix_row_persistence import (
-    StatusCeilingViolatedError,
-    apply_ceilings_to_matrix_row_payloads,
-)
-from ato_service.model_routing import EndpointProfile
+from ato_service.model_gateway import ModelCallRequest, ModelCapability
+from ato_service.model_routing import DataOrigin, Sensitivity
+from ato_service.normalization_service import resolve_text_model_endpoint_profile
 from ato_service.runtime_config import RuntimeConfig
+from ato_service.sufficiency_matrix.constants import RESPONSE_SCHEMA_ID
+from ato_service.sufficiency_matrix.profile_catalog import load_profile_catalog
+from ato_service.sufficiency_matrix.prompt import prompt_contract_metadata
+from ato_service.sufficiency_matrix.runner import run_sufficiency_matrix
+from ato_service.sufficiency_matrix.types import SufficiencyMatrixResult
+from ato_service.text_llm import TextModelClient, text_model_is_configured
 
 TARGETED_STEP_KEY = "sufficiency_matrix"
 TARGETED_STEP_TYPE = "sufficiency_matrix"
-TARGETED_SCHEMA_ID = "ato.matrix-row.v1"
-TARGETED_PROMPT_VERSION = "sealed-mock-1"
-TARGETED_ENDPOINT_HOST = "mock.local"
-TARGETED_MODEL_NAME = "mock-assisted"
-TARGETED_PROVIDER_REQUEST_ID = "mock-assisted"
 MATRIX_OUTPUT_PATH = "machine/matrix.json"
 WORKER_ACTOR_ID = "model-assisted-analyzer-worker"
+_ROUTING_ERROR_CODES = frozenset(
+    {
+        "model_routing_denied",
+        "classified_data_unsupported",
+        "model_policy_not_approved",
+        "prohibited_model_action",
+    }
+)
 
 
 class ModelAssistedAnalyzerRuntimeError(Exception):
@@ -68,10 +65,12 @@ class ModelAssistedAnalysisProcessingError(Exception):
         *,
         error_code: str,
         retryable: bool = False,
+        policy_blocked: bool = False,
     ) -> None:
         self.message = message
         self.error_code = error_code
         self.retryable = retryable
+        self.policy_blocked = policy_blocked
         super().__init__(message)
 
 
@@ -91,12 +90,6 @@ def require_model_assisted_analyzer_runtime(config: RuntimeConfig) -> None:
         )
 
 
-def _prompt_sha256() -> str:
-    return hashlib.sha256(
-        canonical_json_bytes({"step": TARGETED_STEP_KEY, "version": TARGETED_PROMPT_VERSION})
-    ).hexdigest()
-
-
 def _fact_bundle_sha256(*, package_revision_id: uuid.UUID, content_sha256: str) -> str:
     return hashlib.sha256(
         canonical_json_bytes(
@@ -112,70 +105,176 @@ def _response_sha256(*, rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(canonical_json_bytes({"rows": rows})).hexdigest()
 
 
-def _build_matrix_rows_from_sealed_content(
+def _resolve_endpoint_host(config: RuntimeConfig) -> str:
+    document = config.document
+    if not text_model_is_configured(document):
+        return "mock.local"
+    endpoint_url = document.get("TEXT_MODEL_ENDPOINT_URL")
+    if isinstance(endpoint_url, str) and endpoint_url.strip():
+        parsed = urlparse(endpoint_url.strip())
+        if parsed.hostname:
+            return parsed.hostname
+    if config.text_model_provider == "aws_bedrock":
+        region = document.get("AWS_REGION")
+        if isinstance(region, str) and region.strip():
+            return f"bedrock.{region.strip()}.amazonaws.com"
+    return "model.local"
+
+
+def _positive_int(document: dict[str, Any], key: str, *, default: int) -> int:
+    raw = document.get(key, default)
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ModelAssistedAnalysisProcessingError(
+            f"{key} must be a positive integer",
+            error_code="reconciliation_required",
+        )
+    return raw
+
+
+def build_model_call_request(
     *,
-    run_id: uuid.UUID,
-    profile: dict[str, Any],
-    assessment_item_ids: tuple[str, ...],
-    sealed: SealedPackageContent,
-) -> list[dict[str, Any]]:
-    sources = build_sealed_citable_sources(
-        sealed_document=sealed.document,
-        field_provenance=sealed.field_provenance,
+    package_revision: PackageRevision,
+    config: RuntimeConfig,
+    current_llm_call_count: int = 0,
+) -> ModelCallRequest:
+    document = config.document
+    max_llm_calls = _positive_int(
+        document,
+        "MAX_MODEL_CALLS_PER_RUN",
+        default=120,
     )
-    rows: list[dict[str, Any]] = []
-    for assessment_item_id in assessment_item_ids:
-        matrix_row_id = uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            f"{format_uuid(run_id)}:{assessment_item_id}",
+    return ModelCallRequest(
+        capability=ModelCapability.SUFFICIENCY_MATRIX,
+        data_origin=DataOrigin(package_revision.data_origin),
+        sensitivity=Sensitivity(package_revision.sensitivity),
+        endpoint_profile=resolve_text_model_endpoint_profile(config),
+        endpoint_policy_approved=document.get("TEXT_MODEL_ENDPOINT_POLICY_APPROVED") is True,
+        cui_boundary_approved=document.get("CUI_MODEL_BOUNDARY_APPROVED") is True,
+        vision_model_enabled=config.vision_model_enabled,
+        current_llm_call_count=current_llm_call_count,
+        max_llm_calls=max_llm_calls,
+    )
+
+
+def _resolved_assessment_item_ids(analysis_run: AnalysisRun) -> tuple[str, ...]:
+    if analysis_run.assessment_item_ids:
+        return tuple(str(item) for item in analysis_run.assessment_item_ids)
+    raise ModelAssistedAnalysisProcessingError(
+        "analysis run is missing assessment item ids",
+        error_code="reconciliation_required",
+    )
+
+
+def _model_requested(config: RuntimeConfig) -> str:
+    document = config.document
+    if not text_model_is_configured(document):
+        return "mock-assisted"
+    model_name = document.get("TEXT_MODEL_NAME")
+    if isinstance(model_name, str) and model_name.strip():
+        return model_name.strip()
+    return "mock-assisted"
+
+
+def _runtime_limits(config: RuntimeConfig) -> tuple[int, int, float]:
+    document = config.document
+    context_tokens = _positive_int(document, "TEXT_MODEL_CONTEXT_TOKENS", default=8192)
+    max_output_tokens = _positive_int(
+        document,
+        "TEXT_MODEL_MAX_OUTPUT_TOKENS",
+        default=1024,
+    )
+    timeout_seconds = float(
+        _positive_int(document, "TEXT_MODEL_TIMEOUT_SECONDS", default=30)
+    )
+    return context_tokens, max_output_tokens, timeout_seconds
+
+
+async def _execute_sufficiency_matrix(
+    *,
+    analysis_run: AnalysisRun,
+    package_revision: PackageRevision,
+    sealed: SealedPackageContent,
+    config: RuntimeConfig,
+    project_root: Path,
+    text_client: TextModelClient | None,
+) -> SufficiencyMatrixResult:
+    profile = load_profile_catalog(
+        profile_id=package_revision.profile_id,
+        project_root=project_root,
+    )
+    if analysis_run.analysis_profile_sha256 != analysis_profile_sha256(profile):
+        raise ModelAssistedAnalysisProcessingError(
+            "analysis profile digest does not match pinned catalog",
+            error_code="artifact_digest_mismatch",
         )
-        control = (sealed.document.get("security_controls") or {}).get(assessment_item_id)
-        citations: list[dict[str, Any]] = []
-        status = "insufficient_evidence"
-        summary = (
-            f"No usable sealed evidence linked for {assessment_item_id} in the "
-            "package snapshot."
+    assessment_item_ids = _resolved_assessment_item_ids(analysis_run)
+    context_tokens, max_output_tokens, _timeout_seconds = _runtime_limits(config)
+    return await run_sufficiency_matrix(
+        run_id=analysis_run.run_id,
+        profile=profile,
+        assessment_item_ids=assessment_item_ids,
+        sealed=sealed,
+        model_request=build_model_call_request(
+            package_revision=package_revision,
+            config=config,
+        ),
+        context_tokens=context_tokens,
+        max_output_tokens=max_output_tokens,
+        model_requested=_model_requested(config),
+        text_client=text_client,
+    )
+
+
+def _map_runner_failure(
+    result: SufficiencyMatrixResult,
+) -> ModelAssistedAnalysisProcessingError:
+    if result.validation_outcome == "rejected_routing" and result.error_code in _ROUTING_ERROR_CODES:
+        return ModelAssistedAnalysisProcessingError(
+            result.error_code or "model_routing_denied",
+            error_code=result.error_code or "model_routing_denied",
+            policy_blocked=True,
         )
-        if isinstance(control, dict):
-            statement = control.get("implementation_statement")
-            if isinstance(statement, str) and statement.strip():
-                source = sources.get(assessment_item_id)
-                if source is not None and len(statement) >= 8:
-                    citations = [
-                        build_evidence_citation(
-                            source=source,
-                            start_offset=0,
-                            end_offset=min(len(statement), 120),
-                        )
-                    ]
-                    validate_citations(citations=citations, sources=sources)
-                    status = "supported"
-                    summary = (
-                        f"Sealed implementation statement supports {assessment_item_id} "
-                        "within the cited byte range."
-                    )
-        rows.append(
-            {
-                "schema_version": "2.0.0",
-                "object_type": "matrix_row",
-                "matrix_row_id": format_uuid(matrix_row_id),
-                "assessment_item_type": assessment_item_type_for_id(
-                    profile,
-                    assessment_item_id,
-                ),
-                "assessment_item_id": assessment_item_id,
-                "model_proposed_status": status,
-                "system_status": status,
-                "finding_summary": summary,
-                "gaps": [] if status == "supported" else ["No usable evidence linked."],
-                "assessor_questions": [],
-                "citations": citations,
-                "context_complete": status == "supported",
-                "producing_run_id": format_uuid(run_id),
-                "source_run_id": format_uuid(run_id),
-            }
+    if result.validation_outcome == "model_timeout":
+        return ModelAssistedAnalysisProcessingError(
+            "model request timed out",
+            error_code="model_timeout",
+            retryable=True,
         )
-    return rows
+    if result.validation_outcome == "model_call_failed":
+        return ModelAssistedAnalysisProcessingError(
+            "model request failed",
+            error_code=result.error_code or "model_call_failed",
+            retryable=result.retryable,
+        )
+    if result.validation_outcome == "rejected_citation":
+        return ModelAssistedAnalysisProcessingError(
+            "citation validation failed",
+            error_code="citation_validation_failed",
+        )
+    if result.validation_outcome == "rejected_status_ceiling":
+        return ModelAssistedAnalysisProcessingError(
+            "status ceiling violated",
+            error_code="status_ceiling_violated",
+        )
+    if result.validation_outcome == "rejected_coverage":
+        return ModelAssistedAnalysisProcessingError(
+            "matrix coverage invalid",
+            error_code="matrix_coverage_invalid",
+        )
+    if result.validation_outcome in {"repair_exhausted", "rejected_parse"}:
+        return ModelAssistedAnalysisProcessingError(
+            "model response schema invalid",
+            error_code="model_response_schema_invalid",
+        )
+    if result.validation_outcome == "rejected_context_limit":
+        return ModelAssistedAnalysisProcessingError(
+            "context limit exceeded",
+            error_code="context_limit_exceeded",
+        )
+    return ModelAssistedAnalysisProcessingError(
+        result.error_code or "model_response_schema_invalid",
+        error_code=result.error_code or "model_response_schema_invalid",
+    )
 
 
 async def process_next_model_assisted_analysis(
@@ -187,24 +286,21 @@ async def process_next_model_assisted_analysis(
     sealed: SealedPackageContent,
     storage_root: Path,
     project_root: Path,
+    config: RuntimeConfig,
     hmac_key: bytes,
     now: datetime,
+    text_client: TextModelClient | None = None,
 ) -> ModelAssistedAnalysisResult:
-    """Execute one targeted matrix step using sealed package bytes and mock routing."""
+    """Execute one sufficiency_matrix step using sealed content and routed model calls."""
     if claimed.job.step_key != TARGETED_STEP_KEY:
         raise ModelAssistedAnalysisProcessingError(
             "unexpected job step_key",
             error_code="reconciliation_required",
         )
-    if analysis_run.run_type != "targeted":
+    if analysis_run.run_type not in {"targeted", "full"}:
         raise ModelAssistedAnalysisProcessingError(
-            "model-assisted worker only supports targeted runs",
+            "model-assisted worker only supports targeted and full runs",
             error_code="prohibited_model_action",
-        )
-    if package_revision.data_origin != "synthetic":
-        raise ModelAssistedAnalysisProcessingError(
-            "model-assisted worker requires synthetic package revisions",
-            error_code="model_routing_denied",
         )
     if package_revision.status != "ready":
         raise ModelAssistedAnalysisProcessingError(
@@ -217,36 +313,48 @@ async def process_next_model_assisted_analysis(
             error_code="artifact_digest_mismatch",
         )
 
-    profile = load_pinned_fisma_synthetic_profile(project_root=project_root)
-    expected_ids = expected_assessment_item_ids(profile)
-    try:
-        row_payloads = _build_matrix_rows_from_sealed_content(
-            run_id=analysis_run.run_id,
-            profile=profile,
-            assessment_item_ids=expected_ids,
-            sealed=sealed,
-        )
-    except CitationValidationError as exc:
-        raise ModelAssistedAnalysisProcessingError(
-            exc.message,
-            error_code=exc.error_code,
-        ) from exc
-
-    require_exact_matrix_coverage(
-        expected_ids,
-        [row["assessment_item_id"] for row in row_payloads],
+    result = await _execute_sufficiency_matrix(
+        analysis_run=analysis_run,
+        package_revision=package_revision,
+        sealed=sealed,
+        config=config,
+        project_root=project_root,
+        text_client=text_client,
     )
-    try:
-        row_payloads = apply_ceilings_to_matrix_row_payloads(
-            row_payloads,
-            status_policy=profile.get("status_policy"),
-        )
-    except StatusCeilingViolatedError as exc:
-        raise ModelAssistedAnalysisProcessingError(
-            str(exc),
-            error_code=exc.error_code,
-        ) from exc
+    if result.validation_outcome != "accepted":
+        exc = _map_runner_failure(result)
+        if exc.policy_blocked:
+            transition_run_to_policy_blocked(
+                analysis_run,
+                now=now,
+                error_code=exc.error_code,
+            )
+            await complete_job(
+                session,
+                job_id=claimed.job.job_id,
+                lease_owner=claimed.attempt.lease_owner,
+                now=now,
+            )
+            await append_audit_event(
+                session,
+                hmac_key=hmac_key,
+                actor_type="service",
+                actor_id=WORKER_ACTOR_ID,
+                action="analysis_run.policy_blocked",
+                object_type="analysis_run",
+                object_id=format_uuid(analysis_run.run_id),
+                outcome="denied",
+                reason_code=exc.error_code,
+                metadata={
+                    "run_type": analysis_run.run_type,
+                    "llm_call_count": 0,
+                },
+                occurred_at=now,
+            )
+            raise exc
+        raise exc
 
+    row_payloads = list(result.row_payloads)
     matrix_bytes = json.dumps(
         row_payloads,
         ensure_ascii=False,
@@ -279,34 +387,41 @@ async def process_next_model_assisted_analysis(
             )
         )
 
-    response_sha256 = _response_sha256(rows=row_payloads)
+    contract = prompt_contract_metadata()
+    document = config.document
+    context_tokens, max_output_tokens, timeout_seconds = _runtime_limits(config)
+    endpoint_profile = resolve_text_model_endpoint_profile(config)
+    last_call = result.model_calls[-1] if result.model_calls else None
     session.add(
         RunStep(
             step_id=uuid.uuid4(),
             run_id=analysis_run.run_id,
             step_key=TARGETED_STEP_KEY,
             step_type=TARGETED_STEP_TYPE,
-            schema_id=TARGETED_SCHEMA_ID,
-            prompt_version=TARGETED_PROMPT_VERSION,
-            prompt_sha256=_prompt_sha256(),
-            fact_bundle_sha256=_fact_bundle_sha256(
+            schema_id=RESPONSE_SCHEMA_ID,
+            prompt_version=contract["prompt_version"],
+            prompt_sha256=contract["prompt_sha256"],
+            fact_bundle_sha256=result.fact_bundle_sha256
+            or _fact_bundle_sha256(
                 package_revision_id=package_revision.package_revision_id,
                 content_sha256=sealed.content_sha256,
             ),
-            endpoint_profile=EndpointProfile.MOCK.value,
-            endpoint_host=TARGETED_ENDPOINT_HOST,
-            model_requested=TARGETED_MODEL_NAME,
-            model_reported=TARGETED_MODEL_NAME,
-            temperature=0,
-            input_limit=1,
-            output_limit=1,
-            timeout_seconds=1,
+            endpoint_profile=endpoint_profile.value,
+            endpoint_host=_resolve_endpoint_host(config),
+            model_requested=_model_requested(config),
+            model_reported=last_call.model_reported if last_call else _model_requested(config),
+            temperature=float(document.get("TEXT_MODEL_TEMPERATURE", 0.0)),
+            input_limit=context_tokens,
+            output_limit=max_output_tokens,
+            timeout_seconds=int(timeout_seconds),
             attempt=claimed.attempt.attempt_number,
-            provider_request_id=TARGETED_PROVIDER_REQUEST_ID,
-            input_tokens=0,
-            output_tokens=0,
-            latency_ms=0,
-            response_sha256=response_sha256,
+            provider_request_id=(
+                last_call.provider_request_id if last_call else f"deterministic-{analysis_run.run_id}"
+            ),
+            input_tokens=last_call.input_tokens if last_call else 0,
+            output_tokens=last_call.output_tokens if last_call else 0,
+            latency_ms=last_call.latency_ms if last_call and last_call.latency_ms is not None else 0,
+            response_sha256=result.response_sha256 or _response_sha256(rows=row_payloads),
             validation_outcome="passed",
             completed_at=now,
         )
@@ -339,7 +454,7 @@ async def process_next_model_assisted_analysis(
     analysis_run.status = AnalysisRunStatus.SUCCEEDED.value
     analysis_run.completed_at = now
     analysis_run.artifact_manifest_sha256 = stored_manifest.sha256
-    analysis_run.llm_call_count = 1
+    analysis_run.llm_call_count = result.llm_call_count
     analysis_run.error_code = None
     analysis_run.error_retryable = None
 
@@ -364,7 +479,7 @@ async def process_next_model_assisted_analysis(
             "run_type": analysis_run.run_type,
             "matrix_row_count": len(row_payloads),
             "artifact_manifest_sha256": stored_manifest.sha256,
-            "llm_call_count": 1,
+            "llm_call_count": result.llm_call_count,
             "sealed_content_sha256": sealed.content_sha256,
         },
         occurred_at=now,
@@ -375,5 +490,5 @@ async def process_next_model_assisted_analysis(
         package_revision_id=package_revision.package_revision_id,
         matrix_row_count=len(row_payloads),
         artifact_manifest_sha256=stored_manifest.sha256,
-        llm_call_count=1,
+        llm_call_count=result.llm_call_count,
     )

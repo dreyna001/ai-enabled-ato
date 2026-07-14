@@ -117,6 +117,7 @@ def test_deterministic_analysis_run_completes_with_exact_matrix(tmp_path: Path) 
                         hmac_key=b"x" * MIN_AUDIT_HMAC_KEY_BYTES,
                         lease_owner="integration-worker",
                         now=now,
+                        config=config,
                     )
                     assert completed is not None
                     await session.flush()
