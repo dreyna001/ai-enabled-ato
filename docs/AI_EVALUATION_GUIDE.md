@@ -10,7 +10,7 @@ This guide defines the gold labels, fixtures, adjudication, metrics, and immutab
 
 It covers:
 
-- `sufficiency_matrix` status and citation evaluation;
+- `sufficiency_matrix` status and citation evaluation against sealed package bytes and pinned profile catalogs;
 - `normalize_proposal` field evaluation;
 - prompt-injection and prohibited-claim evaluation for every model step in qualification scope; and
 - deterministic validation of model output before scoring.

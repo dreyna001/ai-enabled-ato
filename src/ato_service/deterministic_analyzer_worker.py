@@ -63,6 +63,7 @@ async def process_next_deterministic_analysis_job(
     now: datetime,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    config: RuntimeConfig | None = None,
 ) -> DeterministicAnalysisResult | None:
     """Claim and execute one deterministic analysis job when eligible."""
     claimed = await claim_next_eligible_job(
@@ -115,8 +116,11 @@ async def process_next_deterministic_analysis_job(
         )
         return None
 
+    if config is None:
+        raise ValueError("config is required for model-assisted analysis runs")
+
     try:
-        if analysis_run.run_type == "targeted":
+        if analysis_run.run_type in {"targeted", "full"}:
             sealed_result = await session.execute(
                 select(SealedPackageContent).where(
                     SealedPackageContent.package_revision_id
@@ -126,7 +130,7 @@ async def process_next_deterministic_analysis_job(
             sealed = sealed_result.scalar_one_or_none()
             if sealed is None:
                 raise ModelAssistedAnalysisProcessingError(
-                    "sealed package content is required for targeted analysis",
+                    "sealed package content is required for model-assisted analysis",
                     error_code="analysis_not_eligible",
                 )
             return await process_next_model_assisted_analysis(
@@ -137,6 +141,7 @@ async def process_next_deterministic_analysis_job(
                 sealed=sealed,
                 storage_root=storage_root,
                 project_root=project_root,
+                config=config,
                 hmac_key=hmac_key,
                 now=now,
             )
@@ -169,6 +174,7 @@ async def drain_deterministic_analysis(
     storage_root: Path,
     project_root: Path,
     hmac_key: bytes,
+    config: RuntimeConfig,
     lease_owner: str = DEFAULT_LEASE_OWNER,
     now_factory: UtcNowFactory | None = None,
 ) -> tuple[DeterministicAnalysisResult, ...]:
@@ -184,6 +190,7 @@ async def drain_deterministic_analysis(
                 hmac_key=hmac_key,
                 lease_owner=lease_owner,
                 now=current_time(),
+                config=config,
             )
         if result is None:
             return tuple(processed)
@@ -215,6 +222,7 @@ async def run_deterministic_analyzer_worker(
             storage_root=config.storage_data_path,
             project_root=resolved_project_root,
             hmac_key=resolved_audit_hmac_key,
+            config=config,
             now_factory=now_factory,
         )
     finally:
@@ -268,6 +276,7 @@ async def run_deterministic_analyzer_worker_loop(
                     now=current_time(),
                     max_attempts=max_attempts,
                     lease_seconds=lease_seconds,
+                    config=config,
                 )
             if not stop_requested():
                 await asyncio.sleep(poll_interval_seconds)
@@ -346,6 +355,7 @@ async def process_next_deterministic_job(
         now=now,
         max_attempts=max_attempts,
         lease_seconds=lease_seconds,
+        config=config,
     )
 
 

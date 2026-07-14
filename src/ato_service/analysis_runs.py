@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ato_service.analysis_profile import (
     analysis_profile_sha256,
     expected_assessment_item_ids,
-    load_pinned_fisma_synthetic_profile,
+    load_pinned_profile,
 )
 from ato_service.audit import append_audit_event
 from ato_service.auth_context import (
@@ -268,9 +268,9 @@ def _assert_deterministic_run_gate(
         raise AnalysisRunPolicyError(error_code="model_routing_denied")
     if package_revision.status != "ready":
         raise AnalysisRunPolicyError(error_code="analysis_not_eligible")
-    if run_type not in {"deterministic_only", "targeted"}:
+    if run_type not in {"deterministic_only", "targeted", "full"}:
         raise AnalysisRunPolicyError(error_code="prohibited_model_action")
-    if run_type == "targeted" and package_revision.package_content_sha256 is None:
+    if run_type in {"targeted", "full"} and package_revision.package_content_sha256 is None:
         raise AnalysisRunPolicyError(error_code="analysis_not_eligible")
 
 
@@ -355,7 +355,10 @@ async def start_run(
     if int(active_run_count or 0) >= int(max_concurrent_runs):
         raise ConcurrentRunLimitExceededError()
 
-    profile = load_pinned_fisma_synthetic_profile(project_root=project_root)
+    profile = load_pinned_profile(
+        profile_id=package_revision.profile_id,
+        project_root=project_root,
+    )
     if package_revision.profile_id != profile["profile_id"]:
         raise AnalysisRunValidationError(
             "pinned analysis profile does not match package revision profile",

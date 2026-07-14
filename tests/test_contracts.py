@@ -53,6 +53,7 @@ FIXTURE_SCHEMA_PATHS = {
         "extracted-segment",
         "normalize-proposal-response",
         "normalize-proposal-fact-bundle",
+        "sufficiency-matrix-response",
     )
 }
 FIXTURE_NAME = re.compile(

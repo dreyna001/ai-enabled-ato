@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "rows": [
+    {
+      "assessment_item_id": "FR-1",
+      "model_proposed_status": "supported",
+      "finding_summary": "Sealed implementation statement supports FR-1 within the cited byte range.",
+      "gaps": [],
+      "assessor_questions": [],
+      "citations": [
+        {
+          "source_kind": "evidence",
+          "source_id": "33333333-3333-4333-8333-333333333333",
+          "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "chunk_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "start_offset": 0,
+          "end_offset": 52,
+          "page_or_section": null
+        }
+      ],
+      "context_complete": true
+    }
+  ]
+}

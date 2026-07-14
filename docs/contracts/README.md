@@ -17,6 +17,7 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `extracted-segment.schema.json` | Pure extractor outcome and segment contract | Published Component A Diff 2 contract |
 | `normalize-proposal-response.schema.json` | Closed structured output for `normalize_proposal` v1 | Published Component A Diff 4 contract |
 | `normalize-proposal-fact-bundle.schema.json` | Canonical `FactBundle.prompt_payload` user prompt for `normalize_proposal` v1 | Published Component A Diff 4 contract |
+| `sufficiency-matrix-response.schema.json` | Closed structured output for `sufficiency_matrix` v1 | Published Phase 3 Workstream A contract |
 | `openapi.json` | OpenAPI 3.1 API surface and shared HTTP contracts | Published P-1 contract (`info.version` 1.0.0) |
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
@@ -53,7 +54,7 @@ OpenAPI-linked contracts without adding a runtime dependency.
 Contract fixtures live in `docs/contracts/fixtures` and use
 `<contract>.<outcome>.<case>.json`. Covered contracts are `domain`,
 `package-draft-document`, `extracted-segment`, `normalize-proposal-response`,
-`normalize-proposal-fact-bundle`, `analysis-profile`, `content-manifest`,
+`normalize-proposal-fact-bundle`, `sufficiency-matrix-response`, `analysis-profile`, `content-manifest`,
 `artifact-manifest`, `export-manifest`, `preflight`, and `runtime-config`; each
 has at least one valid and one invalid fixture.
 
