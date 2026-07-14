@@ -44,6 +44,10 @@ def test_portal_nginx_proxies_api_and_serves_spa() -> None:
     assert "try_files $uri $uri/ /index.html;" in text
     assert "/opt/ato-analyzer/portal/dist" in text
     assert "Content-Security-Policy" in text
+    assert "server_tokens off" in text
+    assert "Inactive template" in text
+    assert "proxy_set_header X-Remote-User" in text
+    assert "X-Download-Options" in text
 
 
 def test_intake_worker_systemd_unit_runs_long_lived_process() -> None:
@@ -51,7 +55,9 @@ def test_intake_worker_systemd_unit_runs_long_lived_process() -> None:
     assert "ato-intake-worker" in text
     assert "Type=simple" in text
     assert "Restart=on-failure" in text
+    assert "inactive until operator enablement" in text
     assert "ato-synthetic-intake-worker" not in text
+    assert "User=ato" in text
 
 
 def test_portal_runtime_example_declares_oidc_and_portal_origin() -> None:

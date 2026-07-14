@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 SYSTEMD_UNIT = ROOT / "deployment" / "systemd" / "ato-api.service"
+INTAKE_WORKER_UNIT = ROOT / "deployment" / "systemd" / "ato-intake-worker.service"
 ANALYZER_WORKER_UNIT = ROOT / "deployment" / "systemd" / "ato-analyzer-worker.service"
 WSL_SYSTEMD_UNIT = ROOT / "deployment" / "systemd" / "ato-api.wsl-local.service"
 SYNTHETIC_WORKER_UNIT = (
@@ -21,7 +22,15 @@ SYNTHETIC_WORKER_TIMER = (
     ROOT / "deployment" / "systemd" / "ato-synthetic-intake-worker.timer"
 )
 NGINX_CONF = ROOT / "deployment" / "nginx" / "ato-api.conf"
+PORTAL_NGINX_CONF = ROOT / "deployment" / "nginx" / "ato-portal.conf"
 INSTALL_SCRIPT = ROOT / "scripts" / "install.sh"
+DRAIN_SCRIPT = ROOT / "scripts" / "drain_workers.sh"
+UPGRADE_SCRIPT = ROOT / "scripts" / "upgrade.sh"
+ROLLBACK_SCRIPT = ROOT / "scripts" / "rollback.sh"
+BACKUP_CONTRACT_SCRIPT = ROOT / "scripts" / "verify_backup_contract.sh"
+PRESTAGE_SCRIPT = ROOT / "scripts" / "prestage_airgap_deps.sh"
+ONBOARDING_DOC = ROOT / "docs" / "CUSTOMER_ONBOARDING.md"
+AIRGAP_DOC = ROOT / "docs" / "AIRGAP_PRESTAGE.md"
 WSL_DEPLOY_SCRIPT = ROOT / "scripts" / "wsl-local-deploy.sh"
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke_service_chain.sh"
 WSL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_local.json"
@@ -47,6 +56,8 @@ DATABASE_DSN_IDENTIFIER = "database-dsn"
 AUDIT_HMAC_CREDENTIAL_PATH = f"{CONFIG_DIR}/credentials/audit-hmac-key"
 AUDIT_HMAC_IDENTIFIER = "audit-hmac-key"
 NGINX_EXAMPLE_DEST = "/etc/nginx/conf.d/ato-api.conf.example"
+PORTAL_NGINX_EXAMPLE_DEST = "/etc/nginx/conf.d/ato-portal.conf.example"
+NGINX_API_EXAMPLE_DEST = NGINX_EXAMPLE_DEST
 
 FORBIDDEN_SECRET_PATTERNS = (
     re.compile(r"postgresql://", re.IGNORECASE),
@@ -102,6 +113,16 @@ def deployment_readme_text() -> str:
         WSL_RUNTIME_CONFIG,
         WSL_PORTAL_RUNTIME_CONFIG,
         WSL_PORTAL_ENABLE_SCRIPT,
+        INTAKE_WORKER_UNIT,
+        ANALYZER_WORKER_UNIT,
+        PORTAL_NGINX_CONF,
+        DRAIN_SCRIPT,
+        UPGRADE_SCRIPT,
+        ROLLBACK_SCRIPT,
+        BACKUP_CONTRACT_SCRIPT,
+        PRESTAGE_SCRIPT,
+        ONBOARDING_DOC,
+        AIRGAP_DOC,
     ],
 )
 def test_deployment_assets_exist(path: Path) -> None:
@@ -132,7 +153,17 @@ def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 @pytest.mark.parametrize(
     "script",
-    [INSTALL_SCRIPT, SMOKE_SCRIPT, WSL_DEPLOY_SCRIPT, WSL_PORTAL_ENABLE_SCRIPT],
+    [
+        INSTALL_SCRIPT,
+        SMOKE_SCRIPT,
+        WSL_DEPLOY_SCRIPT,
+        WSL_PORTAL_ENABLE_SCRIPT,
+        DRAIN_SCRIPT,
+        UPGRADE_SCRIPT,
+        ROLLBACK_SCRIPT,
+        BACKUP_CONTRACT_SCRIPT,
+        PRESTAGE_SCRIPT,
+    ],
 )
 def test_shell_scripts_pass_bash_syntax_check(script: Path) -> None:
     script_text = _read(script).replace("\r\n", "\n").replace("\r", "\n")
@@ -369,6 +400,19 @@ def test_nginx_template_sets_security_headers(nginx_text: str) -> None:
     assert "X-Frame-Options" in nginx_text
     assert "Referrer-Policy" in nginx_text
     assert "Content-Security-Policy" in nginx_text
+    assert "Permissions-Policy" in nginx_text
+    assert "server_tokens off" in nginx_text
+
+
+def test_nginx_templates_strip_identity_headers() -> None:
+    for path in (NGINX_CONF, PORTAL_NGINX_CONF):
+        text = _read(path)
+        for header in (
+            "proxy_set_header X-Remote-User",
+            "proxy_set_header Remote-User",
+            "proxy_hide_header X-Forwarded-User",
+        ):
+            assert header in text, f"{path.name} missing identity stripping: {header}"
 
 
 def test_install_script_is_idempotent_and_explicit_about_side_effects(
@@ -391,7 +435,13 @@ def test_install_script_is_idempotent_and_explicit_about_side_effects(
     assert "database-dsn" in install_text
     assert "deployment/systemd/" in install_text
     assert "ato-api.service" in install_text
-    assert "deployment/nginx/ato-api.conf" in install_text
+    assert "ato-intake-worker.service" in install_text
+    assert "ato-analyzer-worker.service" in install_text
+    assert "install_portal_bundle" in install_text
+    assert "ato-api.conf" in install_text
+    assert "ato-portal.conf" in install_text
+    assert NGINX_API_EXAMPLE_DEST in install_text or NGINX_EXAMPLE_DEST in install_text
+    assert "systemctl disable" in install_text
 
 
 def test_install_script_does_not_auto_start_migrate_or_smoke_by_default(
@@ -511,9 +561,11 @@ def test_install_script_rejects_symlink_or_non_regular_destination_files(
 def test_install_script_installs_nginx_example_not_active_conf(
     install_text: str,
 ) -> None:
-    assert NGINX_EXAMPLE_DEST in install_text
-    assert "install_nginx_example" in install_text
+    assert NGINX_EXAMPLE_DEST in install_text or "/etc/nginx/conf.d/${template_name}.example" in install_text
+    assert PORTAL_NGINX_EXAMPLE_DEST in install_text
+    assert "install_nginx_examples" in install_text
     assert "/etc/nginx/conf.d/ato-api.conf\"" not in install_text
+    assert "/etc/nginx/conf.d/ato-portal.conf\"" not in install_text
 
 
 def test_install_script_runs_migrations_only_with_explicit_flag(
@@ -624,10 +676,64 @@ def test_smoke_script_defaults_to_loopback_api(smoke_text: str) -> None:
 def test_analyzer_worker_systemd_unit_is_hardened_and_inactive_by_default() -> None:
     text = _read(ANALYZER_WORKER_UNIT)
     assert "ato-analyzer-worker" in text
-    assert "NoNewPrivileges=true" in text
+    assert "inactive until operator enablement" in text
+    assert "User=ato" in text
+    assert "Group=ato" in text
+    assert f"ExecStart={INSTALL_DIR}/venv/bin/ato-analyzer-worker" in text
+    assert (
+        f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}"
+        in text
+    )
+    assert (
+        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
+        in text
+    )
+    assert "LoadCredential=oidc" not in text.lower()
+    assert "NoNewPrivileges=yes" in text
     assert "ProtectSystem=strict" in text
-    assert "ReadWritePaths=/var/ato-packages" in text
-    assert "ato-analyzer" in text
+    assert f"ReadWritePaths={DATA_DIR}" in text
+
+
+def test_intake_worker_systemd_unit_wires_consumed_credentials_only() -> None:
+    text = _read(INTAKE_WORKER_UNIT)
+    assert "inactive until operator enablement" in text
+    assert "User=ato" in text
+    assert f"ExecStart={INSTALL_DIR}/venv/bin/ato-intake-worker" in text
+    assert (
+        f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}"
+        in text
+    )
+    assert (
+        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
+        in text
+    )
+    assert "LoadCredential=backup" not in text.lower()
+    assert "Requires=ato-api.service" in text
+    assert f"ReadWritePaths={DATA_DIR}" in text
+
+
+def test_operational_scripts_reference_bounded_flows() -> None:
+    upgrade_text = _read(UPGRADE_SCRIPT)
+    drain_text = _read(DRAIN_SCRIPT)
+    rollback_text = _read(ROLLBACK_SCRIPT)
+    backup_text = _read(BACKUP_CONTRACT_SCRIPT)
+    assert "drain_workers.sh" in upgrade_text
+    assert "verify_backup_contract.sh" in upgrade_text
+    assert "ato-intake-worker.service" in drain_text
+    assert "ato-analyzer-worker.service" in drain_text
+    assert "current-snapshot" in rollback_text
+    assert "HS-008" in backup_text
+    assert "BACKUP_OFF_HOST_ENABLED" in backup_text
+
+
+def test_airgap_and_onboarding_docs_retain_json_credential_contract() -> None:
+    onboarding = _read(ONBOARDING_DOC)
+    airgap = _read(AIRGAP_DOC)
+    assert "runtime-config.json" in onboarding
+    assert "credential" in onboarding.lower()
+    assert "Do not introduce `config.env`" in onboarding
+    assert "credential references" in airgap.lower() or "credential files" in airgap.lower()
+    assert "prestage_airgap_deps.sh" in airgap
 
 
 def test_deployment_readme_matches_current_installer_contract(
@@ -635,11 +741,14 @@ def test_deployment_readme_matches_current_installer_contract(
 ) -> None:
     assert "`ato-intake-worker`" in deployment_readme_text
     assert "scripts/wsl-local-deploy.sh" in deployment_readme_text
-    assert (
-        "the installer does not deploy, configure, start, or credential"
-        in deployment_readme_text
-    )
+    assert "Worker units are installed but left disabled" in deployment_readme_text
     assert NGINX_EXAMPLE_DEST in deployment_readme_text
+    assert PORTAL_NGINX_EXAMPLE_DEST in deployment_readme_text
+    assert "scripts/upgrade.sh" in deployment_readme_text
+    assert "scripts/drain_workers.sh" in deployment_readme_text
+    assert "scripts/verify_backup_contract.sh" in deployment_readme_text
+    assert "CUSTOMER_ONBOARDING.md" in deployment_readme_text
+    assert "AIRGAP_PRESTAGE.md" in deployment_readme_text
     assert "/etc/nginx/conf.d/ato-api.conf\n" not in deployment_readme_text
     assert "location /api/" not in deployment_readme_text
     assert "--migrate --start --smoke" in deployment_readme_text

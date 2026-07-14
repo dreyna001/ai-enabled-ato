@@ -458,18 +458,31 @@
       "epic": "EP-08-onprem-release",
       "implementation_files": [
         "deployment/systemd/ato-api.service",
+        "deployment/systemd/ato-intake-worker.service",
+        "deployment/systemd/ato-analyzer-worker.service",
         "deployment/nginx/ato-api.conf",
+        "deployment/nginx/ato-portal.conf",
         "deployment/README.md",
+        "docs/CUSTOMER_ONBOARDING.md",
+        "docs/AIRGAP_PRESTAGE.md",
         "scripts/install.sh",
+        "scripts/upgrade.sh",
+        "scripts/drain_workers.sh",
+        "scripts/rollback.sh",
+        "scripts/verify_backup_contract.sh",
+        "scripts/prestage_airgap_deps.sh",
         "scripts/smoke_service_chain.sh"
       ],
       "test_ids": [
         "tests/test_deployment_contract.py::test_shell_scripts_pass_bash_syntax_check",
         "tests/test_deployment_contract.py::test_systemd_unit_hardens_service_and_declares_writable_storage",
         "tests/test_deployment_contract.py::test_install_script_does_not_auto_start_migrate_or_smoke_by_default",
-        "tests/test_deployment_contract.py::test_smoke_script_requires_ready_http_200_by_default"
+        "tests/test_deployment_contract.py::test_smoke_script_requires_ready_http_200_by_default",
+        "tests/test_deployment_contract.py::test_operational_scripts_reference_bounded_flows",
+        "tests/test_deployment_contract.py::test_nginx_templates_strip_identity_headers",
+        "tests/test_portal_contract.py::test_portal_nginx_proxies_api_and_serves_spa"
       ],
-      "verification_type": "API-only deployment scaffold and deterministic asset contracts are implemented; live RHEL 9 install, upgrade, rollback, backup, restore, and smoke drills remain required",
+      "verification_type": "Deployment scaffold with API, portal nginx, worker units, bounded upgrade/drain/rollback/backup-contract scripts, and deterministic asset contracts are implemented; live RHEL 9 install, upgrade, rollback, backup, restore, and smoke drills remain required",
       "status": "partial"
     },
     {
@@ -491,7 +504,23 @@
         "src/ato_operator/audit_verify.py",
         "src/ato_operator/checklist.py",
         "deployment/config/runtime-config.onprem.example.json",
-        "docs/CONFIGURATION.md"
+        "docs/CONFIGURATION.md",
+        "docs/OPERATIONS_AND_RECOVERY.md",
+        "docs/CUSTOMER_ONBOARDING.md",
+        "docs/AIRGAP_PRESTAGE.md",
+        "deployment/README.md",
+        "deployment/systemd/ato-api.service",
+        "deployment/systemd/ato-intake-worker.service",
+        "deployment/systemd/ato-analyzer-worker.service",
+        "deployment/nginx/ato-api.conf",
+        "deployment/nginx/ato-portal.conf",
+        "scripts/install.sh",
+        "scripts/upgrade.sh",
+        "scripts/drain_workers.sh",
+        "scripts/rollback.sh",
+        "scripts/verify_backup_contract.sh",
+        "scripts/prestage_airgap_deps.sh",
+        "scripts/smoke_service_chain.sh"
       ],
       "test_ids": [
         "tests/ato_service/test_runtime_config.py::test_load_onprem_config_from_external_path_without_base_dir",
@@ -502,9 +531,22 @@
         "tests/ato_operator/test_cli.py::test_validate_config_rejects_invalid_onprem_fixture",
         "tests/ato_operator/test_cli.py::test_onprem_example_loads_with_process_capabilities",
         "tests/ato_operator/test_cli.py::test_pyproject_declares_ato_operator_entrypoint",
-        "tests/ato_operator/test_preflight.py::test_inactive_capabilities_reduce_required_credentials"
+        "tests/ato_operator/test_preflight.py::test_inactive_capabilities_reduce_required_credentials",
+        "tests/ato_service/test_intake.py::test_runtime_gate_accepts_dev_local",
+        "tests/ato_service/test_intake.py::test_runtime_gate_fails_closed_for_production",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_drain_delegates_to_unified_intake",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_worker_resolves_dependencies_and_disposes_engine",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_worker_rejects_production_before_creating_engine",
+        "tests/ato_service/test_synthetic_intake_worker.py::test_worker_requires_audit_credential_before_creating_engine",
+        "tests/test_deployment_contract.py::test_systemd_unit_points_to_canonical_runtime_config",
+        "tests/test_deployment_contract.py::test_install_script_is_idempotent_and_explicit_about_side_effects",
+        "tests/test_deployment_contract.py::test_deployment_readme_matches_current_installer_contract",
+        "tests/test_deployment_contract.py::test_pyproject_declares_approved_extraction_dependencies",
+        "tests/test_deployment_contract.py::test_intake_worker_systemd_unit_wires_consumed_credentials_only",
+        "tests/test_deployment_contract.py::test_analyzer_worker_systemd_unit_is_hardened_and_inactive_by_default",
+        "tests/test_portal_contract.py::test_intake_worker_systemd_unit_runs_long_lived_process"
       ],
-      "verification_type": "Workstream A extends runtime JSON schema/examples, PROCESS_CAPABILITIES semantic validation, and bounded ato-operator preflight/CLI tests; deployment assets and live-host drills remain partial",
+      "verification_type": "Runtime JSON capabilities, ato-operator preflight, production API/portal nginx/intake/analyzer assets, bounded operational scripts, and dev_local worker paths are contract-tested; live-host drills and customer hard-stop evidence remain partial",
       "status": "partial"
     },
     {

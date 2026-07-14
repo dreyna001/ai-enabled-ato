@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# install.sh -- ATO API on-prem installation for RHEL 9-compatible hosts.
-# API-only scope: no portal, worker, timers, or model hosting.
+# install.sh -- ATO on-prem installation for RHEL 9-compatible hosts.
+# Stages application, portal bundle, systemd units, and inactive nginx templates.
+# Does not overwrite live runtime JSON, credentials, or active nginx configs.
 # Run as root.
 set -euo pipefail
 IFS=$'\n\t'
@@ -11,10 +12,12 @@ readonly INSTALL_DIR="/opt/ato-analyzer"
 readonly CONFIG_DIR="/etc/ato-analyzer"
 readonly DATA_DIR="/var/ato-packages"
 readonly SVC_HOME="/var/lib/ato"
+readonly RELEASE_STATE_DIR="$SVC_HOME/release"
 readonly CREDENTIALS_DIR="$CONFIG_DIR/credentials"
 readonly RUNTIME_CONFIG_PATH="$CONFIG_DIR/runtime-config.json"
 readonly RUNTIME_CONFIG_EXAMPLE_PATH="$CONFIG_DIR/runtime-config.onprem.example.json"
 readonly DATABASE_DSN_CREDENTIAL_PATH="$CREDENTIALS_DIR/database-dsn"
+readonly PORTAL_INSTALL_DIR="$INSTALL_DIR/portal/dist"
 readonly SVC_USER="ato"
 readonly PYTHON_BIN="${PYTHON_BIN:-python3.12}"
 readonly MIN_PYTHON_MAJOR=3
@@ -26,11 +29,27 @@ START_SERVICE=false
 RUN_SMOKE=false
 RUN_MIGRATE=false
 
+PRODUCTION_SYSTEMD_UNITS=(
+    "ato-api.service"
+    "ato-intake-worker.service"
+    "ato-analyzer-worker.service"
+)
+
+NGINX_EXAMPLE_TEMPLATES=(
+    "ato-api.conf"
+    "ato-portal.conf"
+)
+readonly NGINX_API_TEMPLATE="deployment/nginx/ato-api.conf"
+readonly NGINX_PORTAL_TEMPLATE="deployment/nginx/ato-portal.conf"
+readonly NGINX_API_EXAMPLE_DEST="/etc/nginx/conf.d/ato-api.conf.example"
+readonly NGINX_PORTAL_EXAMPLE_DEST="/etc/nginx/conf.d/ato-portal.conf.example"
+
 usage() {
     cat <<'EOF'
 Usage: install.sh [options]
 
-Install the ATO API package, deployment assets, and least-privilege host layout.
+Install the ATO application package, portal bundle, deployment assets, and
+least-privilege host layout. Worker units are installed but not enabled.
 Does not start services unless --start is supplied. Does not run smoke checks
 unless --smoke is supplied. Does not run database migrations unless --migrate
 is supplied.
@@ -308,23 +327,55 @@ install_application_tree() {
     info "Installed application tree under $INSTALL_DIR (root-owned, service-readable)"
 }
 
-install_systemd_unit() {
-    local unit="ato-api.service"
+install_portal_bundle() {
+    local src="$REPO_DIR/portal/dist"
+    local index="$src/index.html"
+
+    if [[ ! -f "$index" ]]; then
+        warn "Portal bundle not found at $src (run 'npm run build' in portal/ before packaging)"
+        warn "Skipping portal static install; nginx portal template remains inactive"
+        return 0
+    fi
+
+    rm -rf "$PORTAL_INSTALL_DIR"
+    mkdir -p "$(dirname "$PORTAL_INSTALL_DIR")"
+    cp -a "$src" "$PORTAL_INSTALL_DIR" || err "Failed to copy portal bundle to $PORTAL_INSTALL_DIR"
+    chown -R root:root "$INSTALL_DIR/portal" || err "Failed to set portal ownership"
+    find "$INSTALL_DIR/portal" -type d -exec chmod 755 {} + || err "Failed to set portal directory permissions"
+    find "$INSTALL_DIR/portal" -type f -exec chmod 644 {} + || err "Failed to set portal file permissions"
+    info "Installed portal static bundle: $PORTAL_INSTALL_DIR"
+}
+
+install_systemd_unit_file() {
+    local unit="$1"
     local src="$REPO_DIR/deployment/systemd/$unit"
     local dest="/etc/systemd/system/$unit"
     [[ -f "$src" ]] || err "Missing systemd unit: $src"
-    reject_non_regular_existing_file "$dest"
     cp "$src" "$dest" || err "Failed to copy $unit"
     normalize_dest_file_crlf "$dest"
     chown root:root "$dest" || err "Failed to set owner on $dest"
     chmod 644 "$dest" || err "Failed to set permissions on $dest"
-    systemctl daemon-reload || err "Failed to reload systemd"
     info "Installed systemd unit: $unit"
 }
 
-install_nginx_example() {
-    local src="$REPO_DIR/deployment/nginx/ato-api.conf"
-    local dest="/etc/nginx/conf.d/ato-api.conf.example"
+install_systemd_units() {
+    local unit
+    for unit in "${PRODUCTION_SYSTEMD_UNITS[@]}"; do
+        install_systemd_unit_file "$unit"
+    done
+    systemctl daemon-reload || err "Failed to reload systemd"
+    for unit in "${PRODUCTION_SYSTEMD_UNITS[@]}"; do
+        if [[ "$unit" != "ato-api.service" ]]; then
+            systemctl disable "$unit" 2>/dev/null || true
+            info "Worker unit left disabled: $unit"
+        fi
+    done
+}
+
+install_nginx_example_file() {
+    local template_name="$1"
+    local src="$REPO_DIR/deployment/nginx/$template_name"
+    local dest="/etc/nginx/conf.d/${template_name}.example"
     [[ -f "$src" ]] || err "Missing nginx example template: $src"
     reject_non_regular_existing_file "$dest"
     if [[ -f "$dest" ]]; then
@@ -337,7 +388,35 @@ install_nginx_example() {
     chown root:root "$dest" || err "Failed to set owner on $dest"
     chmod 644 "$dest" || err "Failed to set permissions on $dest"
     info "Installed inactive nginx example: $dest"
-    warn "Replace TLS placeholders and rename to ato-api.conf before enabling the site"
+}
+
+install_nginx_examples() {
+    local template_name
+    for template_name in "${NGINX_EXAMPLE_TEMPLATES[@]}"; do
+        install_nginx_example_file "$template_name"
+    done
+    warn "Replace TLS placeholders and rename *.conf.example before enabling nginx sites"
+}
+
+record_release_snapshot() {
+    local stamp
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    local snapshot_dir="$RELEASE_STATE_DIR/snapshots/$stamp"
+    ensure_dir "$RELEASE_STATE_DIR/snapshots" "root:root" 700
+    mkdir -p "$snapshot_dir" || err "Failed to create release snapshot directory"
+    if [[ -f "$INSTALL_DIR/pyproject.toml" ]]; then
+        cp "$INSTALL_DIR/pyproject.toml" "$snapshot_dir/pyproject.toml" \
+            || err "Failed to snapshot pyproject.toml"
+    fi
+    if [[ -f "$INSTALL_DIR/alembic.ini" ]]; then
+        cp "$INSTALL_DIR/alembic.ini" "$snapshot_dir/alembic.ini" \
+            || err "Failed to snapshot alembic.ini"
+    fi
+    printf '%s\n' "$stamp" > "$RELEASE_STATE_DIR/current-snapshot" \
+        || err "Failed to record current release snapshot"
+    chown root:root "$RELEASE_STATE_DIR/current-snapshot" || true
+    chmod 600 "$RELEASE_STATE_DIR/current-snapshot" || true
+    info "Recorded release snapshot marker: $stamp"
 }
 
 validate_migration_prerequisites() {
@@ -414,7 +493,7 @@ run_smoke_checks() {
     bash "$smoke_script" || err "Smoke checks failed"
 }
 
-echo "=== ATO API Installation ==="
+echo "=== ATO Installation ==="
 echo ""
 
 check_root
@@ -429,37 +508,44 @@ validate_safe_path "DATA_DIR" "$DATA_DIR"
 check_command systemctl
 check_python_version "$PYTHON_BIN"
 
-echo "[1/7] Creating service identity..."
+echo "[1/8] Creating service identity..."
 create_user_if_missing "$SVC_USER" "$SVC_HOME"
 ensure_dir "$SVC_HOME" "$SVC_USER:$SVC_USER" 700
+ensure_dir "$RELEASE_STATE_DIR" "root:root" 700
 
-echo "[2/7] Creating directories..."
+echo "[2/8] Creating directories..."
 ensure_dir "$INSTALL_DIR" "root:root" 755
 ensure_dir "$CONFIG_DIR" "root:$SVC_USER" 750
 ensure_dir "$DATA_DIR" "$SVC_USER:$SVC_USER" 750
 ensure_dir "$DATA_DIR/_tmp" "$SVC_USER:$SVC_USER" 750
 
-echo "[3/7] Installing application package..."
+echo "[3/8] Installing application package..."
 install_application_tree
 
-echo "[4/7] Installing configuration layout..."
+echo "[4/8] Installing portal bundle..."
+install_portal_bundle
+
+echo "[5/8] Installing configuration layout..."
 install_runtime_config_example
 install_database_dsn_credential_layout
 
-echo "[5/7] Installing deployment assets..."
+echo "[6/8] Installing deployment assets..."
 if [[ "$INSTALL_SYSTEMD_UNITS" == "true" ]]; then
-    install_systemd_unit
+    install_systemd_units
 else
     warn "INSTALL_SYSTEMD_UNITS=false; skipping systemd unit installation"
 fi
 
 if [[ "$INSTALL_NGINX_SITE" == "true" ]]; then
-    install_nginx_example
+    install_nginx_examples
 else
     warn "INSTALL_NGINX_SITE=false; skipping nginx example installation"
 fi
 
-echo "[6/7] Post-install actions..."
+echo "[7/8] Recording release snapshot..."
+record_release_snapshot
+
+echo "[8/8] Post-install actions..."
 if [[ "$RUN_MIGRATE" == "true" ]]; then
     run_database_migrations
 else
@@ -483,7 +569,13 @@ echo "Installation complete."
 echo "  Runtime config: $RUNTIME_CONFIG_PATH"
 echo "  Runtime example: $RUNTIME_CONFIG_EXAMPLE_PATH"
 echo "  Database DSN credential: $DATABASE_DSN_CREDENTIAL_PATH"
+echo "  Portal bundle: $PORTAL_INSTALL_DIR"
 echo "  API loopback: 127.0.0.1:8000 (nginx is the external listener)"
+echo "  Worker units: installed disabled; enable explicitly after acceptance tests"
+echo "  Upgrade flow:   sudo bash scripts/upgrade.sh"
+echo "  Worker drain:   sudo bash scripts/drain_workers.sh"
+echo "  Rollback flow:  sudo bash scripts/rollback.sh"
+echo "  Backup contract: sudo bash scripts/verify_backup_contract.sh"
 echo "  Migrations:     sudo bash scripts/install.sh --migrate"
 echo "  Start service:  sudo bash scripts/install.sh --start"
 echo "  Combined flow:  sudo bash scripts/install.sh --migrate --start --smoke"
