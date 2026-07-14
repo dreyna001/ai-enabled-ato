@@ -93,13 +93,28 @@ def test_preflight_export_eligible_when_requirements_present() -> None:
     assert result["export_eligible"] is True
 
 
-def test_export_readiness_reports_missing_assessor_inputs() -> None:
+def test_export_readiness_reports_missing_assessor_inputs_for_fedramp() -> None:
+    document = _minimal_document()
+    document["package"]["profile_id"] = "fedramp_20x_program"
+    document["fedramp_20x"] = {"cpo": {}, "sdr": {}, "ocr": {}, "scg": {}, "ksi_methods": [], "metric_history": [], "independent_assessment": {}}
+    result = evaluate_export_readiness(
+        profile_id="fedramp_20x_program",
+        sealed_document=document,
+        project_root=ROOT,
+    )
+    assert "missing_assessor_inputs" in result.blockers
+
+
+def test_export_readiness_fisma_security_only_does_not_require_privacy_execution() -> None:
     result = evaluate_export_readiness(
         profile_id="fisma_agency_security",
         sealed_document=_minimal_document(),
         project_root=ROOT,
+        runtime_config_document=None,
     )
-    assert "missing_assessor_inputs" in result.blockers
+    assert result.structural_checks_passed is True
+    assert "missing_privacy_artifacts" not in result.blockers
+    assert "hs002_template_pack_unavailable" in result.warnings
 
 
 def test_revision_delta_detects_changed_controls() -> None:
