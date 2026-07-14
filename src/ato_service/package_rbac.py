@@ -11,7 +11,7 @@ from ato_service.auth_context import (
     require_system_read_access,
 )
 
-PACKAGE_ROLE_GROUPS: dict[str, tuple[str, ...]] = {
+DEFAULT_PACKAGE_ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "system_owner": ("owners", "system-owners"),
     "isso": ("isso", "owners"),
     "control_owner": ("control-owners", "owners"),
@@ -20,7 +20,40 @@ PACKAGE_ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "approver": ("approvers",),
     "ao_custodian": ("ao-custodians", "approvers"),
     "viewer": ("viewers", "owners"),
+    "platform_admin": ("platform-admins",),
 }
+
+_PACKAGE_ROLE_GROUPS = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
+
+
+def configure_package_role_groups(document: dict[str, Any]) -> None:
+    """Apply OIDC_GROUP_ROLE_MAPPING from runtime JSON when present."""
+    global _PACKAGE_ROLE_GROUPS
+    mapping = document.get("OIDC_GROUP_ROLE_MAPPING")
+    if not isinstance(mapping, dict):
+        _PACKAGE_ROLE_GROUPS = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
+        return
+    resolved = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
+    for role, groups in mapping.items():
+        if not isinstance(role, str) or role not in resolved:
+            continue
+        if not isinstance(groups, list) or not groups:
+            continue
+        normalized = tuple(
+            value.strip()
+            for value in groups
+            if isinstance(value, str) and value.strip()
+        )
+        if normalized:
+            resolved[role] = normalized
+    _PACKAGE_ROLE_GROUPS = resolved
+
+
+def package_role_groups() -> dict[str, tuple[str, ...]]:
+    return dict(_PACKAGE_ROLE_GROUPS)
+
+
+PACKAGE_ROLE_GROUPS = DEFAULT_PACKAGE_ROLE_GROUPS
 
 
 class _SystemTarget(Protocol):
@@ -33,7 +66,7 @@ class _RevisionTarget(Protocol):
 
 
 def principal_has_role(principal: AuthenticatedPrincipal, role: str) -> bool:
-    groups = PACKAGE_ROLE_GROUPS.get(role, ())
+    groups = _PACKAGE_ROLE_GROUPS.get(role, ())
     return any(principal.is_member_of(group) for group in groups)
 
 

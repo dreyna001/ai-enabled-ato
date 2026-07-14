@@ -472,6 +472,49 @@ def _validate_runtime_semantics(document: dict[str, Any]) -> None:
     _validate_model_token_limits(document)
     _validate_loopback_http_consistency(document)
     _validate_endpoint_allowlist(document)
+    _validate_process_capability_consistency(document)
+    _validate_internal_egress_allowlist(document)
+
+
+def _validate_process_capability_consistency(document: dict[str, Any]) -> None:
+    from ato_service.process_capabilities import resolve_process_capabilities
+
+    try:
+        capabilities = resolve_process_capabilities(document)
+    except RuntimeConfigValidationError:
+        raise
+    if capabilities is None:
+        return
+
+    if capabilities.malware_scanning and document.get("MALWARE_SCANNER_ENABLED") is not True:
+        raise RuntimeConfigValidationError(
+            "MALWARE_SCANNER_ENABLED must be true when PROCESS_CAPABILITIES.malware_scanning is true"
+        )
+    if capabilities.vision_model_calls and document.get("VISION_MODEL_ENABLED") is not True:
+        raise RuntimeConfigValidationError(
+            "VISION_MODEL_ENABLED must be true when PROCESS_CAPABILITIES.vision_model_calls is true"
+        )
+    if capabilities.oidc_authentication and document.get("IDENTITY_PROVIDER_MODE") != "oidc":
+        raise RuntimeConfigValidationError(
+            "IDENTITY_PROVIDER_MODE must be oidc when PROCESS_CAPABILITIES.oidc_authentication is true"
+        )
+    if capabilities.text_model_calls and document.get("runtime_profile") == "onprem_production":
+        if document.get("TEXT_MODEL_ENDPOINT_POLICY_APPROVED") is not True:
+            raise RuntimeConfigValidationError(
+                "TEXT_MODEL_ENDPOINT_POLICY_APPROVED must be true when "
+                "PROCESS_CAPABILITIES.text_model_calls is true for onprem_production"
+            )
+
+
+def _validate_internal_egress_allowlist(document: dict[str, Any]) -> None:
+    if document.get("runtime_profile") != "onprem_production":
+        return
+    allowlist = document.get("INTERNAL_EGRESS_ALLOWLIST")
+    if not isinstance(allowlist, list) or not allowlist:
+        raise RuntimeConfigValidationError(
+            "INTERNAL_EGRESS_ALLOWLIST must be a non-empty array for onprem_production"
+        )
+    _build_allowlist_index(allowlist)
 
 
 def _positive_limit_from_document(
@@ -674,6 +717,10 @@ def load_runtime_config_from_dict(
         runtime_profile=runtime_profile,
         base_dir=base_dir,
     )
+
+    from ato_service.package_rbac import configure_package_role_groups
+
+    configure_package_role_groups(document)
 
     return RuntimeConfig(
         runtime_profile=runtime_profile,

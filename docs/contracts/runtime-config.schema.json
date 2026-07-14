@@ -452,6 +452,38 @@
     },
     "BACKUP_RESTORE_DRILL_FREQUENCY": {
       "const": "quarterly"
+    },
+    "BACKUP_TARGET_DECLARATION": {
+      "$ref": "#/$defs/backupTargetDeclaration",
+      "$comment": "Customer backup destination declaration. Does not perform backup I/O; operator preflight validates syntax and allowlist membership only."
+    },
+    "OIDC_GROUPS_CLAIM": {
+      "$ref": "#/$defs/boundedIdentifier",
+      "default": "groups",
+      "$comment": "JWT claim name containing group membership strings for RBAC mapping."
+    },
+    "OIDC_GROUP_ROLE_MAPPING": {
+      "$ref": "#/$defs/oidcGroupRoleMapping"
+    },
+    "INTERNAL_EGRESS_ALLOWLIST": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/allowedEndpoint"
+      },
+      "$comment": "Closed outbound allowlist for IdP, model endpoints, and backup targets. Startup and operator preflight require configured endpoints to match entries exactly."
+    },
+    "AUTHORITY_MANIFEST_FILE_REFERENCE": {
+      "$ref": "#/$defs/fileReferenceWithDigest",
+      "$comment": "Optional override of the default authority manifest path with an expected SHA-256 digest."
+    },
+    "FISMA_TEMPLATE_PACK_FILE_REFERENCE": {
+      "$ref": "#/$defs/fileReferenceWithDigest",
+      "$comment": "Optional customer agency template pack path and digest when HS-002 inputs are supplied."
+    },
+    "PROCESS_CAPABILITIES": {
+      "$ref": "#/$defs/processCapabilities"
     }
   },
   "allOf": [
@@ -537,7 +569,13 @@
           "BACKUP_KEY_OWNERSHIP",
           "BACKUP_ENCRYPTION_KEY_CREDENTIAL_REFERENCE",
           "BACKUP_ONLINE_RETENTION_DAYS",
-          "BACKUP_RESTORE_DRILL_FREQUENCY"
+          "BACKUP_RESTORE_DRILL_FREQUENCY",
+          "BACKUP_TARGET_DECLARATION",
+          "OIDC_GROUPS_CLAIM",
+          "OIDC_GROUP_ROLE_MAPPING",
+          "INTERNAL_EGRESS_ALLOWLIST",
+          "AUTHORITY_MANIFEST_FILE_REFERENCE",
+          "PROCESS_CAPABILITIES"
         ],
         "properties": {
           "STORAGE_DATA_PATH": {
@@ -900,8 +938,115 @@
           "OIDC_ISSUER_URL",
           "OIDC_AUDIENCE",
           "OIDC_CLIENT_CREDENTIAL_REFERENCE",
-          "PORTAL_PUBLIC_ORIGIN"
+          "PORTAL_PUBLIC_ORIGIN",
+          "OIDC_GROUPS_CLAIM",
+          "OIDC_GROUP_ROLE_MAPPING"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "runtime_profile": {
+            "const": "onprem_production"
+          },
+          "BACKUP_OFF_HOST_ENABLED": {
+            "const": true
+          }
+        },
+        "required": [
+          "runtime_profile",
+          "BACKUP_OFF_HOST_ENABLED"
+        ]
+      },
+      "then": {
+        "required": [
+          "BACKUP_TARGET_DECLARATION"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "PROCESS_CAPABILITIES": {
+            "type": "object",
+            "properties": {
+              "malware_scanning": {
+                "const": true
+              }
+            },
+            "required": [
+              "malware_scanning"
+            ]
+          }
+        },
+        "required": [
+          "PROCESS_CAPABILITIES"
+        ]
+      },
+      "then": {
+        "properties": {
+          "MALWARE_SCANNER_ENABLED": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "PROCESS_CAPABILITIES": {
+            "type": "object",
+            "properties": {
+              "vision_model_calls": {
+                "const": true
+              }
+            },
+            "required": [
+              "vision_model_calls"
+            ]
+          }
+        },
+        "required": [
+          "PROCESS_CAPABILITIES"
+        ]
+      },
+      "then": {
+        "properties": {
+          "VISION_MODEL_ENABLED": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "PROCESS_CAPABILITIES": {
+            "type": "object",
+            "properties": {
+              "oidc_authentication": {
+                "const": true
+              }
+            },
+            "required": [
+              "oidc_authentication"
+            ]
+          }
+        },
+        "required": [
+          "PROCESS_CAPABILITIES"
+        ]
+      },
+      "then": {
+        "required": [
+          "IDENTITY_PROVIDER_MODE"
+        ],
+        "properties": {
+          "IDENTITY_PROVIDER_MODE": {
+            "const": "oidc"
+          }
+        }
       }
     },
     {
@@ -1077,6 +1222,151 @@
         }
       },
       "$comment": "The specification requires a configurable input-length limit but does not prescribe its value or measurement unit; the deployment must choose and enforce one explicitly."
+    },
+    "groupNameList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/boundedText"
+      }
+    },
+    "oidcGroupRoleMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "system_owner": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "isso": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "control_owner": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "assessor": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "reviewer": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "approver": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "ao_custodian": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "viewer": {
+          "$ref": "#/$defs/groupNameList"
+        },
+        "platform_admin": {
+          "$ref": "#/$defs/groupNameList"
+        }
+      },
+      "$comment": "Maps product roles to one or more IdP group names resolved from OIDC_GROUPS_CLAIM."
+    },
+    "fileReferenceWithDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "expected_sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "expected_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "backupTargetDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "host",
+        "port",
+        "export_path"
+      ],
+      "properties": {
+        "protocol": {
+          "enum": [
+            "nfs_v4",
+            "smb",
+            "s3_compatible",
+            "local_mount"
+          ]
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "export_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/[^\\u0000-\\u001F\\u007F]+$"
+        }
+      }
+    },
+    "processCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api",
+        "intake_worker",
+        "analyzer_worker",
+        "portal_static",
+        "malware_scanning",
+        "text_model_calls",
+        "vision_model_calls",
+        "oidc_authentication"
+      ],
+      "properties": {
+        "api": {
+          "type": "boolean"
+        },
+        "intake_worker": {
+          "type": "boolean"
+        },
+        "analyzer_worker": {
+          "type": "boolean"
+        },
+        "portal_static": {
+          "type": "boolean"
+        },
+        "malware_scanning": {
+          "type": "boolean"
+        },
+        "text_model_calls": {
+          "type": "boolean"
+        },
+        "vision_model_calls": {
+          "type": "boolean"
+        },
+        "oidc_authentication": {
+          "type": "boolean"
+        },
+        "package_search": {
+          "type": "boolean",
+          "default": false
+        },
+        "package_chat": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "$comment": "Explicit process and feature flags. Inactive optional capabilities are ignored by operator preflight; active capabilities fail fast when dependencies are invalid."
     }
   }
 }

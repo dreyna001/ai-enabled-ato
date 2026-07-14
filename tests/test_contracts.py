@@ -906,6 +906,38 @@ def _minimal_onprem_runtime_config() -> dict[str, Any]:
         },
         "BACKUP_ONLINE_RETENTION_DAYS": 90,
         "BACKUP_RESTORE_DRILL_FREQUENCY": "quarterly",
+        "BACKUP_TARGET_DECLARATION": {
+            "protocol": "nfs_v4",
+            "host": "backup.example.internal",
+            "port": 2049,
+            "export_path": "/exports/ato-backup",
+        },
+        "OIDC_GROUPS_CLAIM": "groups",
+        "OIDC_GROUP_ROLE_MAPPING": {
+            "system_owner": ["owners"],
+            "viewer": ["viewers"],
+        },
+        "INTERNAL_EGRESS_ALLOWLIST": [
+            {"host": "idp.example.internal", "port": 443},
+            {"host": "models.example.internal", "port": 443},
+            {"host": "backup.example.internal", "port": 2049},
+        ],
+        "AUTHORITY_MANIFEST_FILE_REFERENCE": {
+            "path": "/opt/ato-analyzer/docs/contracts/authority-manifest.json",
+            "expected_sha256": "8ef67caa62cb960725f35342ea6e4dff600b2e4bfd5dea6558e70f06f2d945cb",
+        },
+        "PROCESS_CAPABILITIES": {
+            "api": True,
+            "intake_worker": False,
+            "analyzer_worker": False,
+            "portal_static": True,
+            "malware_scanning": True,
+            "text_model_calls": False,
+            "vision_model_calls": False,
+            "oidc_authentication": True,
+            "package_search": False,
+            "package_chat": False,
+        },
     }
 
 

@@ -1,42 +1,22 @@
 {
   "schema_version": "1.0.0",
   "runtime_profile": "onprem_production",
-  "TEXT_MODEL_ENDPOINT_URL": "https://models.customer.internal/v1",
-  "TEXT_MODEL_NAME": "customer-text-model",
+  "TEXT_MODEL_ENDPOINT_URL": "https://models.example.internal/v1",
+  "TEXT_MODEL_NAME": "fixture-text-model",
   "TEXT_MODEL_CONTEXT_TOKENS": 8192,
   "TEXT_MODEL_MAX_OUTPUT_TOKENS": 1024,
   "TEXT_MODEL_TIMEOUT_SECONDS": 30,
   "TEXT_MODEL_MAX_RETRIES": 2,
   "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
-  "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": false,
-  "CUI_MODEL_BOUNDARY_APPROVED": false,
-  "TEXT_MODEL_CREDENTIAL_REFERENCE": {
-    "source": "systemd_credential",
-    "identifier": "text-model-api-key"
-  },
   "VISION_MODEL_ENABLED": false,
-  "VISION_MODEL_ENDPOINT_URL": "https://models.customer.internal/v1",
-  "VISION_MODEL_NAME": "customer-vision-model",
+  "VISION_MODEL_ENDPOINT_URL": "https://models.example.internal/v1",
+  "VISION_MODEL_NAME": "fixture-vision-model",
   "VISION_MODEL_CONTEXT_TOKENS": 4096,
   "VISION_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
   "MODEL_ENDPOINT_ALLOWLIST": [
     {
-      "host": "models.customer.internal",
+      "host": "models.example.internal",
       "port": 443
-    }
-  ],
-  "INTERNAL_EGRESS_ALLOWLIST": [
-    {
-      "host": "idp.customer.internal",
-      "port": 443
-    },
-    {
-      "host": "models.customer.internal",
-      "port": 443
-    },
-    {
-      "host": "backup.customer.internal",
-      "port": 2049
     }
   ],
   "MAX_MODEL_CALLS_PER_RUN": 120,
@@ -82,16 +62,9 @@
     "identifier": "database-dsn"
   },
   "IDENTITY_PROVIDER_MODE": "oidc",
-  "OIDC_ISSUER_URL": "https://idp.customer.internal/",
+  "OIDC_ISSUER_URL": "https://idp.example.internal/",
   "OIDC_AUDIENCE": "ato-analyzer",
-  "OIDC_GROUPS_CLAIM": "groups",
-  "OIDC_GROUP_ROLE_MAPPING": {
-    "system_owner": ["cn=ato-owners,ou=groups,dc=customer,dc=gov"],
-    "reviewer": ["cn=ato-reviewers,ou=groups,dc=customer,dc=gov"],
-    "approver": ["cn=ato-approvers,ou=groups,dc=customer,dc=gov"],
-    "viewer": ["cn=ato-viewers,ou=groups,dc=customer,dc=gov"]
-  },
-  "PORTAL_PUBLIC_ORIGIN": "https://ato-portal.customer.internal/",
+  "PORTAL_PUBLIC_ORIGIN": "https://portal.example.internal/",
   "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
     "source": "systemd_credential",
     "identifier": "oidc-client-secret"
@@ -100,7 +73,7 @@
   "SESSION_ABSOLUTE_TIMEOUT_HOURS": 8,
   "LOCAL_PASSWORD_AUTH_ENABLED": false,
   "MALWARE_SCANNER_ENABLED": true,
-  "MALWARE_SCANNER_ID": "customer-scanner",
+  "MALWARE_SCANNER_ID": "fixture-scanner",
   "MALWARE_SCANNER_FAILURE_POLICY": "fail_closed",
   "MALWARE_SCANNER_TRANSPORT": "unix_socket",
   "MALWARE_SCANNER_SOCKET_PATH": "/var/run/clamd.scan/clamd.sock",
@@ -126,27 +99,5 @@
     "identifier": "backup-encryption-key"
   },
   "BACKUP_ONLINE_RETENTION_DAYS": 90,
-  "BACKUP_RESTORE_DRILL_FREQUENCY": "quarterly",
-  "BACKUP_TARGET_DECLARATION": {
-    "protocol": "nfs_v4",
-    "host": "backup.customer.internal",
-    "port": 2049,
-    "export_path": "/exports/ato-backup"
-  },
-  "AUTHORITY_MANIFEST_FILE_REFERENCE": {
-    "path": "/opt/ato-analyzer/docs/contracts/authority-manifest.json",
-    "expected_sha256": "8ef67caa62cb960725f35342ea6e4dff600b2e4bfd5dea6558e70f06f2d945cb"
-  },
-  "PROCESS_CAPABILITIES": {
-    "api": true,
-    "intake_worker": false,
-    "analyzer_worker": false,
-    "portal_static": true,
-    "malware_scanning": true,
-    "text_model_calls": false,
-    "vision_model_calls": false,
-    "oidc_authentication": true,
-    "package_search": false,
-    "package_chat": false
-  }
+  "BACKUP_RESTORE_DRILL_FREQUENCY": "quarterly"
 }

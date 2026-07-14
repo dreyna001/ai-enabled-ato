@@ -62,8 +62,10 @@ def _decode_jwt_payload(token: str) -> dict[str, Any]:
     return payload
 
 
-def _groups_from_claims(claims: dict[str, Any]) -> tuple[str, ...]:
-    raw_groups = claims.get("groups")
+def _groups_from_claims(claims: dict[str, Any], *, groups_claim: str = "groups") -> tuple[str, ...]:
+    raw_groups = claims.get(groups_claim)
+    if raw_groups is None and groups_claim != "groups":
+        raw_groups = claims.get("groups")
     if isinstance(raw_groups, list):
         normalized = [value for value in raw_groups if isinstance(value, str) and value.strip()]
         if normalized:
@@ -175,7 +177,12 @@ async def exchange_code_for_identity(
     actor_id = claims.get("sub")
     if not isinstance(actor_id, str) or not actor_id.strip():
         raise OidcAuthenticationError()
-    return OidcIdentity(actor_id=actor_id.strip(), groups=_groups_from_claims(claims))
+    groups_claim = config.document.get("OIDC_GROUPS_CLAIM", "groups")
+    claim_name = groups_claim if isinstance(groups_claim, str) and groups_claim.strip() else "groups"
+    return OidcIdentity(
+        actor_id=actor_id.strip(),
+        groups=_groups_from_claims(claims, groups_claim=claim_name),
+    )
 
 
 def create_dev_oidc_router() -> APIRouter:
