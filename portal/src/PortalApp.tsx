@@ -109,14 +109,23 @@ export function PortalApp() {
           />
         }
       >
-        <Route path="/workflow" element={<WorkflowRoute session={session} />} />
+        <Route
+          path="/workflow"
+          element={
+            <WorkflowRoute session={session} readiness={readiness} />
+          }
+        />
         <Route
           path="/workflow/systems/:systemId"
-          element={<WorkflowRoute session={session} />}
+          element={
+            <WorkflowRoute session={session} readiness={readiness} />
+          }
         />
         <Route
           path="/workflow/systems/:systemId/revisions/:revisionId"
-          element={<WorkflowRoute session={session} />}
+          element={
+            <WorkflowRoute session={session} readiness={readiness} />
+          }
         />
       </Route>
       <Route path="/login" element={<Navigate replace to="/workflow" />} />

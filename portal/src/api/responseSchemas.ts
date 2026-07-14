@@ -3,6 +3,9 @@ import { z } from "zod";
 export const INVALID_RESPONSE_MESSAGE =
   "Portal API returned an unexpected response.";
 
+const uuidSchema = z.string().uuid();
+const sha256Schema = z.string().length(64);
+
 const sessionSchema = z.object({
   actor_id: z.string().min(1),
   groups: z.array(z.string()),
@@ -11,25 +14,52 @@ const sessionSchema = z.object({
 });
 
 const systemSchema = z.object({
-  system_id: z.string().uuid(),
+  system_id: uuidSchema,
   display_name: z.string().min(1),
   owner_group: z.string().min(1),
   viewer_groups: z.array(z.string()),
 });
 
 const packageRevisionSchema = z.object({
-  package_revision_id: z.string().uuid(),
-  system_id: z.string().uuid(),
+  package_revision_id: uuidSchema,
+  system_id: uuidSchema,
+  parent_revision_id: uuidSchema.nullable().optional(),
   status: z.string().min(1),
   revision_version: z.number().int().nonnegative(),
   profile_id: z.string().min(1),
   data_origin: z.string().min(1),
   sensitivity: z.string().min(1),
+  impact_level: z.string().nullable().optional(),
+  certification_class: z.string().nullable().optional(),
+});
+
+const citationSchema = z
+  .object({
+    source_kind: z.string().optional(),
+    source_sha256: sha256Schema.optional(),
+    artifact_id: z.string().optional(),
+    sha256: sha256Schema.optional(),
+    locator: z.record(z.unknown()).optional(),
+    excerpt: z.string().optional(),
+  })
+  .passthrough();
+
+const matrixRowSchema = z.object({
+  matrix_row_id: uuidSchema,
+  assessment_item_id: z.string().min(1),
+  assessment_item_type: z.string().min(1),
+  model_proposed_status: z.string().min(1),
+  system_status: z.string().min(1),
+  finding_summary: z.string(),
+  gaps: z.array(z.string()).optional(),
+  assessor_questions: z.array(z.string()).optional(),
+  citations: z.array(citationSchema).optional(),
+  context_complete: z.boolean().optional(),
 });
 
 const analysisRunSchema = z.object({
-  run_id: z.string().uuid(),
-  package_revision_id: z.string().uuid(),
+  run_id: uuidSchema,
+  package_revision_id: uuidSchema,
   run_type: z.string().min(1),
   status: z.string().min(1),
   llm_call_count: z.number().int().nonnegative(),
@@ -37,23 +67,17 @@ const analysisRunSchema = z.object({
   requested_at: z.string().min(1),
   started_at: z.string().nullable(),
   completed_at: z.string().nullable(),
-});
-
-const matrixRowSchema = z.object({
-  matrix_row_id: z.string().uuid(),
-  assessment_item_id: z.string().min(1),
-  assessment_item_type: z.string().min(1),
-  model_proposed_status: z.string().min(1),
-  system_status: z.string().min(1),
-  finding_summary: z.string(),
+  error_code: z.string().nullable().optional(),
+  error_retryable: z.boolean().nullable().optional(),
+  parent_run_id: uuidSchema.nullable().optional(),
 });
 
 const fieldProvenanceEntrySchema = z.object({
-  source_artifact_id: z.string().uuid(),
-  source_sha256: z.string().min(64).max(64),
+  source_artifact_id: uuidSchema,
+  source_sha256: sha256Schema,
   source_locator: z.record(z.unknown()),
   extraction_method: z.enum(["deterministic", "text", "vision", "llm_normalize"]),
-  model_step_id: z.string().uuid().nullable().optional(),
+  model_step_id: uuidSchema.nullable().optional(),
 });
 
 const contactPersonSchema = z.object({
@@ -121,13 +145,127 @@ const packageDraftDocumentSchema = z.object({
 const packageRevisionDraftSchema = z.object({
   schema_version: z.literal("2.0.0"),
   object_type: z.literal("package_revision_draft"),
-  package_revision_id: z.string().uuid(),
+  package_revision_id: uuidSchema,
   document_schema_version: z.string().min(1),
   document: packageDraftDocumentSchema,
   field_provenance: z.record(fieldProvenanceEntrySchema),
   updated_by: z.string().min(1),
   updated_at: z.string().min(1),
   revision_version: z.number().int().nonnegative(),
+});
+
+const preflightSchema = z.object({
+  analysis_eligible: z.boolean(),
+  export_eligible: z.boolean(),
+  analysis_blockers: z.array(z.string()),
+  export_blockers: z.array(z.string()),
+  warnings: z.array(z.string()),
+  readiness: z.object({
+    numerator: z.number().int().nonnegative(),
+    denominator: z.number().int().nonnegative(),
+    score: z.number(),
+  }),
+});
+
+const dispositionSchema = z.object({
+  matrix_row_id: uuidSchema,
+  decision: z.string(),
+  edited_summary: z.string().nullable(),
+  notes: z.string().nullable(),
+  version: z.number().int().nonnegative(),
+  decided_by: z.string(),
+  decided_at: z.string(),
+  evidence_request_id: uuidSchema.optional(),
+  poam_candidate_id: uuidSchema.optional(),
+});
+
+const reviewRevisionSchema = z.object({
+  review_revision_id: uuidSchema,
+  run_id: uuidSchema,
+  version: z.number().int().nonnegative(),
+  status: z.string(),
+  dispositions: z.array(dispositionSchema),
+});
+
+const exportDraftSchema = z.object({
+  export_draft_id: uuidSchema,
+  review_revision_id: uuidSchema,
+  payload_manifest_sha256: sha256Schema,
+  status: z.string(),
+});
+
+const approvalSchema = z.object({
+  approval_id: uuidSchema,
+  export_draft_id: uuidSchema,
+  payload_manifest_sha256: sha256Schema,
+  submitted_by: z.string(),
+  decided_by: z.string().nullable(),
+  decision: z.string(),
+  submitted_at: z.string().optional(),
+  decided_at: z.string().nullable().optional(),
+  expires_at: z.string(),
+  reason: z.string().nullable().optional(),
+});
+
+const reviewCommentSchema = z.object({
+  comment_id: uuidSchema,
+  review_revision_id: uuidSchema,
+  matrix_row_id: uuidSchema.nullable(),
+  body: z.string().min(1),
+  created_by: z.string(),
+  created_at: z.string(),
+});
+
+const revisionDeltaSchema = z.object({
+  parent_revision_id: uuidSchema,
+  child_revision_id: uuidSchema,
+  changed_artifact_ids: z.array(z.string()),
+  added_artifact_ids: z.array(z.string()),
+  removed_artifact_ids: z.array(z.string()),
+  changed_control_ids: z.array(z.string()),
+  changed_evidence_keys: z.array(z.string()),
+  content_digest_changed: z.boolean(),
+  generated_at: z.string(),
+});
+
+const changeAnalysisSchema = z.object({
+  delta: revisionDeltaSchema,
+  targeted_assessment_item_ids: z.array(z.string()),
+  requires_targeted_reanalysis: z.boolean(),
+});
+
+const searchHitSchema = z
+  .object({
+    reference_id: z.string().optional(),
+    chunk_id: sha256Schema.optional(),
+    artifact_id: uuidSchema.optional(),
+    sha256: sha256Schema,
+    excerpt: z.string(),
+    score: z.number(),
+    citation: citationSchema.optional(),
+  })
+  .passthrough();
+
+const searchResultsSchema = z.object({
+  items: z.array(searchHitSchema),
+  next_cursor: z.string().nullable().optional(),
+  query: z.string().optional(),
+});
+
+const chatResponseSchema = z.object({
+  answer: z.string(),
+  citations: z.array(citationSchema),
+  refused: z.boolean(),
+  refusal_code: z.string().nullable(),
+});
+
+const artifactDescriptorSchema = z.object({
+  artifact_id: z.string().min(1),
+  path: z.string().min(1),
+  media_type: z.string().min(1),
+  sha256: sha256Schema,
+  size_bytes: z.number().int().positive(),
+  official_schema_id: z.string().nullable(),
 });
 
 function parseWithSchema<T>(
@@ -180,6 +318,7 @@ export function parseMatrixList(value: unknown) {
   const schema = z.object({
     items: z.array(matrixRowSchema),
     total: z.number().int().nonnegative().optional(),
+    next_cursor: z.string().nullable().optional(),
   });
   const parsed = parseWithSchema(schema, value);
   if (!parsed) {
@@ -188,6 +327,22 @@ export function parseMatrixList(value: unknown) {
   return {
     items: parsed.items,
     total: parsed.total ?? parsed.items.length,
+    next_cursor: parsed.next_cursor ?? null,
+  };
+}
+
+export function parseArtifactList(value: unknown) {
+  const schema = z.object({
+    items: z.array(artifactDescriptorSchema),
+    next_cursor: z.string().nullable().optional(),
+  });
+  const parsed = parseWithSchema(schema, value);
+  if (!parsed) {
+    return null;
+  }
+  return {
+    items: parsed.items,
+    next_cursor: parsed.next_cursor ?? null,
   };
 }
 
@@ -206,64 +361,6 @@ export function parseReadinessResponse(value: unknown) {
 export function parsePackageRevisionDraft(value: unknown) {
   return parseWithSchema(packageRevisionDraftSchema, value);
 }
-
-const preflightSchema = z.object({
-  analysis_eligible: z.boolean(),
-  export_eligible: z.boolean(),
-  analysis_blockers: z.array(z.string()),
-  export_blockers: z.array(z.string()),
-  warnings: z.array(z.string()),
-  readiness: z.object({
-    numerator: z.number().int().nonnegative(),
-    denominator: z.number().int().nonnegative(),
-    score: z.number(),
-  }),
-});
-
-const dispositionSchema = z.object({
-  matrix_row_id: z.string().uuid(),
-  decision: z.string(),
-  edited_summary: z.string().nullable(),
-  notes: z.string().nullable(),
-  version: z.number().int().nonnegative(),
-  decided_by: z.string(),
-  decided_at: z.string(),
-});
-
-const reviewRevisionSchema = z.object({
-  review_revision_id: z.string().uuid(),
-  run_id: z.string().uuid(),
-  version: z.number().int().nonnegative(),
-  status: z.string(),
-  dispositions: z.array(dispositionSchema),
-});
-
-const exportDraftSchema = z.object({
-  export_draft_id: z.string().uuid(),
-  review_revision_id: z.string().uuid(),
-  payload_manifest_sha256: z.string().length(64),
-  status: z.string(),
-});
-
-const approvalSchema = z.object({
-  approval_id: z.string().uuid(),
-  export_draft_id: z.string().uuid(),
-  payload_manifest_sha256: z.string().length(64),
-  submitted_by: z.string(),
-  decided_by: z.string().nullable(),
-  decision: z.string(),
-  expires_at: z.string(),
-  reason: z.string().nullable().optional(),
-});
-
-const reviewCommentSchema = z.object({
-  comment_id: z.string().uuid(),
-  review_revision_id: z.string().uuid(),
-  matrix_row_id: z.string().uuid().nullable(),
-  body: z.string().min(1),
-  created_by: z.string(),
-  created_at: z.string(),
-});
 
 export function parsePreflight(value: unknown) {
   return parseWithSchema(preflightSchema, value);
@@ -295,4 +392,16 @@ export function parseReviewCommentList(value: unknown) {
     next_cursor: z.string().nullable(),
   });
   return parseWithSchema(schema, value);
+}
+
+export function parseChangeAnalysis(value: unknown) {
+  return parseWithSchema(changeAnalysisSchema, value);
+}
+
+export function parseSearchResults(value: unknown) {
+  return parseWithSchema(searchResultsSchema, value);
+}
+
+export function parseChatResponse(value: unknown) {
+  return parseWithSchema(chatResponseSchema, value);
 }

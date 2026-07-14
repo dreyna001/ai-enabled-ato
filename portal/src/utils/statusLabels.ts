@@ -18,9 +18,13 @@ export function revisionStatusVariant(
     case "extracting":
     case "uploading":
       return "secondary";
+    case "invalid":
+    case "quarantined":
     case "failed":
     case "cancelled":
       return "destructive";
+    case "archived":
+      return "muted";
     default:
       return "muted";
   }
@@ -37,8 +41,24 @@ export function runStatusVariant(
       return "warning";
     case "failed":
     case "cancelled":
+    case "policy_blocked":
       return "destructive";
     default:
       return "muted";
   }
+}
+
+export function runFailureMessage(status: string, errorCode?: string | null): string {
+  if (status === "cancelled") {
+    return "Run was cancelled before completion.";
+  }
+  if (status === "policy_blocked") {
+    return errorCode
+      ? `Run blocked by policy (${errorCode}).`
+      : "Run blocked by policy before model execution.";
+  }
+  if (status === "failed") {
+    return errorCode ? `Run failed (${errorCode}).` : "Run failed before producing matrix output.";
+  }
+  return `Run status: ${status}`;
 }

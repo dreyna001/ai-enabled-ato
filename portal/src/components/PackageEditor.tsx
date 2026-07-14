@@ -21,6 +21,7 @@ import type {
 } from "@/types";
 import {
   createEmptySecurityControl,
+  formatProvenanceDetails,
   isModelAssistedProvenance,
   listSecurityControlIds,
   lookupProvenance,
@@ -48,9 +49,16 @@ function ProvenanceBadge({ pointer, provenance }: { pointer: string; provenance:
     return null;
   }
   return (
-    <Badge variant={isModelAssistedProvenance(entry) ? "default" : "muted"}>
-      {label}
-    </Badge>
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Badge variant={isModelAssistedProvenance(entry) ? "default" : "muted"}>
+        {label}
+      </Badge>
+      {entry ? (
+        <span className="text-xs text-muted-foreground" title={formatProvenanceDetails(entry)}>
+          {formatProvenanceDetails(entry)}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -181,6 +189,7 @@ export function PackageEditor({
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
           {profileLabel ? <TabsTrigger value="profile">{profileLabel}</TabsTrigger> : null}
           <TabsTrigger value="privacy">Privacy</TabsTrigger>
+          <TabsTrigger value="assessor">Assessor inputs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="package" className="space-y-4">
@@ -407,7 +416,7 @@ export function PackageEditor({
 
         {profileLabel ? (
           <TabsContent value="profile" className="space-y-4">
-            <ProfileSection document={document} />
+            <ProfileSection document={document} onDocumentChange={updateDocument} />
           </TabsContent>
         ) : null}
 
@@ -429,8 +438,32 @@ export function PackageEditor({
             />
           </FieldRow>
           <p className="text-sm text-muted-foreground">
-            Artifacts present: {document.privacy.artifacts_present ? "yes" : "no"}
+            Artifacts present (assessor/privacy ownership — read-only):{" "}
+            {document.privacy.artifacts_present ? "yes" : "no"}
           </p>
+        </TabsContent>
+
+        <TabsContent value="assessor" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Assessor-owned inputs are read-only in the portal. Contact an assessor to update SAR
+            or independent assessment fields.
+          </p>
+          {Object.keys(document.assessor_inputs).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No assessor inputs populated yet.</p>
+          ) : (
+            Object.entries(document.assessor_inputs).map(([key, value]) => (
+              <Card key={key} className="bg-muted/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="font-mono text-sm">{key}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="overflow-auto rounded-md border bg-background p-3 text-xs">
+                    {JSON.stringify(value, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </TabsContent>
       </Tabs>
 
@@ -497,32 +530,95 @@ function ContactEditor({
   );
 }
 
-function ProfileSection({ document }: { document: PackageDraftDocument }) {
+function ProfileSection({
+  document,
+  onDocumentChange,
+}: {
+  document: PackageDraftDocument;
+  onDocumentChange: (document: PackageDraftDocument) => void;
+}) {
   const profileId = document.package.profile_id;
-  if (profileId === "fedramp_20x_program" && document.fedramp_20x) {
+  const sectionKey =
+    profileId === "fedramp_20x_program"
+      ? "fedramp_20x"
+      : profileId === "fedramp_rev5_transition"
+        ? "fedramp_rev5_transition"
+        : "fisma_agency_security";
+  const section = document[sectionKey as keyof PackageDraftDocument] as Record<
+    string,
+    unknown
+  > | null;
+
+  if (!section || Object.keys(section).length === 0) {
     return (
-      <pre className="overflow-auto rounded-md border bg-muted/20 p-3 text-xs">
-        {JSON.stringify(document.fedramp_20x, null, 2)}
-      </pre>
+      <p className="text-sm text-muted-foreground">
+        No profile-specific section populated yet for {profileId}.
+      </p>
     );
   }
-  if (profileId === "fedramp_rev5_transition" && document.fedramp_rev5_transition) {
-    return (
-      <pre className="overflow-auto rounded-md border bg-muted/20 p-3 text-xs">
-        {JSON.stringify(document.fedramp_rev5_transition, null, 2)}
-      </pre>
-    );
-  }
-  if (profileId === "fisma_agency_security" && document.fisma_agency_security) {
-    return (
-      <pre className="overflow-auto rounded-md border bg-muted/20 p-3 text-xs">
-        {JSON.stringify(document.fisma_agency_security, null, 2)}
-      </pre>
-    );
-  }
+
   return (
-    <p className="text-sm text-muted-foreground">
-      No profile-specific section populated yet for {profileId}.
-    </p>
+    <GroupedRecordEditor
+      label={profileSectionLabel(profileId) ?? profileId}
+      value={section}
+      onChange={(next) =>
+        onDocumentChange({
+          ...document,
+          [sectionKey]: next,
+        } as PackageDraftDocument)
+      }
+    />
+  );
+}
+
+function GroupedRecordEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+}) {
+  return (
+    <Card className="bg-muted/20">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">{label}</CardTitle>
+        <CardDescription>Edit grouped profile fields (JSON values).</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {Object.entries(value).map(([key, fieldValue]) => (
+          <div key={key} className="space-y-1">
+            <Label>{key}</Label>
+            {typeof fieldValue === "string" ? (
+              <Input
+                value={fieldValue}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    [key]: event.target.value,
+                  })
+                }
+              />
+            ) : (
+              <textarea
+                className="min-h-20 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+                value={JSON.stringify(fieldValue, null, 2)}
+                onChange={(event) => {
+                  try {
+                    onChange({
+                      ...value,
+                      [key]: JSON.parse(event.target.value),
+                    });
+                  } catch {
+                    // keep editing until valid JSON
+                  }
+                }}
+              />
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

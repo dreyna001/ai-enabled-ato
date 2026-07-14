@@ -12,6 +12,7 @@ import {
   UPLOAD_ACCEPT,
 } from "@/utils/artifactKinds";
 import { formatApiError } from "@/utils/formatApiError";
+import { sanitizeDisplayFilename } from "@/utils/downloadFilename";
 import type { SessionInfo } from "@/types";
 
 type PackageUploadPanelProps = {
@@ -164,7 +165,9 @@ export function PackageUploadPanel({
               key={`${item.file.name}-${item.file.size}-${item.file.lastModified}`}
               className="flex flex-wrap items-center gap-2 text-sm"
             >
-              <span className="min-w-0 flex-1 truncate font-medium">{item.file.name}</span>
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {sanitizeDisplayFilename(item.file.name)}
+              </span>
               <select
                 className="rounded-md border bg-background px-2 py-1 text-xs"
                 value={item.artifactKind}

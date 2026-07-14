@@ -12,20 +12,45 @@ export type System = {
   viewer_groups: string[];
 };
 
+export type ProfileId =
+  | "fedramp_20x_program"
+  | "fedramp_rev5_transition"
+  | "fisma_agency_security";
+
+export type DataOrigin =
+  | "synthetic"
+  | "redacted_nonproduction"
+  | "customer_production";
+
+export type Sensitivity =
+  | "public"
+  | "internal_unclassified"
+  | "customer_sensitive"
+  | "cui"
+  | "classified"
+  | "unknown";
+
+export type CreateRevisionInput = {
+  parent_revision_id?: string | null;
+  profile_id: ProfileId;
+  certification_class?: "B" | "C" | null;
+  impact_level?: "low" | "moderate" | "high" | null;
+  data_origin: DataOrigin;
+  sensitivity: Sensitivity;
+};
+
 export type PackageRevision = {
   package_revision_id: string;
   system_id: string;
+  parent_revision_id?: string | null;
   status: string;
   revision_version: number;
   profile_id: string;
   data_origin: string;
   sensitivity: string;
+  impact_level?: string | null;
+  certification_class?: string | null;
 };
-
-export type ProfileId =
-  | "fedramp_20x_program"
-  | "fedramp_rev5_transition"
-  | "fisma_agency_security";
 
 export type ExtractionMethod =
   | "deterministic"
@@ -121,6 +146,19 @@ export type AnalysisRun = {
   requested_at: string;
   started_at: string | null;
   completed_at: string | null;
+  error_code?: string | null;
+  error_retryable?: boolean | null;
+  parent_run_id?: string | null;
+};
+
+export type Citation = {
+  source_kind?: string;
+  source_sha256?: string;
+  artifact_id?: string;
+  sha256?: string;
+  locator?: Record<string, unknown>;
+  excerpt?: string;
+  [key: string]: unknown;
 };
 
 export type MatrixRow = {
@@ -130,6 +168,16 @@ export type MatrixRow = {
   model_proposed_status: string;
   system_status: string;
   finding_summary: string;
+  gaps?: string[];
+  assessor_questions?: string[];
+  citations?: Citation[];
+  context_complete?: boolean;
+};
+
+export type MatrixPage = {
+  items: MatrixRow[];
+  total: number;
+  next_cursor: string | null;
 };
 
 export type PreflightResult = {
@@ -145,14 +193,24 @@ export type PreflightResult = {
   };
 };
 
+export type DispositionDecision =
+  | "pending"
+  | "accepted"
+  | "edited"
+  | "rejected"
+  | "evidence_requested"
+  | "weakness_confirmed";
+
 export type Disposition = {
   matrix_row_id: string;
-  decision: string;
+  decision: DispositionDecision | string;
   edited_summary: string | null;
   notes: string | null;
   version: number;
   decided_by: string;
   decided_at: string;
+  evidence_request_id?: string;
+  poam_candidate_id?: string;
 };
 
 export type ReviewRevision = {
@@ -177,6 +235,8 @@ export type Approval = {
   submitted_by: string;
   decided_by: string | null;
   decision: string;
+  submitted_at?: string;
+  decided_at?: string | null;
   expires_at: string;
   reason?: string | null;
 };
@@ -208,4 +268,59 @@ export type PortalReadinessState = {
   degraded: boolean;
   error: string | null;
   checks: ReadinessCheck[];
+};
+
+export type RevisionDelta = {
+  parent_revision_id: string;
+  child_revision_id: string;
+  changed_artifact_ids: string[];
+  added_artifact_ids: string[];
+  removed_artifact_ids: string[];
+  changed_control_ids: string[];
+  changed_evidence_keys: string[];
+  content_digest_changed: boolean;
+  generated_at: string;
+};
+
+export type ChangeAnalysisResult = {
+  delta: RevisionDelta;
+  targeted_assessment_item_ids: string[];
+  requires_targeted_reanalysis: boolean;
+};
+
+export type SearchHit = {
+  reference_id?: string;
+  chunk_id?: string;
+  artifact_id?: string;
+  sha256: string;
+  excerpt: string;
+  score: number;
+  citation?: Citation;
+};
+
+export type SearchResults = {
+  items: SearchHit[];
+  next_cursor?: string | null;
+  query?: string;
+};
+
+export type ChatResponse = {
+  answer: string;
+  citations: Citation[];
+  refused: boolean;
+  refusal_code: string | null;
+};
+
+export type ArtifactDescriptor = {
+  artifact_id: string;
+  path: string;
+  media_type: string;
+  sha256: string;
+  size_bytes: number;
+  official_schema_id: string | null;
+};
+
+export type ExportDownloadResult = {
+  blob: Blob;
+  filename: string;
 };

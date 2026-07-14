@@ -2,6 +2,9 @@ import {
   INVALID_RESPONSE_MESSAGE,
   parseAnalysisRun,
   parseApproval,
+  parseArtifactList,
+  parseChangeAnalysis,
+  parseChatResponse,
   parseDisposition,
   parseExportDraft,
   parseMatrixList,
@@ -14,6 +17,7 @@ import {
   parseReviewRevision,
   parseRevisionList,
   parseRunList,
+  parseSearchResults,
   parseSessionInfo,
   parseSystem,
   parseSystemList,
@@ -21,8 +25,14 @@ import {
 import type {
   AnalysisRun,
   Approval,
+  ArtifactDescriptor,
+  ChangeAnalysisResult,
+  ChatResponse,
+  CreateRevisionInput,
   Disposition,
   ExportDraft,
+  ExportDownloadResult,
+  MatrixPage,
   MatrixRow,
   PackageDraftDocument,
   PackageRevision,
@@ -31,10 +41,12 @@ import type {
   ReviewComment,
   ReviewRevision,
   ReadinessResponse,
+  SearchResults,
   SessionInfo,
   System,
 } from "../types";
 import type { ArtifactKind } from "@/utils/artifactKinds";
+import { parseContentDispositionFilename } from "@/utils/downloadFilename";
 
 export type ApiErrorKind = "cancelled" | "timeout" | "http" | "invalid_response";
 
@@ -71,29 +83,43 @@ export function isCancelledRequest(
 
 type ResponseParser<T> = (value: unknown) => T | null;
 
+async function readProblemBody(response: Response): Promise<{
+  detail: string;
+  errorCode?: string;
+}> {
+  let detail = response.statusText;
+  let errorCode: string | undefined;
+  try {
+    const body = (await response.json()) as {
+      detail?: unknown;
+      error_code?: unknown;
+      error?: unknown;
+      title?: unknown;
+    };
+    if (typeof body.error_code === "string") {
+      errorCode = body.error_code;
+    } else if (typeof body.error === "string") {
+      errorCode = body.error;
+    }
+    if (typeof body.detail === "string") {
+      detail = body.detail;
+    } else if (typeof body.title === "string") {
+      detail = body.title;
+    } else if (body.detail != null) {
+      detail = JSON.stringify(body.detail);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return { detail, errorCode };
+}
+
 async function readValidatedJson<T>(
   response: Response,
   parse: ResponseParser<T>,
 ): Promise<T> {
   if (!response.ok) {
-    let detail = response.statusText;
-    let errorCode: string | undefined;
-    try {
-      const body = (await response.json()) as {
-        detail?: unknown;
-        error_code?: unknown;
-      };
-      if (typeof body.error_code === "string") {
-        errorCode = body.error_code;
-      }
-      if (typeof body.detail === "string") {
-        detail = body.detail;
-      } else if (body.detail != null) {
-        detail = JSON.stringify(body.detail);
-      }
-    } catch {
-      // ignore parse errors
-    }
+    const { detail, errorCode } = await readProblemBody(response);
     throw new ApiError(response.status, detail, "http", errorCode);
   }
 
@@ -301,6 +327,7 @@ export async function listRevisions(
 export async function createRevision(
   session: SessionInfo,
   systemId: string,
+  input: CreateRevisionInput,
   options: ApiFetchOptions = {},
 ): Promise<PackageRevision> {
   const response = await apiFetch(
@@ -315,12 +342,12 @@ export async function createRevision(
         ...options.headers,
       },
       body: JSON.stringify({
-        parent_revision_id: null,
-        profile_id: "fisma_agency_security",
-        certification_class: null,
-        impact_level: "moderate",
-        data_origin: "synthetic",
-        sensitivity: "internal_unclassified",
+        parent_revision_id: input.parent_revision_id ?? null,
+        profile_id: input.profile_id,
+        certification_class: input.certification_class ?? null,
+        impact_level: input.impact_level ?? "moderate",
+        data_origin: input.data_origin,
+        sensitivity: input.sensitivity,
       }),
       ...options,
     },
@@ -364,34 +391,9 @@ export async function uploadPackageFile(
     },
   );
   if (!response.ok) {
-    let detail = response.statusText;
-    let errorCode: string | undefined;
-    try {
-      const body = (await response.json()) as {
-        detail?: string;
-        error_code?: string;
-      };
-      if (typeof body.error_code === "string") {
-        errorCode = body.error_code;
-      }
-      if (body.detail) {
-        detail = body.detail;
-      }
-    } catch {
-      // ignore
-    }
+    const { detail, errorCode } = await readProblemBody(response);
     throw new ApiError(response.status, detail, "http", errorCode);
   }
-}
-
-/** @deprecated Use uploadPackageFile with an explicit artifact kind. */
-export async function uploadJsonFile(
-  session: SessionInfo,
-  revisionId: string,
-  file: File,
-  options: ApiFetchOptions = {},
-): Promise<void> {
-  return uploadPackageFile(session, revisionId, file, "manifest", options);
 }
 
 export async function finalizeRevision(
@@ -488,10 +490,75 @@ export function revisionEtag(revisionVersion: number): string {
   return `"v${revisionVersion}"`;
 }
 
+export async function getPreflight(
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<PreflightResult> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/preflight`, {
+    credentials: "include",
+    ...options,
+  });
+  return readValidatedJson(response, parsePreflight);
+}
+
+export async function getChangeAnalysis(
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<ChangeAnalysisResult> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/delta`, {
+    credentials: "include",
+    ...options,
+  });
+  return readValidatedJson(response, parseChangeAnalysis);
+}
+
+export async function searchPackage(
+  revisionId: string,
+  query: string,
+  options: ApiFetchOptions & { limit?: number } = {},
+): Promise<SearchResults> {
+  const params = new URLSearchParams({ q: query });
+  if (options.limit != null) {
+    params.set("limit", String(options.limit));
+  }
+  const response = await apiFetch(
+    `${API_BASE}/package-revisions/${revisionId}/search?${params.toString()}`,
+    { credentials: "include", ...options },
+  );
+  return readValidatedJson(response, parseSearchResults);
+}
+
+export async function chatWithPackage(
+  session: SessionInfo,
+  revisionId: string,
+  question: string,
+  options: ApiFetchOptions & { reviewRevisionId?: string | null } = {},
+): Promise<ChatResponse> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/chat`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...mutationHeaders(session),
+      ...options.headers,
+    },
+    body: JSON.stringify({
+      question,
+      review_revision_id: options.reviewRevisionId ?? null,
+    }),
+    ...options,
+  });
+  return readValidatedJson(response, parseChatResponse);
+}
+
 export async function startRun(
   session: SessionInfo,
   revisionId: string,
-  options: ApiFetchOptions = {},
+  options: ApiFetchOptions & {
+    runType?: "deterministic_only" | "targeted" | "full";
+    assessmentItemIds?: string[];
+    parentRunId?: string | null;
+  } = {},
 ): Promise<AnalysisRun> {
   const response = await apiFetch(
     `${API_BASE}/package-revisions/${revisionId}/runs`,
@@ -505,14 +572,28 @@ export async function startRun(
         ...options.headers,
       },
       body: JSON.stringify({
-        run_type: "deterministic_only",
-        parent_run_id: null,
-        assessment_item_ids: [],
+        run_type: options.runType ?? "deterministic_only",
+        parent_run_id: options.parentRunId ?? null,
+        assessment_item_ids: options.assessmentItemIds ?? [],
       }),
       ...options,
     },
   );
   return readValidatedJson(response, parseAnalysisRun);
+}
+
+/** @deprecated Use startRun with runType: "targeted". */
+export async function startTargetedRun(
+  session: SessionInfo,
+  revisionId: string,
+  assessmentItemIds: string[] = [],
+  options: ApiFetchOptions = {},
+): Promise<AnalysisRun> {
+  return startRun(session, revisionId, {
+    ...options,
+    runType: "targeted",
+    assessmentItemIds,
+  });
 }
 
 export async function listRuns(
@@ -556,25 +637,41 @@ export async function cancelRun(
 
 export async function listMatrixRows(
   runId: string,
-  options: ApiFetchOptions = {},
-): Promise<{ items: MatrixRow[]; total: number }> {
-  const response = await apiFetch(`${API_BASE}/runs/${runId}/matrix`, {
-    credentials: "include",
-    ...options,
-  });
+  options: ApiFetchOptions & {
+    cursor?: string | null;
+    limit?: number;
+    status?: string;
+  } = {},
+): Promise<MatrixPage> {
+  const params = new URLSearchParams();
+  if (options.cursor) {
+    params.set("cursor", options.cursor);
+  }
+  if (options.limit != null) {
+    params.set("limit", String(options.limit));
+  }
+  if (options.status) {
+    params.set("status", options.status);
+  }
+  const query = params.toString();
+  const response = await apiFetch(
+    `${API_BASE}/runs/${runId}/matrix${query ? `?${query}` : ""}`,
+    { credentials: "include", ...options },
+  );
   const parsed = await readValidatedJson(response, parseMatrixList);
   return parsed;
 }
 
-export async function getPreflight(
-  revisionId: string,
+export async function listRunArtifacts(
+  runId: string,
   options: ApiFetchOptions = {},
-): Promise<PreflightResult> {
-  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/preflight`, {
+): Promise<{ items: ArtifactDescriptor[]; next_cursor: string | null }> {
+  const response = await apiFetch(`${API_BASE}/runs/${runId}/artifacts`, {
     credentials: "include",
     ...options,
   });
-  return readValidatedJson(response, parsePreflight);
+  const parsed = await readValidatedJson(response, parseArtifactList);
+  return parsed;
 }
 
 export async function createReviewRevision(
@@ -758,10 +855,10 @@ export async function listReviewComments(
 
 export async function downloadExport(
   _session: SessionInfo,
-  exportId: string,
+  exportOrApprovalId: string,
   options: ApiFetchOptions = {},
-): Promise<Blob> {
-  const response = await apiFetch(`${API_BASE}/exports/${exportId}/download`, {
+): Promise<ExportDownloadResult> {
+  const response = await apiFetch(`${API_BASE}/exports/${exportOrApprovalId}/download`, {
     credentials: "include",
     headers: {
       "Idempotency-Key": crypto.randomUUID(),
@@ -770,34 +867,15 @@ export async function downloadExport(
     ...options,
   });
   if (!response.ok) {
-    throw new ApiError(response.status, response.statusText);
+    const { detail, errorCode } = await readProblemBody(response);
+    throw new ApiError(response.status, detail, "http", errorCode);
   }
-  return response.blob();
+  const blob = await response.blob();
+  const header = response.headers.get("Content-Disposition");
+  const filename =
+    parseContentDispositionFilename(header) ??
+    `ato-export-${exportOrApprovalId}.zip`;
+  return { blob, filename };
 }
 
-export async function startTargetedRun(
-  session: SessionInfo,
-  revisionId: string,
-  options: ApiFetchOptions = {},
-): Promise<AnalysisRun> {
-  const response = await apiFetch(
-    `${API_BASE}/package-revisions/${revisionId}/runs`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": crypto.randomUUID(),
-        ...mutationHeaders(session),
-        ...options.headers,
-      },
-      body: JSON.stringify({
-        run_type: "targeted",
-        parent_run_id: null,
-        assessment_item_ids: [],
-      }),
-      ...options,
-    },
-  );
-  return readValidatedJson(response, parseAnalysisRun);
-}
+export type { MatrixRow };
