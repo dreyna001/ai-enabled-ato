@@ -39,10 +39,21 @@
       "spec_section": "32",
       "requirement_text": "FedRAMP 20x Program Class C packages conform to the reviewed official package contract and semantic rules.",
       "epic": "EP-03-fedramp-20x",
-      "implementation_files": [],
-      "test_ids": [],
-      "verification_type": "Blocked by HS-001; planned official-schema and semantic end-to-end validation",
-      "status": "blocked"
+      "implementation_files": [
+        "src/ato_service/profile_artifacts.py",
+        "src/ato_service/fedramp_schema.py",
+        "src/ato_service/export_readiness.py",
+        "src/ato_service/export_assembly.py",
+        "tests/fixtures/profile_artifacts/fedramp-20x-class-c-sealed.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_profile_artifacts.py::test_fedramp_fixture_cpo_validates_against_vendored_schema",
+        "tests/ato_service/test_profile_artifacts.py::test_fedramp_20x_generates_spec_paths_and_schema_ids",
+        "tests/ato_service/test_profile_artifacts.py::test_generate_profile_artifacts_is_deterministic",
+        "tests/ato_service/test_profile_artifacts.py::test_assemble_export_bundle_reproduces_fedramp_manifest_hash"
+      ],
+      "verification_type": "Deterministic Class C draft artifact generators with vendored official-schema structural validation and HS-001/HS-009 disclaimers; semantic qualification remains blocked by HS-001",
+      "status": "partial"
     },
     {
       "requirement_id": "R-004",
@@ -257,14 +268,20 @@
       "implementation_files": [
         "src/ato_service/preflight.py",
         "src/ato_service/export_readiness.py",
-        "docs/contracts/preflight.schema.json"
+        "src/ato_service/fedramp_schema.py",
+        "src/ato_service/profile_artifacts.py",
+        "docs/contracts/preflight.schema.json",
+        "docs/contracts/export-manifest.schema.json"
       ],
       "test_ids": [
         "tests/ato_service/test_downstream_contracts.py::test_preflight_blocks_export_without_assessor_and_privacy",
-        "tests/ato_service/test_downstream_contracts.py::test_export_readiness_reports_missing_assessor_inputs"
+        "tests/ato_service/test_downstream_contracts.py::test_export_readiness_reports_missing_assessor_inputs",
+        "tests/ato_service/test_downstream_contracts.py::test_export_readiness_fedramp_20x_reports_schema_warnings",
+        "tests/ato_service/test_profile_artifacts.py::test_fedramp_fixture_cpo_validates_against_vendored_schema",
+        "tests/ato_service/test_profile_artifacts.py::test_fedramp_rev5_preserves_imported_sections_and_provenance"
       ],
-      "verification_type": "Deterministic preflight with separate analysis_eligible and export_eligible; structural FedRAMP export-readiness checks remain draft-only under HS-001",
-      "status": "blocked"
+      "verification_type": "Deterministic preflight and export-readiness with vendored FedRAMP schema-purity validation, validation/ bundle artifacts, and HS-001 draft disclaimers; official qualification claims remain blocked by HS-001",
+      "status": "partial"
     },
     {
       "requirement_id": "R-012",

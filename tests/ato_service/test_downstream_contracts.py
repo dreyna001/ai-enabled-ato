@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import json
+
 from ato_service.export_readiness import evaluate_export_readiness
 from ato_service.package_chat import chat_with_package
 from ato_service.package_search import search_revision_content
@@ -100,6 +102,22 @@ def test_export_readiness_reports_missing_assessor_inputs() -> None:
         project_root=ROOT,
     )
     assert "missing_assessor_inputs" in result.blockers
+
+
+def test_export_readiness_fedramp_20x_reports_schema_warnings() -> None:
+    document = json.loads(
+        (
+            ROOT
+            / "tests/fixtures/profile_artifacts/fedramp-20x-class-c-sealed.json"
+        ).read_text(encoding="utf-8")
+    )
+    result = evaluate_export_readiness(
+        profile_id="fedramp_20x_program",
+        sealed_document=document,
+        project_root=ROOT,
+    )
+    assert result.structural_checks_passed is True
+    assert "hs_001_authority_review_pending" in result.warnings
 
 
 def test_revision_delta_detects_changed_controls() -> None:
