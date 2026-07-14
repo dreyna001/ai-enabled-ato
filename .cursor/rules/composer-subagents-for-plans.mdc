@@ -1,0 +1,29 @@
+---
+description: Use Composer 2.5 subagents for plans and any work that delegates to subagents
+alwaysApply: true
+---
+
+# Composer 2.5 Subagents For Plans And Delegated Work
+
+When creating or updating **any plan** (Cursor Plan mode, markdown plan files under `docs/`, or `.cursor/plans/`) or when work requires **subagents**, use **Composer 2.5 subagents** with model **`composer-2.5-fast`**.
+
+## Required
+
+- Planning passes that explore the codebase, compare contracts, or map gaps: launch parallel **explore** or **generalPurpose** subagents at `composer-2.5-fast`.
+- For every non-trivial implementation phase, split independent workstreams across **at least two Composer 2.5 subagents** when parallel work is technically possible.
+- Implementation plans with multiple bounded diffs: document phase ownership and assign separate subagents per independent workstream so one agent does not accumulate the entire phase context.
+- Any `Task` / subagent invocation for non-trivial work: set `model: composer-2.5-fast` unless the user explicitly names another allowed model.
+- Cloud execution for large multi-phase implementation unless the user restricts work to local only.
+
+## Parent agent responsibilities
+
+- Merge subagent output; do not treat subagent summaries as done without verification.
+- Run focused tests and contract checks after each subagent deliverable.
+- Keep one branch coherent; subagents must not leave conflicting partial implementations unreviewed.
+- Use an additional Composer 2.5 review or integration-gate subagent when parallel implementation branches touch shared contracts.
+
+## Do not
+
+- Use subagents for single-file trivia that is faster to do directly.
+- Substitute a different model when the user asked for Composer 2.5 subagents.
+- Let subagents invent customer evidence, close hard stops from mocks, or overwrite live customer config/credentials.
