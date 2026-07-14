@@ -37,6 +37,11 @@ From the release tree on a connected staging host:
 # Build portal static bundle before packaging
 cd portal && npm ci && npm run build && cd ..
 
+# Prestaged offline wheels and deterministic release archive
+bash scripts/prestage_airgap_deps.sh
+bash scripts/build_release.sh --require-airgap
+bash scripts/verify_release.sh dist/releases/ato-analyzer-*.tar.gz
+
 # Install application, portal dist, systemd units, and inactive nginx examples
 sudo bash scripts/install.sh
 ```

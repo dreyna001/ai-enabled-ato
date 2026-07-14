@@ -27,7 +27,11 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`../scripts/rollback.sh`](../scripts/rollback.sh) | Restore last install snapshot metadata (not database schema) |
 | [`../scripts/verify_backup_contract.sh`](../scripts/verify_backup_contract.sh) | Fail-safe backup declaration checks (**HS-008**) |
 | [`../scripts/prestage_airgap_deps.sh`](../scripts/prestage_airgap_deps.sh) | Offline wheel staging for airgap installs |
+| [`../scripts/build_release.sh`](../scripts/build_release.sh) | Deterministic versioned release archive from allowlist |
+| [`../scripts/verify_release.sh`](../scripts/verify_release.sh) | Offline archive verification (checksums, allowlist, schema) |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
+| [`../docs/RELEASE_PACKAGING.md`](../docs/RELEASE_PACKAGING.md) | Connected build and airgap verification guide |
+| [`../docs/release/`](../docs/release/) | Version/config/credential/lifecycle/checklist/evidence indexes |
 | [`../docs/contracts/validation-drill-record.schema.json`](../docs/contracts/validation-drill-record.schema.json) | Immutable customer validation drill record contract |
 | [`../src/ato_operator/drill_handlers.py`](../src/ato_operator/drill_handlers.py) | `ato-operator run-drill`, `list-drills`, `validate-drill-record`, `write-drill-record` |
 | [`../docs/CUSTOMER_ONBOARDING.md`](../docs/CUSTOMER_ONBOARDING.md) | Customer onboarding checklist |

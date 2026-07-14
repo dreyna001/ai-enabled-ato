@@ -21,6 +21,7 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `sufficiency-matrix-response.schema.json` | Closed structured output for `sufficiency_matrix` v1 | Published Phase 3 Workstream A contract |
 | `qualification-manifest.schema.json` | Sealed qualification corpus manifest with digests and hard-stop-safe claim metadata | Published Phase 5 qualification contract |
 | `validation-drill-record.schema.json` | Immutable customer validation drill evidence record | Published Phase 5 contract |
+| `release-package-manifest.schema.json` | Embedded release archive metadata and verification contract | Published Phase 6 contract |
 | `ai-evaluation-record.schema.json` | Immutable AI qualification evaluation record | Published Phase 5 contract |
 | `openapi.json` | OpenAPI 3.1 API surface and shared HTTP contracts | Published P-1 contract (`info.version` 1.0.0) |
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |

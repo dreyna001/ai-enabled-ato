@@ -33,6 +33,12 @@ from ato_operator.evaluation_record import (
 )
 from ato_operator.preflight import run_operator_preflight_sync
 from ato_operator.qualification_check import run_qualification_check
+from ato_operator.release_allowlist import ReleaseBuildOptions
+from ato_operator.release_packaging import (
+    ReleasePackagingError,
+    build_release_archive,
+    verify_release_archive,
+)
 from ato_operator.search_index import rebuild_package_search_index_sync
 from ato_service.db.dsn import require_database_dsn_from_env
 from ato_service.process_capabilities import resolve_process_capabilities
@@ -321,6 +327,53 @@ def _command_write_evaluation_record(args: argparse.Namespace) -> int:
     )
 
 
+def _command_build_release(args: argparse.Namespace) -> int:
+    project_root = _find_project_root()
+    report = build_release_archive(
+        ReleaseBuildOptions(
+            project_root=project_root,
+            output_dir=Path(args.output_dir).resolve(),
+            require_portal_dist=not args.skip_portal_dist,
+            require_airgap=args.require_airgap,
+            source_date_epoch=args.source_date_epoch,
+            git_revision=args.git_revision,
+        )
+    )
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(f"archive: {report.archive_path}")
+        print(f"version: {report.package_version}")
+        print(f"files: {report.file_count}")
+        print(f"sha256: {report.archive_sha256}")
+        print(f"migration_head: {report.migration_head}")
+    return 0
+
+
+def _command_verify_release(args: argparse.Namespace) -> int:
+    project_root = _find_project_root()
+    signature_path = Path(args.signature).resolve() if args.signature else None
+    report = verify_release_archive(
+        Path(args.archive).resolve(),
+        signature_path=signature_path,
+        project_root=project_root,
+    )
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        for warning in report.warnings:
+            print(f"warning: {warning}")
+        for error in report.errors:
+            print(f"error: {error}", file=sys.stderr)
+        print(
+            "release verification passed"
+            if report.passed
+            else "release verification failed"
+        )
+        print(f"signature_status: {report.signature_status}")
+    return 0 if report.passed else 1
+
+
 def _command_print_checklist(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     items = build_operator_checklist(project_root=project_root)
@@ -370,6 +423,48 @@ def _build_parser() -> argparse.ArgumentParser:
         ("print-checklist", "Print airgapped onboarding checklist"),
     ):
         subparsers.add_parser(name, parents=[parent], help=help_text)
+
+    build_release = subparsers.add_parser(
+        "build-release",
+        help="Build deterministic customer release archive from allowlist",
+    )
+    build_release.add_argument(
+        "--output-dir",
+        default="dist/releases",
+        help="Directory for versioned archive output",
+    )
+    build_release.add_argument(
+        "--skip-portal-dist",
+        action="store_true",
+        help="Do not require portal/dist (not for production packaging)",
+    )
+    build_release.add_argument(
+        "--require-airgap",
+        action="store_true",
+        help="Require dist/airgap prestaged wheels and manifest",
+    )
+    build_release.add_argument(
+        "--source-date-epoch",
+        type=int,
+        default=1_700_000_000,
+        help="Deterministic archive timestamp",
+    )
+    build_release.add_argument(
+        "--git-revision",
+        help="Optional revision string recorded in release evidence",
+    )
+    build_release.add_argument("--json", action="store_true")
+
+    verify_release = subparsers.add_parser(
+        "verify-release",
+        help="Verify release archive offline (checksums, allowlist, schema, secrets)",
+    )
+    verify_release.add_argument("--archive", required=True, help="Path to .tar.gz archive")
+    verify_release.add_argument(
+        "--signature",
+        help="Optional detached OpenPGP signature path (.asc)",
+    )
+    verify_release.add_argument("--json", action="store_true")
 
     verify_migrations = subparsers.add_parser(
         "verify-migrations",
@@ -539,12 +634,17 @@ def main(argv: list[str] | None = None) -> int:
         "run-drill": command_run_drill,
         "validate-evaluation-record": _command_validate_evaluation_record,
         "write-evaluation-record": _command_write_evaluation_record,
+        "build-release": _command_build_release,
+        "verify-release": _command_verify_release,
     }
     handler = commands[args.command]
     try:
         if args.command == "write-evaluation-record" and not args.records_root:
             raise RuntimeConfigError("--records-root is required for write-evaluation-record")
         return handler(args)
+    except ReleasePackagingError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     except RuntimeConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
