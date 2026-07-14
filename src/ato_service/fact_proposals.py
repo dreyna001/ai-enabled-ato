@@ -14,14 +14,10 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
-from ato_service.auth_context import (
-    AuthenticatedPrincipal,
-    AuthorizationDeniedError,
-    require_system_mutation_access,
-    require_system_read_access,
-)
+from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.route_role_matrix import ROLE_ISSO, ROLE_SYSTEM_OWNER, ROLE_VIEWER
 from ato_service.concurrency import (
-    EtagMismatchError,
     IfMatchRequiredError,
     assert_if_match,
     format_package_revision_etag,
@@ -172,7 +168,12 @@ async def list_fact_proposals(
         session,
         package_revision_id=package_revision_id,
     )
-    require_system_read_access(principal, system)
+    require_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        role=ROLE_VIEWER,
+    )
     page_limit = validate_page_limit(limit)
 
     statement = (
@@ -237,7 +238,12 @@ async def _review_fact_proposal(
         session,
         package_revision_id=proposal.package_revision_id,
     )
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ISSO),
+    )
     assert_if_match(if_match, package_revision.revision_version)
 
     if package_revision.status != "awaiting_confirmation":

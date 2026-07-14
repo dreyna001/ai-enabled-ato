@@ -177,7 +177,7 @@ processing. Customer extraction remains blocked while **HS-005** is open.
   revision is non-`pending` (legacy compatibility path) and performs
   `awaiting_confirmation -> ready` without sealed package content.
 
-#### 2.1.3 Authentication and object authorization (pre-EP-06)
+#### 2.1.3 Authentication and object authorization
 
 Package routes require an injected authenticated principal carrying `actor_id`
 and `groups`. No request header may self-assert identity; external
@@ -191,17 +191,59 @@ Mutations also require a validated CSRF context (`X-CSRF-Token` plus
 server-side Origin validation). No insecure development bypass and no
 `LOCAL_PASSWORD_AUTH_ENABLED` path exist for package mutations.
 
-Object authorization for this slice is default-deny:
+Object authorization is default-deny and package-scoped. Roles map from OIDC
+groups through `OIDC_GROUP_ROLE_MAPPING` with the normative defaults in
+`src/ato_service/package_rbac.py`. The published per-route matrix is
+`src/ato_service/route_role_matrix.py` (`ROUTE_ROLE_MATRIX`).
 
-- **Reads** (`GET` system, list revisions, get revision, get draft, list proposals):
-  principal must be a member of `System.owner_group` or one of
-  `System.viewer_groups`.
-- **Mutations** (create system, create revision, upload, finalize, save draft,
-  confirm, proposal accept/reject): principal must be a member of `System.owner_group`.
+| Route | Method | Required package role(s) |
+| --- | --- | --- |
+| `/systems` | `GET` | `viewer` |
+| `/systems` | `POST` | `system_owner` (prospective `owner_group`) |
+| `/systems/{system_id}` | `GET` | `viewer` |
+| `/systems/{system_id}/package-revisions` | `POST` | `system_owner`, `isso` |
+| `/systems/{system_id}/package-revisions` | `GET` | `viewer` |
+| `/package-revisions/{id}` | `GET` | `viewer` |
+| `/package-revisions/{id}/files` | `POST` | `system_owner`, `control_owner` |
+| `/package-revisions/{id}/finalize` | `POST` | `system_owner`, `isso` |
+| `/package-revisions/{id}/draft` | `GET` | `viewer` |
+| `/package-revisions/{id}/draft` | `PUT` | `system_owner`, `isso` |
+| `/package-revisions/{id}/confirm` | `POST` | `system_owner`, `isso` |
+| `/package-revisions/{id}/proposals` | `GET` | `viewer` |
+| `/proposals/{id}/accept` | `POST` | `system_owner`, `isso` |
+| `/proposals/{id}/reject` | `POST` | `system_owner`, `isso` |
+| `/package-revisions/{id}/runs` | `POST` | `system_owner`, `assessor` |
+| `/package-revisions/{id}/runs` | `GET` | `viewer` |
+| `/runs/{run_id}` | `GET` | `viewer` |
+| `/runs/{run_id}/cancel` | `POST` | `system_owner` |
+| `/runs/{run_id}/matrix` | `GET` | `viewer` |
+| `/runs/{run_id}/review-revisions` | `POST` | `reviewer` |
+| `/review-revisions/{id}/submit` | `POST` | `reviewer` |
+| `/review-revisions/{id}/dispositions/{row_id}` | `PATCH` | `reviewer` |
+| `/review-revisions/{id}/comments` | `POST` | `reviewer` |
+| `/review-revisions/{id}/comments` | `GET` | `viewer` |
+| `/review-revisions/{id}/export-drafts` | `POST` | `reviewer` |
+| `/export-drafts/{id}/submit` | `POST` | `reviewer` |
+| `/approvals/{id}/approve` | `POST` | `approver`, `ao_custodian` |
+| `/approvals/{id}/reject` | `POST` | `approver`, `ao_custodian` |
+| `/exports/{id}/download` | `GET` | `viewer` |
+| `/systems/{system_id}/authorization-decisions` | `POST` | `ao_custodian`, `isso` |
+| `/systems/{system_id}/authorization-decisions` | `GET` | `viewer` |
+| `/package-revisions/{id}/preflight` | `GET` | `viewer` |
+| `/package-revisions/{id}/delta` | `GET` | `viewer` |
+| `/package-revisions/{id}/search` | `GET` | `viewer` |
+| `/package-revisions/{id}/chat` | `POST` | `viewer` |
 
-Unauthorized access returns HTTP 403 `authorization_denied` without leaking
-sensitive object existence or field details beyond what the route contract
-requires.
+`system_owner`, `isso`, and `reviewer` also accept membership in the owning
+`System.owner_group` for migration compatibility. `viewer` accepts
+`System.owner_group` or `System.viewer_groups`. Export approval denies
+`submitted_by == decided_by` with HTTP 403 `self_approval_denied`.
+
+Object lookups enforce package authorization before disclosure or mutation.
+Guessed IDs for revisions, runs, reviews, exports, approvals, proposals, and
+artifacts MUST NOT leak cross-system data: unauthorized callers receive HTTP
+403 `authorization_denied`; missing objects receive HTTP 404
+`resource_not_found`. List and detail behavior agree on visibility filters.
 
 #### 2.1.4 Idempotency-required operations (P1.1)
 

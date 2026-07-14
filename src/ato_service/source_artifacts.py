@@ -23,10 +23,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
-from ato_service.auth_context import (
-    AuthenticatedPrincipal,
-    require_system_mutation_access,
-)
+from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.package_rbac import require_any_package_role
+from ato_service.route_role_matrix import ROLE_CONTROL_OWNER, ROLE_SYSTEM_OWNER
 from ato_service.blobs import (
     BlobStore,
     BlobStoreError,
@@ -184,7 +183,12 @@ async def upload_source_artifact(
     revision, system = await _lock_package_revision_and_system(
         session, package_revision_id
     )
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_CONTROL_OWNER),
+    )
     _require_uploading_status(revision)
 
     prehashed_sha256, prehashed_size_bytes = _prehash_seekable_stream(

@@ -25,6 +25,7 @@ from ato_service.idempotency import (
     request_digest_from_payload,
 )
 from ato_service.package_rbac import require_package_role
+from ato_service.route_role_matrix import ROLE_REVIEWER, ROLE_VIEWER
 from ato_service.pagination import (
     InvalidPaginationCursorError,
     PaginationCursor,
@@ -176,7 +177,7 @@ async def create_review_revision(
 
     run, revision, system, matrix_rows = await _load_run_context(session, run_id=run_id)
     try:
-        require_package_role(principal, system=system, revision=revision, role="reviewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
 
@@ -272,7 +273,7 @@ async def submit_review_revision(
         raise ReviewRevisionNotFoundError()
     run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
     try:
-        require_package_role(principal, system=system, revision=revision, role="reviewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
     assert_if_match(if_match=if_match, current_version=review_revision.version)
@@ -341,7 +342,7 @@ async def update_disposition(
         )
     run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
     try:
-        require_package_role(principal, system=system, revision=revision, role="reviewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
     assert_if_match(if_match=if_match, current_version=review_revision.version)
@@ -455,7 +456,7 @@ async def create_review_comment(
         )
     run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
     try:
-        require_package_role(principal, system=system, revision=revision, role="reviewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
 
@@ -543,7 +544,7 @@ async def list_review_comments(
         raise ReviewRevisionNotFoundError()
     run, revision, system, _ = await _load_run_context(session, run_id=review_revision.run_id)
     try:
-        require_package_role(principal, system=system, revision=revision, role="viewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_VIEWER)
     except AuthorizationDeniedError:
         raise
 

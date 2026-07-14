@@ -17,10 +17,12 @@ from ato_service.authorization_boundary import (
     ClassifiedAuthorizationInputError,
     require_unclassified_sensitivity,
 )
-from ato_service.auth_context import (
-    AuthenticatedPrincipal,
-    require_system_mutation_access,
-    require_system_read_access,
+from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.route_role_matrix import (
+    ROLE_ISSO,
+    ROLE_SYSTEM_OWNER,
+    ROLE_VIEWER,
 )
 from ato_service.concurrency import (
     IfMatchRequiredError,
@@ -507,7 +509,7 @@ async def get_package_revision(
         raise PackageRevisionNotFoundError(package_revision_id=package_revision_id)
 
     package_revision, system = row
-    require_system_read_access(principal, system)
+    require_package_role(principal, system=system, revision=package_revision, role=ROLE_VIEWER)
     return map_package_revision_to_domain(package_revision)
 
 
@@ -525,7 +527,7 @@ async def list_package_revisions(
     if system is None:
         raise SystemNotFoundError(system_id=system_id)
 
-    require_system_read_access(principal, system)
+    require_package_role(principal, system=system, role=ROLE_VIEWER)
 
     decoded_cursor = (
         None if cursor is None else decode_pagination_cursor(cursor)
@@ -588,7 +590,11 @@ async def create_package_revision(
     if system is None:
         raise SystemNotFoundError(system_id=system_id)
 
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ISSO),
+    )
 
     replay = await load_idempotency_replay(
         session,
@@ -689,7 +695,12 @@ async def finalize_package_revision(
         _load_system_for_update_statement(package_revision.system_id)
     )
     system = system_result.scalar_one()
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ISSO),
+    )
 
     replay = await load_idempotency_replay(
         session,
@@ -819,7 +830,12 @@ async def confirm_package_revision(
         _load_system_for_update_statement(package_revision.system_id)
     )
     system = system_result.scalar_one()
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ISSO),
+    )
 
     replay = await load_idempotency_replay(
         session,

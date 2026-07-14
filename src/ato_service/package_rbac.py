@@ -7,7 +7,6 @@ from typing import Any, Protocol
 from ato_service.auth_context import (
     AuthenticatedPrincipal,
     AuthorizationDeniedError,
-    require_system_mutation_access,
     require_system_read_access,
 )
 
@@ -102,6 +101,33 @@ def require_package_mutation(
     system: _SystemTarget,
     role: str = "system_owner",
 ) -> None:
-    if principal_has_role(principal, role) or principal.is_member_of(system.owner_group):
-        return
+    require_any_package_role(principal, system=system, role=role)
+
+
+def require_any_package_role(
+    principal: AuthenticatedPrincipal,
+    *,
+    system: _SystemTarget,
+    revision: _RevisionTarget | None = None,
+    roles: tuple[str, ...] | None = None,
+    role: str | None = None,
+) -> None:
+    """Default-deny check that succeeds when any listed package role is satisfied."""
+    resolved_roles = roles if roles is not None else ((role,) if role is not None else ())
+    if not resolved_roles:
+        raise AuthorizationDeniedError()
+    last_error: AuthorizationDeniedError | None = None
+    for candidate in resolved_roles:
+        try:
+            require_package_role(
+                principal,
+                system=system,
+                revision=revision,
+                role=candidate,
+            )
+            return
+        except AuthorizationDeniedError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
     raise AuthorizationDeniedError()

@@ -26,7 +26,8 @@ from ato_service.idempotency import (
     record_idempotency_outcome,
     request_digest_from_payload,
 )
-from ato_service.package_rbac import require_package_role
+from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.route_role_matrix import ROLE_AO_CUSTODIAN, ROLE_APPROVER, ROLE_REVIEWER, ROLE_VIEWER
 from ato_service.profile_artifacts import generate_profile_artifacts
 from ato_service.runtime_config import load_runtime_config
 
@@ -376,7 +377,7 @@ async def create_export_draft(
         session, review_revision_id=review_revision_id
     )
     try:
-        require_package_role(principal, system=system, revision=revision, role="reviewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
     if review_revision.status != "submitted":
@@ -532,7 +533,7 @@ async def submit_export_draft(
         session, review_revision_id=export_draft.review_revision_id
     )
     try:
-        require_package_role(principal, system=system, revision=revision, role="reviewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
     assert_if_match(if_match=if_match, current_version=1)
@@ -649,7 +650,7 @@ async def deliver_export_download(
             session, review_revision_id=existing.review_revision_id
         )
         try:
-            require_package_role(principal, system=system, revision=revision, role="viewer")
+            require_package_role(principal, system=system, revision=revision, role=ROLE_VIEWER)
         except AuthorizationDeniedError:
             raise
         zip_bytes = _read_export_zip(storage_root=storage_root, storage_key=existing.storage_key)
@@ -710,7 +711,7 @@ async def deliver_export_download(
         session, review_revision_id=export_draft.review_revision_id
     )
     try:
-        require_package_role(principal, system=system, revision=revision, role="viewer")
+        require_package_role(principal, system=system, revision=revision, role=ROLE_VIEWER)
     except AuthorizationDeniedError:
         raise
     if sealed is None:
@@ -893,7 +894,12 @@ async def approve_export(
         session, review_revision_id=export_draft.review_revision_id
     )
     try:
-        require_package_role(principal, system=system, revision=revision, role="approver")
+        require_any_package_role(
+            principal,
+            system=system,
+            revision=revision,
+            roles=(ROLE_APPROVER, ROLE_AO_CUSTODIAN),
+        )
     except AuthorizationDeniedError:
         raise
 
@@ -1025,7 +1031,12 @@ async def reject_export(
         session, review_revision_id=export_draft.review_revision_id
     )
     try:
-        require_package_role(principal, system=system, revision=revision, role="approver")
+        require_any_package_role(
+            principal,
+            system=system,
+            revision=revision,
+            roles=(ROLE_APPROVER, ROLE_AO_CUSTODIAN),
+        )
     except AuthorizationDeniedError:
         raise
 

@@ -31,8 +31,8 @@ from ato_service.export_service import (
     reject_export,
     submit_export_draft,
 )
-from ato_service.package_chat import chat_with_package
-from ato_service.package_search import search_revision_content
+from ato_service.object_authorization import authorize_package_revision_read
+from ato_service.package_revisions import PackageRevisionNotFoundError
 from ato_service.preflight import PreflightContext, evaluate_preflight
 from ato_service.review_revisions import (
     ReviewRevisionNotFoundError,
@@ -126,20 +126,23 @@ def build_extended_router() -> APIRouter:
         session: Annotated[AsyncSession, Depends(get_db_session)],
         runtime_state: Annotated[Any, Depends(get_runtime_state)],
     ) -> dict[str, Any]:
-        from ato_service.db.models import PackageRevision, SealedPackageContent, System
+        from ato_service.db.models import SealedPackageContent
 
-        revision_result = await session.execute(
-            select(PackageRevision).where(PackageRevision.package_revision_id == id)
-        )
-        revision = revision_result.scalar_one_or_none()
-        if revision is None:
+        try:
+            scope = await authorize_package_revision_read(
+                session,
+                principal=principal,
+                package_revision_id=id,
+                not_found_error=PackageRevisionNotFoundError,
+            )
+        except PackageRevisionNotFoundError:
             return JSONResponse(status_code=404, content={"error": "not_found"})
-        system_result = await session.execute(
-            select(System).where(System.system_id == revision.system_id)
-        )
-        system = system_result.scalar_one_or_none()
-        if system is None:
-            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except AuthorizationDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "authorization_denied", "error_code": "authorization_denied"},
+            )
+        revision = scope.package_revision
         sealed_result = await session.execute(
             select(SealedPackageContent).where(
                 SealedPackageContent.package_revision_id == id
@@ -167,11 +170,22 @@ def build_extended_router() -> APIRouter:
     ) -> dict[str, Any]:
         from ato_service.db.models import PackageRevision, SealedPackageContent, SourceArtifact
 
-        child_result = await session.execute(
-            select(PackageRevision).where(PackageRevision.package_revision_id == id)
-        )
-        child = child_result.scalar_one_or_none()
-        if child is None or child.parent_revision_id is None:
+        try:
+            scope = await authorize_package_revision_read(
+                session,
+                principal=principal,
+                package_revision_id=id,
+                not_found_error=PackageRevisionNotFoundError,
+            )
+        except PackageRevisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except AuthorizationDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "authorization_denied", "error_code": "authorization_denied"},
+            )
+        child = scope.package_revision
+        if child.parent_revision_id is None:
             return JSONResponse(status_code=404, content={"error": "not_found"})
         parent_result = await session.execute(
             select(PackageRevision).where(
@@ -229,14 +243,23 @@ def build_extended_router() -> APIRouter:
         q: str = "",
         limit: int = 25,
     ) -> dict[str, Any]:
-        from ato_service.db.models import PackageRevision, SealedPackageContent, SourceArtifact
+        from ato_service.db.models import SealedPackageContent, SourceArtifact
+        from ato_service.package_search import search_revision_content
 
-        revision_result = await session.execute(
-            select(PackageRevision).where(PackageRevision.package_revision_id == id)
-        )
-        revision = revision_result.scalar_one_or_none()
-        if revision is None:
+        try:
+            await authorize_package_revision_read(
+                session,
+                principal=principal,
+                package_revision_id=id,
+                not_found_error=PackageRevisionNotFoundError,
+            )
+        except PackageRevisionNotFoundError:
             return JSONResponse(status_code=404, content={"error": "not_found"})
+        except AuthorizationDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "authorization_denied", "error_code": "authorization_denied"},
+            )
         sealed = (
             await session.execute(
                 select(SealedPackageContent).where(
@@ -263,14 +286,24 @@ def build_extended_router() -> APIRouter:
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
     ) -> dict[str, Any]:
-        from ato_service.db.models import PackageRevision, SealedPackageContent, SourceArtifact
+        from ato_service.db.models import SealedPackageContent, SourceArtifact
+        from ato_service.package_chat import chat_with_package
+        from ato_service.package_search import search_revision_content
 
-        revision_result = await session.execute(
-            select(PackageRevision).where(PackageRevision.package_revision_id == id)
-        )
-        revision = revision_result.scalar_one_or_none()
-        if revision is None:
+        try:
+            await authorize_package_revision_read(
+                session,
+                principal=principal,
+                package_revision_id=id,
+                not_found_error=PackageRevisionNotFoundError,
+            )
+        except PackageRevisionNotFoundError:
             return JSONResponse(status_code=404, content={"error": "not_found"})
+        except AuthorizationDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "authorization_denied", "error_code": "authorization_denied"},
+            )
         sealed = (
             await session.execute(
                 select(SealedPackageContent).where(

@@ -352,12 +352,17 @@
       "epic": "EP-06-review-portal",
       "implementation_files": [
         "src/ato_service/package_rbac.py",
+        "src/ato_service/route_role_matrix.py",
+        "src/ato_service/object_authorization.py",
         "src/ato_service/oidc_auth.py",
         "src/ato_service/oidc_jwt.py",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
         "docs/THREAT_MODEL.md"
       ],
       "test_ids": [
-        "tests/ato_service/test_oidc_auth.py"
+        "tests/ato_service/test_oidc_auth.py",
+        "tests/ato_service/test_route_role_matrix.py",
+        "tests/ato_service/test_object_authorization_security.py"
       ],
       "verification_type": "Authlib JWT validation plus package-scoped RBAC role matrix; production deployment also depends on HS-003 live IdP drill",
       "status": "partial"
@@ -782,8 +787,11 @@
       "epic": "EP-06-review-portal",
       "implementation_files": [
         "src/ato_service/package_rbac.py",
+        "src/ato_service/route_role_matrix.py",
+        "src/ato_service/object_authorization.py",
         "src/ato_service/auth_context.py",
-        "src/ato_service/export_service.py"
+        "src/ato_service/export_service.py",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md"
       ],
       "test_ids": [
         "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_denies_viewer_mutation_roles",
@@ -791,9 +799,16 @@
         "tests/ato_service/test_ep06_security_matrix.py::test_package_rbac_allows_dedicated_approver_group",
         "tests/ato_service/test_ep06_security_matrix.py::test_mutation_context_requires_csrf_and_origin",
         "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied",
-        "tests/ato_service/test_review_export_lifecycle.py::test_mutation_context_requires_csrf_for_reject_route"
+        "tests/ato_service/test_ep06_security_matrix.py::test_assessor_may_start_runs_but_not_cancel",
+        "tests/ato_service/test_ep06_security_matrix.py::test_control_owner_may_upload_but_not_finalize",
+        "tests/ato_service/test_ep06_security_matrix.py::test_isso_may_confirm_but_viewer_may_not",
+        "tests/ato_service/test_ep06_security_matrix.py::test_ao_custodian_may_attach_authorization_decisions",
+        "tests/ato_service/test_ep06_security_matrix.py::test_viewer_is_denied_reviewer_export_submit",
+        "tests/ato_service/test_review_export_lifecycle.py::test_mutation_context_requires_csrf_for_reject_route",
+        "tests/ato_service/test_route_role_matrix.py",
+        "tests/ato_service/test_object_authorization_security.py"
       ],
-      "verification_type": "RBAC role matrix, CSRF/origin mutation gate, and self-approval denial unit coverage; live OIDC object-level drills remain partial under HS-003",
+      "verification_type": "Published per-route role matrix with package-scoped enforcement, CSRF/origin mutation gate, object guessing denial, and self-approval denial unit coverage; live OIDC object-level drills remain partial under HS-003",
       "status": "partial"
     },
     {

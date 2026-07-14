@@ -21,10 +21,12 @@ from ato_service.authorization_boundary import (
     UnsupportedAuthorizationPathError,
     validate_system_context_authorization_path,
 )
-from ato_service.auth_context import (
-    AuthenticatedPrincipal,
-    require_system_mutation_access,
-    require_system_read_access,
+from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.route_role_matrix import (
+    ROLE_ISSO,
+    ROLE_SYSTEM_OWNER,
+    ROLE_VIEWER,
 )
 from ato_service.concurrency import (
     IfMatchRequiredError,
@@ -326,7 +328,12 @@ async def get_package_revision_draft(
         raise _revision_not_found(package_revision_id=package_revision_id)
 
     package_revision, system = row
-    require_system_read_access(principal, system)
+    require_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        role=ROLE_VIEWER,
+    )
 
     draft_result = await session.execute(_load_draft_statement(package_revision_id))
     draft = draft_result.scalar_one_or_none()
@@ -380,7 +387,12 @@ async def save_package_revision_draft(
         _load_system_for_update_statement(package_revision.system_id)
     )
     system = system_result.scalar_one()
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ISSO),
+    )
 
     replay = await load_idempotency_replay(
         session,

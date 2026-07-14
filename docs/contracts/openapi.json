@@ -3,7 +3,7 @@
   "info": {
     "title": "ATO Evidence Analysis Portal API",
     "version": "1.0.0",
-    "description": "Published P-1 API contract. An endpoint appearing here does not mean it is implemented."
+    "description": "Published P-1 API contract. An endpoint appearing here does not mean it is implemented. Package-scoped role requirements are normative in docs/contracts/LIFECYCLE_AND_ERRORS.md Section 2.1.3 and src/ato_service/route_role_matrix.py."
   },
   "servers": [
     {

@@ -11,13 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
-from ato_service.auth_context import (
-    AuthenticatedPrincipal,
-    AuthorizationDeniedError,
-    require_system_mutation_access,
-    require_system_read_access,
-)
-from ato_service.concurrency import assert_if_match, format_package_revision_etag
+from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
+from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.route_role_matrix import ROLE_AO_CUSTODIAN, ROLE_ISSO, ROLE_VIEWER
 from ato_service.domain_mapping import format_uuid
 from ato_service.idempotency import (
     IdempotencyReplay,
@@ -109,7 +105,11 @@ async def attach_authorization_decision(
     if system is None:
         raise AuthorizationDecisionNotFoundError()
     try:
-        require_system_mutation_access(principal, system)
+        require_any_package_role(
+            principal,
+            system=system,
+            roles=(ROLE_AO_CUSTODIAN, ROLE_ISSO),
+        )
     except AuthorizationDeniedError:
         raise
 
@@ -212,7 +212,7 @@ async def list_authorization_decisions(
     if system is None:
         raise AuthorizationDecisionNotFoundError()
     try:
-        require_system_read_access(principal, system)
+        require_package_role(principal, system=system, role=ROLE_VIEWER)
     except AuthorizationDeniedError:
         raise
 

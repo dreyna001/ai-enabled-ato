@@ -21,11 +21,12 @@ from ato_service.analysis_profile import (
     load_pinned_profile,
 )
 from ato_service.audit import append_audit_event
-from ato_service.auth_context import (
-    AuthenticatedPrincipal,
-    AuthorizationDeniedError,
-    require_system_mutation_access,
-    require_system_read_access,
+from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.route_role_matrix import (
+    ROLE_ASSESSOR,
+    ROLE_SYSTEM_OWNER,
+    ROLE_VIEWER,
 )
 from ato_service.db.models import AnalysisRun, Job, MatrixRow, PackageRevision, System
 from ato_service.domain_mapping import (
@@ -34,7 +35,6 @@ from ato_service.domain_mapping import (
     map_matrix_row_to_domain,
 )
 from ato_service.idempotency import (
-    IdempotencyReplay,
     load_idempotency_replay,
     record_idempotency_outcome,
     request_digest_from_payload,
@@ -50,9 +50,6 @@ from ato_service.matrix_coverage import require_exact_matrix_coverage
 from ato_service.package_revisions import PackageRevisionNotFoundError
 from ato_service.pagination import (
     InvalidPaginationCursorError,
-    PaginationCursor,
-    decode_pagination_cursor,
-    encode_pagination_cursor,
     validate_page_limit,
 )
 from ato_service.run_fingerprints import (
@@ -323,7 +320,12 @@ async def start_run(
     if row is None:
         raise PackageRevisionNotFoundError(package_revision_id=package_revision_id)
     package_revision, system = row
-    require_system_mutation_access(principal, system)
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ASSESSOR),
+    )
 
     _assert_deterministic_run_gate(
         config=config,
@@ -459,8 +461,8 @@ async def list_runs(
     row = result.one_or_none()
     if row is None:
         raise PackageRevisionNotFoundError(package_revision_id=package_revision_id)
-    _, system = row
-    require_system_read_access(principal, system)
+    package_revision, system = row
+    require_package_role(principal, system=system, revision=package_revision, role=ROLE_VIEWER)
 
     decoded_cursor: tuple[datetime, uuid.UUID] | None = None
     if cursor is not None:
@@ -507,8 +509,8 @@ async def get_run(
     row = result.one_or_none()
     if row is None:
         raise AnalysisRunNotFoundError(run_id=run_id)
-    analysis_run, _, system = row
-    require_system_read_access(principal, system)
+    analysis_run, package_revision, system = row
+    require_package_role(principal, system=system, revision=package_revision, role=ROLE_VIEWER)
     return map_analysis_run_to_domain(analysis_run)
 
 
@@ -527,8 +529,13 @@ async def cancel_run(
     row = result.one_or_none()
     if row is None:
         raise AnalysisRunNotFoundError(run_id=run_id)
-    analysis_run, _, system = row
-    require_system_mutation_access(principal, system)
+    analysis_run, package_revision, system = row
+    require_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        role=ROLE_SYSTEM_OWNER,
+    )
 
     locked = await session.execute(_load_run_for_update_statement(run_id))
     analysis_run = locked.scalar_one()
@@ -587,8 +594,8 @@ async def get_run_matrix(
     row = result.one_or_none()
     if row is None:
         raise AnalysisRunNotFoundError(run_id=run_id)
-    analysis_run, _, system = row
-    require_system_read_access(principal, system)
+    analysis_run, package_revision, system = row
+    require_package_role(principal, system=system, revision=package_revision, role=ROLE_VIEWER)
     if AnalysisRunStatus(analysis_run.status) is not AnalysisRunStatus.SUCCEEDED:
         raise IllegalStateTransitionError(
             error_code="illegal_state_transition",

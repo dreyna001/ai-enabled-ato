@@ -1118,12 +1118,19 @@ Until OIDC/session runtime exists, the production application returns HTTP 401 `
 
 Package mutations also require validated CSRF context. No insecure development bypass and no `LOCAL_PASSWORD_AUTH_ENABLED` path exist for these mutations.
 
-Object authorization for the P1.1 slice is default-deny:
+Object authorization for the P1.1 slice is default-deny and package-scoped per
+`docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 2.1.3 and
+`src/ato_service/route_role_matrix.py`. Until OIDC/session runtime exists,
+the production application returns HTTP 401 `authentication_required` on
+package routes. Contract and service tests may override or inject the
+authentication dependency.
 
-- reads require membership in `System.owner_group` or `System.viewer_groups`;
-- mutations require `System.owner_group` membership.
+Package mutations also require validated CSRF context. No insecure development
+bypass and no `LOCAL_PASSWORD_AUTH_ENABLED` path exist for these mutations.
 
-Unauthorized access returns HTTP 403 `authorization_denied` without leaking sensitive object details.
+Unauthorized object access returns HTTP 403 `authorization_denied` without
+leaking sensitive object details. Guessed cross-system IDs return 403 when the
+object exists but the caller lacks package access, and 404 when absent.
 
 ## 22. API contract
 
