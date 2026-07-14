@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "record_id": "e5f6a7b8-c9d0-4123-e456-789abcdef012",
+  "drill_id": "clamav-eicar",
+  "drill_version": "1.0.0",
+  "environment_type": "onprem_production",
+  "execution_mode": "live",
+  "started_at_utc": "2026-07-14T16:15:00.000000Z",
+  "completed_at_utc": "2026-07-14T16:15:01.000000Z",
+  "application_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "config_digest": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "fixture_digest": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+  "operator_identifier": "operator.example@customer.local",
+  "approver_identifier": null,
+  "outcome": "passed",
+  "hard_stop_claims": [
+    {
+      "hard_stop_id": "HS-005",
+      "claim_status": "not_claimed"
+    }
+  ],
+  "results": {
+    "summary": "Invalid outcome enum value",
+    "checks": [
+      {
+        "name": "eicar_detected",
+        "status": "pass"
+      }
+    ],
+    "preflight_status": "ready"
+  },
+  "record_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}

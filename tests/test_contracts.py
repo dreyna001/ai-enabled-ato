@@ -57,6 +57,7 @@ FIXTURE_SCHEMA_PATHS = {
         "fisma-template-pack",
         "sufficiency-matrix-response",
         "qualification-manifest",
+        "validation-drill-record",
     )
 }
 FIXTURE_NAME = re.compile(

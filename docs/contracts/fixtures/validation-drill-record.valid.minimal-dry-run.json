@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "record_id": "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+  "drill_id": "smoke-readiness",
+  "drill_version": "1.0.0",
+  "environment_type": "dev_local",
+  "execution_mode": "dry_run",
+  "started_at_utc": "2026-07-14T16:00:00.000000Z",
+  "completed_at_utc": "2026-07-14T16:00:01.250000Z",
+  "application_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "config_digest": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "fixture_digest": null,
+  "operator_identifier": "operator.example@customer.local",
+  "approver_identifier": null,
+  "outcome": "skip",
+  "hard_stop_claims": [
+    {
+      "hard_stop_id": "HS-001",
+      "claim_status": "still_open",
+      "detail": "Authority manifest remains draft in repository fixture"
+    },
+    {
+      "hard_stop_id": "HS-003",
+      "claim_status": "not_claimed"
+    },
+    {
+      "hard_stop_id": "HS-005",
+      "claim_status": "not_claimed"
+    },
+    {
+      "hard_stop_id": "HS-008",
+      "claim_status": "not_claimed"
+    }
+  ],
+  "results": {
+    "summary": "Dry-run smoke drill validated script presence only; live readiness not claimed",
+    "checks": [
+      {
+        "name": "smoke_script_present",
+        "status": "pass",
+        "detail": "scripts/smoke_service_chain.sh exists"
+      },
+      {
+        "name": "live_api_probe",
+        "status": "skip",
+        "detail": "execution_mode=dry_run"
+      }
+    ],
+    "detail": "No live HTTP probes executed",
+    "exit_code": 0,
+    "preflight_status": "ready"
+  },
+  "record_digest": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+}

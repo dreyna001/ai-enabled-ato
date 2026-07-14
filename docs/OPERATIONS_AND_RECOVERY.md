@@ -316,6 +316,23 @@ Before an on-prem release, the following must exist and be exercised:
 
 Before real customer data, the threat model, IdP/RBAC, malware scanning, endpoint policy, TLS, secrets, egress, SELinux, backup/restore, retention, and audit verification gates must pass, with no known critical or high vulnerability lacking documented acceptance by the customer authority. Restore and integrity drills continue quarterly.
 
+### 13.1 Immutable validation drill records
+
+Phase 5 publishes executable customer validation drills through `ato-operator run-drill` with optional immutable JSON records under an operator-supplied safe root (recommended: `/var/lib/ato/validation-drill-records/records/<drill_id>/<record_id>.json`). Records bind drill ID/version, application/config/fixture digests, timestamps, environment type, redacted results, operator and approver identifiers, outcome, and explicit hard-stop claim status. They never contain secrets, raw auth headers, or sensitive event bodies.
+
+- Default execution is `dry_run` / read-only. Live drills skip explicitly when required infrastructure is unavailable and must not claim **HS-003**, **HS-005**, or **HS-008** closed from mocks.
+- Destructive drills (`worker-crash-recovery`, `backup-pitr-restore`, live `rhel-upgrade`, live `rhel-rollback`) require `--isolated-target` confirmation.
+- Records are append-only: `write-drill-record` and `run-drill --write-record` refuse collisions and validate schema plus digest binding before atomic write.
+- Schema: [`docs/contracts/validation-drill-record.schema.json`](contracts/validation-drill-record.schema.json).
+
+Example:
+
+```text
+ato-operator list-drills --json
+ato-operator run-drill audit-chain-verify --config /etc/ato-analyzer/runtime-config.json --live --write-record --records-root /var/lib/ato/validation-drill-records --operator-id operator@customer.local
+ato-operator validate-drill-record /var/lib/ato/validation-drill-records/records/audit-chain-verify/<record-id>.json
+```
+
 ## 14. Incident and support boundaries
 
 The product records bounded application, authorization, queue, model-routing, storage, audit, and backup status. Support diagnostics must use an explicit allowlist and exclude source content, extracted text, raw prompts/responses, tokens, credentials, keys, and raw authorization headers.

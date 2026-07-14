@@ -28,6 +28,8 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`../scripts/verify_backup_contract.sh`](../scripts/verify_backup_contract.sh) | Fail-safe backup declaration checks (**HS-008**) |
 | [`../scripts/prestage_airgap_deps.sh`](../scripts/prestage_airgap_deps.sh) | Offline wheel staging for airgap installs |
 | [`../scripts/smoke_service_chain.sh`](../scripts/smoke_service_chain.sh) | Loopback (optional nginx) health smoke |
+| [`../docs/contracts/validation-drill-record.schema.json`](../docs/contracts/validation-drill-record.schema.json) | Immutable customer validation drill record contract |
+| [`../src/ato_operator/drill_handlers.py`](../src/ato_operator/drill_handlers.py) | `ato-operator run-drill`, `list-drills`, `validate-drill-record`, `write-drill-record` |
 | [`../docs/CUSTOMER_ONBOARDING.md`](../docs/CUSTOMER_ONBOARDING.md) | Customer onboarding checklist |
 | [`../docs/AIRGAP_PRESTAGE.md`](../docs/AIRGAP_PRESTAGE.md) | Airgap dependency prestage guide |
 
@@ -45,6 +47,7 @@ There is no model sidecar or timer in this slice. Worker systemd units ship **di
 /var/ato-packages/                             # mutable package storage
 /var/ato-packages/_tmp/                        # package staging scratch (service-writable)
 /var/lib/ato/release/                          # install snapshot markers for rollback metadata
+/var/lib/ato/validation-drill-records/         # optional immutable customer validation drill records
 /etc/nginx/conf.d/ato-api.conf.example       # copied once; inactive until TLS promotion
 /etc/nginx/conf.d/ato-portal.conf.example    # copied once; inactive until TLS promotion
 ```

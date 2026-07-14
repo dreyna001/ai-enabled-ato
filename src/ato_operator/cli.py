@@ -20,6 +20,13 @@ from ato_operator.approval_expiry import process_approval_expiry_sync
 from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
 from ato_operator.checklist import build_operator_checklist, format_checklist
+from ato_operator.drill_handlers import (
+    command_list_drill_records,
+    command_list_drills,
+    command_run_drill,
+    command_validate_drill_record,
+    command_write_drill_record,
+)
 from ato_operator.preflight import run_operator_preflight_sync
 from ato_operator.qualification_check import run_qualification_check
 from ato_operator.search_index import rebuild_package_search_index_sync
@@ -370,6 +377,85 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Package revision UUID to rebuild",
     )
 
+    list_drills = subparsers.add_parser(
+        "list-drills",
+        help="List published customer validation drills",
+    )
+    list_drills.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    list_records = subparsers.add_parser(
+        "list-drill-records",
+        parents=[parent],
+        help="List persisted validation drill records under --records-root",
+    )
+    list_records.add_argument(
+        "--records-root",
+        help="Safe writable root for immutable drill records",
+    )
+    list_records.add_argument(
+        "--drill-id",
+        help="Optional drill_id filter",
+    )
+
+    validate_record = subparsers.add_parser(
+        "validate-drill-record",
+        help="Validate one immutable drill record file",
+    )
+    validate_record.add_argument("record_path", help="Path to drill record JSON")
+    validate_record.add_argument("--json", action="store_true")
+
+    write_record = subparsers.add_parser(
+        "write-drill-record",
+        parents=[parent],
+        help="Append one validated drill record using write-once semantics",
+    )
+    write_record.add_argument("record_path", help="Path to drill record JSON source")
+    write_record.add_argument(
+        "--records-root",
+        help="Safe writable root for immutable drill records",
+    )
+
+    run_drill = subparsers.add_parser(
+        "run-drill",
+        parents=[parent],
+        help="Execute one published validation drill (default dry_run)",
+    )
+    run_drill.add_argument("drill_id", help="Published drill identifier")
+    run_drill.add_argument(
+        "--live",
+        action="store_true",
+        help="Run live-safe probes where supported (default is dry_run/read-only)",
+    )
+    run_drill.add_argument(
+        "--write-record",
+        action="store_true",
+        help="Persist immutable drill record after execution",
+    )
+    run_drill.add_argument(
+        "--records-root",
+        help="Safe writable root for immutable drill records",
+    )
+    run_drill.add_argument(
+        "--operator-id",
+        default="operator@local",
+        help="Operator identifier stored in drill record",
+    )
+    run_drill.add_argument(
+        "--approver-id",
+        help="Optional approver identifier stored in drill record",
+    )
+    run_drill.add_argument(
+        "--isolated-target",
+        action="store_true",
+        help="Confirm destructive drills target an isolated host",
+    )
+    run_drill.add_argument("--smoke-base-url", help="Override smoke base URL for live smoke drill")
+    run_drill.add_argument(
+        "--allow-degraded-ready",
+        action="store_true",
+        help="Allow degraded readiness during live smoke drill",
+    )
+
     return parser
 
 
@@ -389,6 +475,11 @@ def main(argv: list[str] | None = None) -> int:
         "qualification-check": _command_qualification_check,
         "print-checklist": _command_print_checklist,
         "rebuild-search-index": _command_rebuild_search_index,
+        "list-drills": command_list_drills,
+        "list-drill-records": command_list_drill_records,
+        "validate-drill-record": command_validate_drill_record,
+        "write-drill-record": command_write_drill_record,
+        "run-drill": command_run_drill,
     }
     handler = commands[args.command]
     try:
