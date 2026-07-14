@@ -1,9 +1,10 @@
 # ATO Evidence Analysis Portal Operations and Recovery Contract
 
-**Status:** P-1 target operations contract  
-**Applies to:** Eventual `onprem_production` deployment on one customer RHEL 9-compatible host  
+**Status:** Delivered operations contract synchronized with portal/API/worker stack (Phase 6)  
+**Applies to:** `onprem_production` deployment on one customer RHEL 9-compatible host  
 **Normative source:** [`../ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md)  
-**Security source:** [`THREAT_MODEL.md`](THREAT_MODEL.md)
+**Security source:** [`THREAT_MODEL.md`](THREAT_MODEL.md)  
+**Release evidence:** [`RELEASE_EVIDENCE_INDEX.md`](RELEASE_EVIDENCE_INDEX.md)
 
 This document defines the required production behavior; it does not claim that a deployment exists or that customer-specific choices have been supplied. The technical specification prevails on conflict.
 
@@ -41,7 +42,7 @@ Every crossing requires the applicable authentication or service identity, valid
 | Database | `postgresql.service`, loopback or Unix socket | Authoritative mutable state, sessions, job leases, and audit index |
 | Malware scanner | Customer-provided service or integration | Must be approved and available before customer file extraction; scanning fails closed |
 
-This table is the target topology. The current scaffold ships only `ato-api.service` and an inactive health-only nginx template. Worker, portal, timer, scanner, model-hosting, and active proxy assets are added only with their implemented runtime and acceptance tests.
+This table is the target topology. The repository ships `ato-api.service`, `ato-intake-worker.service`, `ato-analyzer-worker.service`, inactive nginx templates for API and portal, and deterministic deployment-contract tests. Worker and portal edge assets remain disabled until operator enablement after acceptance tests. Live RHEL install/upgrade/rollback/backup/restore drills are **environment-not-run** until executed on customer hosts (**P7**).
 
 The application service user is `ato`. Production extraction must execute under a dedicated unprivileged service identity with systemd hardening, private temporary storage, no new privileges, resource limits, a read-only host filesystem, and no network access. Customer-managed service identity names are not defined here.
 
@@ -56,7 +57,7 @@ logs:          journald
 
 Configuration files are owned by `root:ato` with mode `0640` or stricter. Non-secret settings live in `/etc/ato-analyzer/runtime-config.json` (selected by `ATO_RUNTIME_CONFIG_PATH`); there is no shell-sourced `config.env`. Credentials use systemd credentials or root-owned files. No internal API, database, metrics, scanner, or model port is assigned by this contract; customer-approved values must not create additional public listeners.
 
-Current API-only scaffold assets and operator commands: [`CONFIGURATION.md`](CONFIGURATION.md) and [`../deployment/README.md`](../deployment/README.md).
+Current deployment assets and operator commands: [`CONFIGURATION.md`](CONFIGURATION.md), [`../deployment/README.md`](../deployment/README.md), and [`RELEASE_EVIDENCE_INDEX.md`](RELEASE_EVIDENCE_INDEX.md).
 
 ## 3. Configuration and secrets
 
@@ -265,7 +266,7 @@ Purge must not claim immediate removal from immutable backup media. Retention an
 - Rollback must not mutate ready revisions, parent runs, source blobs, artifact manifests, reviews, approvals, exports, or audit history. Application rollback is permitted only when the prior release is compatible with persisted state; otherwise use the tested restore procedure.
 - After install, upgrade, or rollback, run health, authorization, queue, immutable-storage, audit, and backup smoke tests before reopening work.
 
-The repository includes an API-only install/systemd/nginx/smoke scaffold and deterministic deployment-contract tests. Completing upgrade, rollback, backup, restore, monitoring, certificate, SELinux, and live-host procedures remains a P7 deliverable; this contract does not select a customer package repository, certificate process, backup product, or monitoring product.
+The repository includes install/systemd/nginx/smoke assets, intake and analyzer worker units, portal static delivery, validation-drill dispatchers, and deterministic deployment-contract tests. Completing live upgrade, rollback, backup, restore, monitoring, certificate, SELinux, and customer-host procedures remains a **P7 environment-not-run** deliverable; this contract does not select a customer package repository, certificate process, backup product, or monitoring product.
 
 ## 11. Failure taxonomy
 

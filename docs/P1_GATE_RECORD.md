@@ -216,3 +216,19 @@ python3 -m pytest -m "not integration" -q
 on Python 3.12. The warning is the existing third-party Starlette/httpx
 deprecation warning. The optional PostgreSQL integration test was not run
 without `ATO_TEST_DATABASE_URL`.
+
+## Post-gate Phase 6 documentation and contract reconciliation
+
+**Recorded:** 2026-07-14 (append-only; does not reopen or replace prior gates)
+
+This addendum records documentation, traceability, gate-record, and release-evidence synchronization at the Phase 5 implementation tip (Alembic head `20260717_0012`). It does not claim live RHEL drills, customer IdP deployment, production scanning, AI qualification, or hard-stop closure from mocks.
+
+```text
+python3 -m pytest tests/test_contracts.py::test_phase6_documentation_reconciliation_contract -q
+python3 -m pytest tests/test_contracts.py -q
+python3 -m pytest -m "not integration" -q
+```
+
+**Post-gate result:** `25 passed` contract tests; **1585 passed**, 1 skipped, 20 deselected in non-integration gate on Python 3.12.
+
+**Artifacts added:** `docs/RELEASE_EVIDENCE_INDEX.md`, `docs/P6_GATE_RECORD.md`, `docs/P2_GATE_RECORD.md` through `docs/P7_GATE_RECORD.md`, `docs/P6_ANALYSIS_GATE_RECORD.md`, Phase 6 reconciliation checks in `tests/test_contracts.py`.

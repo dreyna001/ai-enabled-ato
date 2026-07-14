@@ -26,13 +26,18 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
 P-1 gate outcome is recorded in [`../P1_GATE_RECORD.md`](../P1_GATE_RECORD.md).
-The implemented P1.2 development boundary is specified in
-`LIFECYCLE_AND_ERRORS.md` Section 2.1.6: only `dev_local` synthetic JSON intake,
-with no production scanner/customer extraction or OIDC claim.
+Phase 6 documentation reconciliation and release evidence are in
+[`../RELEASE_EVIDENCE_INDEX.md`](../RELEASE_EVIDENCE_INDEX.md) and
+[`../P6_GATE_RECORD.md`](../P6_GATE_RECORD.md).
+
+The delivered runtime boundary is specified in `LIFECYCLE_AND_ERRORS.md`:
+`dev_local` uses synthetic/substitute paths at external boundaries; production
+profiles require customer scanner (**HS-005**), IdP (**HS-003**), and model
+policy (**HS-004**) before customer-data claims.
 
 ## Rules
 
-- These files are design contracts, not proof that the corresponding runtime behavior is implemented.
+- These files are design contracts. Passing contract tests proves schema and asset synchronization, not live customer-host operation.
 - JSON Schemas use Draft 2020-12 and reject unknown fields unless explicitly documented.
 - OpenAPI uses relative references to `domain.schema.json`.
 - Official FedRAMP and OSCAL schemas remain external authorities. Internal schemas MUST NOT replace or weaken them.

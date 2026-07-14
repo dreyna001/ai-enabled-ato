@@ -114,7 +114,7 @@
         "tests/ato_service/test_model_gateway.py::test_routing_evaluated_before_callback_on_allowed_call",
         "tests/ato_service/test_model_gateway.py::test_allowed_route_with_disabled_vision_fails_closed_with_zero_calls"
       ],
-      "verification_type": "Deterministic routing-policy and model-gateway unit tests with zero-call policy-ordering coverage; no production worker or model callsite exists yet",
+      "verification_type": "Deterministic routing-policy and model-gateway unit tests with zero-call policy-ordering coverage; model_assisted_analyzer and sufficiency_matrix runner implement routed calls in dev_local; production customer model calls remain blocked by HS-004",
       "status": "partial"
     },
     {
@@ -186,7 +186,7 @@
         "tests/ato_service/test_intake_worker.py",
         "tests/ato_service/test_package_revisions.py::test_finalize_writes_manifest_before_db_mutation"
       ],
-      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, expired-lease recovery, unified intake orchestration over intake work leases, legacy synthetic intake compatibility tests, and bounded dev_local deterministic_only analysis runs with matrix_rows persistence, artifact manifests, and analyzer worker loop; full/targeted model runs, proposal review persistence, and full EP-02 gate remain planned/partial",
+      "verification_type": "Deterministic blob, content-manifest, staging-reconciliation, job persistence, lease, retry, expired-lease recovery, unified intake orchestration, deterministic and model-assisted analysis runs with matrix_rows persistence, artifact manifests, intake/analyzer worker loops, review/export routes; live customer extraction and full EP-02 customer-host gate remain partial under HS-005",
       "status": "partial"
     },
     {
@@ -446,7 +446,7 @@
         "tests/ato_service/test_source_artifacts.py::test_rejects_unsupported_declared_media_type",
         "tests/ato_service/test_package_revisions.py::test_finalize_writes_manifest_before_db_mutation"
       ],
-      "verification_type": "Bounded P1.1 System + PackageRevision HTTP/service slice plus P1.3 deterministic_only AnalysisRun start/list/get/cancel/matrix routes with idempotent POST start, one durable Job per run, and fail-closed HTTP 401 without injected/session auth; full/targeted model runs, review/export idempotency, and full P1/EP-02 gate remain planned/partial",
+      "verification_type": "Full /api/v1 idempotency, ETag/If-Match, advisory-lock serialization, and optimistic concurrency on systems, package revisions, draft, confirm, runs, review, and export routes; fail-closed auth without session; live customer IdP and browser E2E remain partial under HS-003",
       "status": "partial"
     },
     {
@@ -682,9 +682,10 @@
         "tests/test_portal_contract.py::test_intake_worker_systemd_unit_runs_long_lived_process",
         "tests/ato_operator/test_drill_cli.py::test_run_drill_dry_run_model_routing",
         "tests/ato_operator/test_drill_records.py::test_redact_drill_value_strips_bearer_tokens",
-        "tests/ato_operator/test_drill_dispatch.py::test_hard_stop_claims_never_close_hs003_in_dry_run"
+        "tests/ato_operator/test_drill_dispatch.py::test_hard_stop_claims_never_close_hs003_in_dry_run",
+        "tests/test_contracts.py::test_phase6_documentation_reconciliation_contract"
       ],
-      "verification_type": "Runtime JSON capabilities, ato-operator preflight, production API/portal nginx/intake/analyzer assets, bounded operational scripts, dev_local worker paths, and Phase 5 validation drill record contract are contract-tested; live-host drills and customer hard-stop evidence remain partial",
+      "verification_type": "Runtime JSON capabilities, ato-operator preflight, portal/API/worker/nginx assets, bounded operational scripts, qualification manifest, validation drill records, Phase 6 documentation reconciliation, and deployment-contract tests are contract-tested; live-host drills and customer hard-stop evidence remain partial",
       "status": "partial"
     },
     {
@@ -798,7 +799,7 @@
         "tests/test_contracts.py::test_job_attempt_status_field_invariants",
         "tests/test_contracts.py::test_expired_lease_recovery_contract_semantics"
       ],
-      "verification_type": "Filesystem recovery helpers plus published job/attempt contracts, PostgreSQL jobs and attempts tables, lease-safe claim/heartbeat/completion/failure operations, reviewed expired-lease recovery (budget exhaustion, atomicity conflicts, terminal-run handling), and real jobs readiness tests; the analyzer worker loop and end-to-end API pipeline remain planned for P1",
+      "verification_type": "Filesystem recovery helpers plus published job/attempt contracts, PostgreSQL jobs and attempts tables, lease-safe claim/heartbeat/completion/failure operations, reviewed expired-lease recovery, analyzer and intake worker loops, jobs readiness tests, and workflow recovery integration when ATO_TEST_DATABASE_URL is set",
       "status": "partial"
     },
     {
@@ -1039,10 +1040,18 @@
         "deployment/README.md",
         ".cursor/rules/ato-runtime-deployment-contract.mdc",
         "docs/P0_GATE_RECORD.md",
-        "docs/P1_GATE_RECORD.md"
+        "docs/P1_GATE_RECORD.md",
+        "docs/P6_GATE_RECORD.md",
+        "docs/RELEASE_EVIDENCE_INDEX.md",
+        "docs/P2_GATE_RECORD.md",
+        "docs/P3_GATE_RECORD.md",
+        "docs/P4_GATE_RECORD.md",
+        "docs/P5_GATE_RECORD.md",
+        "docs/P6_ANALYSIS_GATE_RECORD.md",
+        "docs/P7_GATE_RECORD.md"
       ],
       "test_ids": [],
-      "verification_type": "Active-document consistency review complete; gate recorded in docs/P1_GATE_RECORD.md",
+      "verification_type": "Active-document consistency review complete; P-1 gate in docs/P1_GATE_RECORD.md; Phase 6 reconciliation in docs/P6_GATE_RECORD.md",
       "status": "implemented"
     },
     {

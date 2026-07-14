@@ -1,10 +1,11 @@
 # Third-Party Hardening and Production Adapter Plan
 
-Status: Approved implementation plan (not yet implemented).
+Status: Partially implemented — Authlib OIDC and ClamAV adapter contract landed; jsonpointer consolidation optional.
 
 Normative contracts remain in [`ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md),
 [`docs/THREAT_MODEL.md`](THREAT_MODEL.md), and
 [`docs/requirements/traceability.yaml`](requirements/traceability.yaml).
+Release evidence: [`RELEASE_EVIDENCE_INDEX.md`](RELEASE_EVIDENCE_INDEX.md).
 This plan does not override hard stops or runtime-contract rules.
 
 ## 1. Purpose
@@ -12,11 +13,10 @@ This plan does not override hard stops or runtime-contract rules.
 This document plans four bounded workstreams identified in the third-party library
 audit:
 
-1. **Replace now:** production OIDC/JWT handling with **Authlib** (closes TM-002 gap).
+1. **Implemented:** production OIDC/JWT handling with **Authlib** (`src/ato_service/oidc_auth.py`, `oidc_jwt.py`) — see [`P5_GATE_RECORD.md`](P5_GATE_RECORD.md). Live customer IdP drill remains **HS-003** customer-gated.
 2. **Evaluate:** consolidate duplicate RFC 6901 helpers with **`jsonpointer`**, only
    if custom set semantics remain intact.
-3. **Diff 7:** production malware scanner via **local ClamAV** (or approved on-prem
-   vendor SDK) behind the existing `MalwareScanner` protocol.
+3. **Implemented (contract):** production malware scanner via **local ClamAV** adapter behind `MalwareScanner` protocol (`src/ato_service/malware_scan.py`). Live scanner drill remains **HS-005** customer-gated.
 4. **Keep current:** OpenAI-compatible HTTP client, PostgreSQL job leases, idempotency,
    audit hash chain, blob storage, routing, and bounded LLM normalization workflow.
 
