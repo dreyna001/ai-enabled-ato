@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from tests.support.platform import requires_posix, requires_symlink
+
 from ato_service.db.session import session_scope
 from ato_service.storage_reconciliation import (
     StoragePathError,
@@ -95,9 +97,7 @@ def test_cleanup_deletes_only_stale_recognized_staging_files(tmp_path: Path) -> 
     assert staging_dir.is_dir()
 
 
-@pytest.mark.skipif(
-    os.name == "nt", reason="symlink creation requires elevated privilege on Windows"
-)
+@requires_symlink
 def test_cleanup_preserves_symlink_and_outside_tmp(tmp_path: Path) -> None:
     temp_dir = tmp_path / "_tmp"
     temp_dir.mkdir()
@@ -117,7 +117,7 @@ def test_cleanup_preserves_symlink_and_outside_tmp(tmp_path: Path) -> None:
     assert outside.read_bytes() == b"keep"
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX symlink semantics")
+@requires_posix
 def test_cleanup_preserves_symlink_to_staging_name(tmp_path: Path) -> None:
     temp_dir = tmp_path / "_tmp"
     temp_dir.mkdir()

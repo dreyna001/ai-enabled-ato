@@ -7,6 +7,7 @@ import io
 import json
 import shutil
 import stat
+import subprocess
 import tarfile
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from ato_operator.release_packaging import (
     reject_unsafe_staging_path,
     verify_release_archive,
 )
+from tests.support.platform import bash_script_argv, requires_bash, requires_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,20 +56,42 @@ def _write_minimal_release_tree(
     ):
         (root / relative_directory).mkdir(parents=True, exist_ok=True)
 
-    shutil.copytree(ROOT / "src" / "ato_service", root / "src" / "ato_service", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "src" / "ato_operator", root / "src" / "ato_operator", dirs_exist_ok=True)
+    shutil.copytree(
+        ROOT / "src" / "ato_service", root / "src" / "ato_service", dirs_exist_ok=True
+    )
+    shutil.copytree(
+        ROOT / "src" / "ato_operator", root / "src" / "ato_operator", dirs_exist_ok=True
+    )
     shutil.copytree(ROOT / "migrations", root / "migrations", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "docs" / "contracts", root / "docs" / "contracts", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "docs" / "release", root / "docs" / "release", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "docs" / "requirements", root / "docs" / "requirements", dirs_exist_ok=True)
+    shutil.copytree(
+        ROOT / "docs" / "contracts", root / "docs" / "contracts", dirs_exist_ok=True
+    )
+    shutil.copytree(
+        ROOT / "docs" / "release", root / "docs" / "release", dirs_exist_ok=True
+    )
+    shutil.copytree(
+        ROOT / "docs" / "requirements",
+        root / "docs" / "requirements",
+        dirs_exist_ok=True,
+    )
     shutil.copytree(
         ROOT / "reference" / "authorities" / "fedramp",
         root / "reference" / "authorities" / "fedramp",
         dirs_exist_ok=True,
     )
-    shutil.copytree(ROOT / "deployment" / "systemd", root / "deployment" / "systemd", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "deployment" / "nginx", root / "deployment" / "nginx", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "data" / "qualification", root / "data" / "qualification", dirs_exist_ok=True)
+    shutil.copytree(
+        ROOT / "deployment" / "systemd",
+        root / "deployment" / "systemd",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        ROOT / "deployment" / "nginx", root / "deployment" / "nginx", dirs_exist_ok=True
+    )
+    shutil.copytree(
+        ROOT / "data" / "qualification",
+        root / "data" / "qualification",
+        dirs_exist_ok=True,
+    )
 
     for relative_file in (
         "pyproject.toml",
@@ -100,9 +124,13 @@ def _write_minimal_release_tree(
     if include_portal_dist:
         portal_dist = root / "portal" / "dist"
         portal_dist.mkdir(parents=True, exist_ok=True)
-        (portal_dist / "index.html").write_text("<!doctype html><title>portal</title>\n", encoding="utf-8")
+        (portal_dist / "index.html").write_text(
+            "<!doctype html><title>portal</title>\n", encoding="utf-8"
+        )
         (portal_dist / "assets").mkdir(exist_ok=True)
-        (portal_dist / "assets" / "app.js").write_text("console.log('portal');\n", encoding="utf-8")
+        (portal_dist / "assets" / "app.js").write_text(
+            "console.log('portal');\n", encoding="utf-8"
+        )
 
     if include_airgap:
         wheel_dir = root / "dist" / "airgap" / "wheels"
@@ -143,7 +171,9 @@ def _write_minimal_release_tree(
     if secret_in_tree is not None:
         secret_path = root / secret_in_tree
         secret_path.parent.mkdir(parents=True, exist_ok=True)
-        secret_path.write_text("postgresql://user:secret@127.0.0.1/db\n", encoding="utf-8")
+        secret_path.write_text(
+            "postgresql://user:secret@127.0.0.1/db\n", encoding="utf-8"
+        )
 
 
 @pytest.fixture
@@ -167,7 +197,9 @@ def test_collect_allowlisted_files_requires_airgap_manifest(tmp_path: Path) -> N
         collect_allowlisted_files(tree, require_portal_dist=True, require_airgap=True)
 
 
-def test_build_release_archive_is_deterministic(release_tree: Path, tmp_path: Path) -> None:
+def test_build_release_archive_is_deterministic(
+    release_tree: Path, tmp_path: Path
+) -> None:
     output_a = tmp_path / "build-a"
     output_b = tmp_path / "build-b"
     report_a = build_release_archive(
@@ -194,7 +226,9 @@ def test_build_release_archive_is_deterministic(release_tree: Path, tmp_path: Pa
     assert report_a.archive_path.read_bytes() == report_b.archive_path.read_bytes()
 
 
-def test_verify_release_archive_passes_for_fresh_build(release_tree: Path, tmp_path: Path) -> None:
+def test_verify_release_archive_passes_for_fresh_build(
+    release_tree: Path, tmp_path: Path
+) -> None:
     report = build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
@@ -204,13 +238,17 @@ def test_verify_release_archive_passes_for_fresh_build(release_tree: Path, tmp_p
             source_date_epoch=1_700_000_000,
         )
     )
-    verify_report = verify_release_archive(report.archive_path, project_root=release_tree)
+    verify_report = verify_release_archive(
+        report.archive_path, project_root=release_tree
+    )
     assert verify_report.passed is True
     assert verify_report.signature_status == "unavailable"
     assert verify_report.file_count > 0
 
 
-def test_verify_release_archive_detects_checksum_tampering(release_tree: Path, tmp_path: Path) -> None:
+def test_verify_release_archive_detects_checksum_tampering(
+    release_tree: Path, tmp_path: Path
+) -> None:
     report = build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
@@ -237,10 +275,14 @@ def test_verify_release_archive_detects_checksum_tampering(release_tree: Path, t
     tampered_path.write_bytes(buffer.getvalue())
     verify_report = verify_release_archive(tampered_path, project_root=release_tree)
     assert verify_report.passed is False
-    assert any("checksum mismatch for README.md" in error for error in verify_report.errors)
+    assert any(
+        "checksum mismatch for README.md" in error for error in verify_report.errors
+    )
 
 
-def test_verify_release_archive_rejects_traversal_member(release_tree: Path, tmp_path: Path) -> None:
+def test_verify_release_archive_rejects_traversal_member(
+    release_tree: Path, tmp_path: Path
+) -> None:
     report = build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
@@ -252,7 +294,11 @@ def test_verify_release_archive_rejects_traversal_member(release_tree: Path, tmp
     )
     unsafe_archive = tmp_path / "unsafe.tar.gz"
     with tarfile.open(report.archive_path, mode="r:gz") as source_tar:
-        members = {member.name: source_tar.extractfile(member).read() for member in source_tar.getmembers() if member.isfile()}
+        members = {
+            member.name: source_tar.extractfile(member).read()
+            for member in source_tar.getmembers()
+            if member.isfile()
+        }
     members["../escape.txt"] = b"traversal"
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
@@ -266,7 +312,9 @@ def test_verify_release_archive_rejects_traversal_member(release_tree: Path, tmp
     assert any("unsafe archive member path" in error for error in verify_report.errors)
 
 
-def test_verify_release_archive_rejects_symlink_member(release_tree: Path, tmp_path: Path) -> None:
+def test_verify_release_archive_rejects_symlink_member(
+    release_tree: Path, tmp_path: Path
+) -> None:
     build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
@@ -313,6 +361,7 @@ def test_is_safe_relative_path_rejects_traversal() -> None:
     assert is_safe_relative_path("/absolute") is False
 
 
+@requires_symlink
 def test_reject_unsafe_staging_path_blocks_symlink(tmp_path: Path) -> None:
     staging_root = tmp_path / "stage"
     staging_root.mkdir()
@@ -324,7 +373,9 @@ def test_reject_unsafe_staging_path_blocks_symlink(tmp_path: Path) -> None:
         reject_unsafe_staging_path(link, staging_root=staging_root)
 
 
-def test_verify_release_archive_allows_skipped_portal_dist(release_tree: Path, tmp_path: Path) -> None:
+def test_verify_release_archive_allows_skipped_portal_dist(
+    release_tree: Path, tmp_path: Path
+) -> None:
     report = build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
@@ -334,14 +385,18 @@ def test_verify_release_archive_allows_skipped_portal_dist(release_tree: Path, t
             source_date_epoch=1_700_000_000,
         )
     )
-    verify_report = verify_release_archive(report.archive_path, project_root=release_tree)
+    verify_report = verify_release_archive(
+        report.archive_path, project_root=release_tree
+    )
     assert verify_report.passed is True
     with tarfile.open(report.archive_path, mode="r:gz") as tar:
         names = {member.name for member in tar.getmembers()}
     assert "portal/dist/index.html" not in names
 
 
-def test_shell_scripts_are_executable_in_archive(release_tree: Path, tmp_path: Path) -> None:
+def test_shell_scripts_are_executable_in_archive(
+    release_tree: Path, tmp_path: Path
+) -> None:
     report = build_release_archive(
         ReleaseBuildOptions(
             project_root=release_tree,
@@ -422,17 +477,22 @@ def test_verify_release_archive_rejects_excluded_credential_path(
     unsafe_archive.write_bytes(buffer.getvalue())
     verify_report = verify_release_archive(unsafe_archive, project_root=release_tree)
     assert verify_report.passed is False
-    assert any("forbidden path segment" in error or "excluded path" in error for error in verify_report.errors)
+    assert any(
+        "forbidden path segment" in error or "excluded path" in error
+        for error in verify_report.errors
+    )
 
 
+@requires_bash
 def test_prestage_verify_only_fails_on_missing_wheel(tmp_path: Path) -> None:
     tree = tmp_path / "airgap-repo"
     _write_minimal_release_tree(tree, include_airgap=True)
     wheel_dir = tree / "dist" / "airgap" / "wheels"
     for wheel in wheel_dir.glob("*.whl"):
         wheel.unlink()
-    result = pytest.importorskip("subprocess").run(
-        ["bash", str(tree / "scripts" / "prestage_airgap_deps.sh"), "--verify-only"],
+    script = tree / "scripts" / "prestage_airgap_deps.sh"
+    result = subprocess.run(
+        [*bash_script_argv(script, cwd=tree), "--verify-only"],
         cwd=tree,
         capture_output=True,
         text=True,

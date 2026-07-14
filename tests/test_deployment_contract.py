@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests.support.platform import bash_script_argv, requires_bash
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,7 +38,9 @@ RELEASE_PACKAGING_DOC = ROOT / "docs" / "RELEASE_PACKAGING.md"
 WSL_DEPLOY_SCRIPT = ROOT / "scripts" / "wsl-local-deploy.sh"
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke_service_chain.sh"
 WSL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_local.json"
-WSL_PORTAL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_portal.json"
+WSL_PORTAL_RUNTIME_CONFIG = (
+    ROOT / "deployment" / "config" / "runtime-config.wsl_portal.json"
+)
 WSL_PORTAL_ENABLE_SCRIPT = ROOT / "scripts" / "wsl-portal-enable.sh"
 DEPLOYMENT_README = ROOT / "deployment" / "README.md"
 PYPROJECT = ROOT / "pyproject.toml"
@@ -158,7 +161,7 @@ def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
         )
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+@requires_bash
 @pytest.mark.parametrize(
     "script",
     [
@@ -190,8 +193,7 @@ def test_pyproject_declares_service_and_worker_entrypoints() -> None:
     assert 'ato-service = "ato_service.main:main"' in text
     assert 'ato-intake-worker = "ato_service.intake_worker:main"' in text
     assert (
-        'ato-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"'
-        in text
+        'ato-analyzer-worker = "ato_service.deterministic_analyzer_worker:main"' in text
     )
 
 
@@ -250,9 +252,7 @@ def test_systemd_unit_runs_unprivileged_ato_service(systemd_text: str) -> None:
 
 
 def test_systemd_unit_points_to_canonical_runtime_config(systemd_text: str) -> None:
-    assert (
-        f"Environment=ATO_RUNTIME_CONFIG_PATH={RUNTIME_CONFIG_PATH}" in systemd_text
-    )
+    assert f"Environment=ATO_RUNTIME_CONFIG_PATH={RUNTIME_CONFIG_PATH}" in systemd_text
 
 
 def test_systemd_unit_wires_api_consumed_credential_references(
@@ -322,8 +322,13 @@ def test_wsl_systemd_unit_uses_dev_local_runtime_config_under_opt() -> None:
         "Environment=ATO_RUNTIME_CONFIG_PATH=/opt/ato-analyzer/runtime-config.json"
         in text
     )
-    assert f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}" in text
-    assert f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
+    assert (
+        f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}"
+        in text
+    )
+    assert (
+        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
+    )
     assert "LoadCredential=oidc-client-secret:" in text
     assert "EnvironmentFile=-/etc/ato-analyzer/credentials/ato-local.env" in text
     assert f"ReadWritePaths={DATA_DIR} /opt/ato-analyzer/data/ato-storage" in text
@@ -481,7 +486,7 @@ def test_install_script_does_not_shell_source_config_or_log_secrets(
     install_text: str,
 ) -> None:
     assert 'source "' not in install_text
-    assert "echo \"$" not in install_text
+    assert 'echo "$' not in install_text
 
 
 def test_install_script_keeps_application_code_root_owned(install_text: str) -> None:
@@ -493,7 +498,9 @@ def test_install_script_keeps_application_code_root_owned(install_text: str) -> 
     assert 'create_user_if_missing "$SVC_USER" "$SVC_HOME"' in install_text
 
 
-def test_install_script_uses_normal_pip_install_without_upgrade(install_text: str) -> None:
+def test_install_script_uses_normal_pip_install_without_upgrade(
+    install_text: str,
+) -> None:
     assert 'pip" install "$INSTALL_DIR"' in install_text
     assert 'pip" install --force-reinstall --no-deps "$INSTALL_DIR"' in install_text
     assert "pip install -e" not in install_text
@@ -501,7 +508,9 @@ def test_install_script_uses_normal_pip_install_without_upgrade(install_text: st
     assert "--upgrade" not in install_text
 
 
-def test_install_script_rejects_symlinks_for_fixed_layout_paths(install_text: str) -> None:
+def test_install_script_rejects_symlinks_for_fixed_layout_paths(
+    install_text: str,
+) -> None:
     assert "reject_unsafe_existing_path" in install_text
     assert "must be a directory, not a symlink" in install_text
     for path_fragment in (
@@ -556,9 +565,15 @@ def test_install_script_installs_inactive_runtime_config_example(
     install_text: str,
 ) -> None:
     assert "runtime-config.onprem.example.json" in install_text
-    assert 'RUNTIME_CONFIG_EXAMPLE_PATH="$CONFIG_DIR/runtime-config.onprem.example.json"' in install_text
+    assert (
+        'RUNTIME_CONFIG_EXAMPLE_PATH="$CONFIG_DIR/runtime-config.onprem.example.json"'
+        in install_text
+    )
     assert "enforce_existing_regular_file" in install_text
-    assert 'enforce_existing_regular_file "$RUNTIME_CONFIG_PATH" "root:$SVC_USER" 640' in install_text
+    assert (
+        'enforce_existing_regular_file "$RUNTIME_CONFIG_PATH" "root:$SVC_USER" 640'
+        in install_text
+    )
     assert (
         'enforce_existing_regular_file "$RUNTIME_CONFIG_EXAMPLE_PATH" "root:$SVC_USER" 640'
         in install_text
@@ -577,19 +592,28 @@ def test_install_script_rejects_symlink_or_non_regular_destination_files(
     assert '[[ -e "$path" || -L "$path" ]]' in install_text
     assert 'reject_non_regular_existing_file "$dest"' in install_text
     assert 'reject_non_regular_existing_file "$RUNTIME_CONFIG_PATH"' in install_text
-    assert 'reject_non_regular_existing_file "$RUNTIME_CONFIG_EXAMPLE_PATH"' in install_text
-    assert 'reject_non_regular_existing_file "$DATABASE_DSN_CREDENTIAL_PATH"' in install_text
+    assert (
+        'reject_non_regular_existing_file "$RUNTIME_CONFIG_EXAMPLE_PATH"'
+        in install_text
+    )
+    assert (
+        'reject_non_regular_existing_file "$DATABASE_DSN_CREDENTIAL_PATH"'
+        in install_text
+    )
     assert 'enforce_existing_regular_file "$dest" "root:root" 644' in install_text
 
 
 def test_install_script_installs_nginx_example_not_active_conf(
     install_text: str,
 ) -> None:
-    assert NGINX_EXAMPLE_DEST in install_text or "/etc/nginx/conf.d/${template_name}.example" in install_text
+    assert (
+        NGINX_EXAMPLE_DEST in install_text
+        or "/etc/nginx/conf.d/${template_name}.example" in install_text
+    )
     assert PORTAL_NGINX_EXAMPLE_DEST in install_text
     assert "install_nginx_examples" in install_text
-    assert "/etc/nginx/conf.d/ato-api.conf\"" not in install_text
-    assert "/etc/nginx/conf.d/ato-portal.conf\"" not in install_text
+    assert '/etc/nginx/conf.d/ato-api.conf"' not in install_text
+    assert '/etc/nginx/conf.d/ato-portal.conf"' not in install_text
 
 
 def test_install_script_runs_migrations_only_with_explicit_flag(
@@ -658,8 +682,8 @@ def test_smoke_script_validates_health_json_without_logging_bodies(
     assert 'payload.get("instance") != "/health/ready"' in smoke_text
     assert "error_code" in smoke_text
     assert "request_id" in smoke_text
-    assert "echo \"$body" not in smoke_text
-    assert "cat \"$body" not in smoke_text
+    assert 'echo "$body' not in smoke_text
+    assert 'cat "$body' not in smoke_text
 
 
 def test_smoke_script_uses_python_stdlib_for_json_validation(smoke_text: str) -> None:
@@ -709,8 +733,7 @@ def test_analyzer_worker_systemd_unit_is_hardened_and_inactive_by_default() -> N
         in text
     )
     assert (
-        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
-        in text
+        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
     )
     assert "LoadCredential=oidc" not in text.lower()
     assert "NoNewPrivileges=yes" in text
@@ -728,8 +751,7 @@ def test_intake_worker_systemd_unit_wires_consumed_credentials_only() -> None:
         in text
     )
     assert (
-        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
-        in text
+        f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
     )
     assert "LoadCredential=backup" not in text.lower()
     assert "Requires=ato-api.service" in text
@@ -773,10 +795,10 @@ def test_backup_contract_script_supports_strict_fail_closed() -> None:
     assert "actionable_issues" in backup_text
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+@requires_bash
 def test_install_script_dry_run_succeeds_without_root() -> None:
     result = subprocess.run(
-        ["bash", str(INSTALL_SCRIPT), "--dry-run"],
+        [*bash_script_argv(INSTALL_SCRIPT, cwd=ROOT), "--dry-run"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -787,11 +809,11 @@ def test_install_script_dry_run_succeeds_without_root() -> None:
     assert "20260717_0012" in result.stdout
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+@requires_bash
 def test_upgrade_and_rollback_dry_run_succeed_without_root() -> None:
     for script in (UPGRADE_SCRIPT, ROLLBACK_SCRIPT):
         result = subprocess.run(
-            ["bash", str(script), "--dry-run"],
+            [*bash_script_argv(script, cwd=ROOT), "--dry-run"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -808,8 +830,14 @@ def test_systemd_topology_matches_implemented_process_credentials() -> None:
     for text in (api_text, intake_text, analyzer_text):
         assert "User=ato" in text
         assert "Group=ato" in text
-        assert f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}" in text
-        assert f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}" in text
+        assert (
+            f"LoadCredential={DATABASE_DSN_IDENTIFIER}:{DATABASE_DSN_CREDENTIAL_PATH}"
+            in text
+        )
+        assert (
+            f"LoadCredential={AUDIT_HMAC_IDENTIFIER}:{AUDIT_HMAC_CREDENTIAL_PATH}"
+            in text
+        )
     assert (
         f"LoadCredential={OIDC_CLIENT_IDENTIFIER}:{OIDC_CLIENT_CREDENTIAL_PATH}"
         in api_text
@@ -826,7 +854,10 @@ def test_airgap_and_onboarding_docs_retain_json_credential_contract() -> None:
     assert "runtime-config.json" in onboarding
     assert "credential" in onboarding.lower()
     assert "Do not introduce `config.env`" in onboarding
-    assert "credential references" in airgap.lower() or "credential files" in airgap.lower()
+    assert (
+        "credential references" in airgap.lower()
+        or "credential files" in airgap.lower()
+    )
     assert "prestage_airgap_deps.sh" in airgap
     assert "build_release.sh" in airgap or "verify_release.sh" in onboarding
     assert "RELEASE_PACKAGING.md" in airgap or "RELEASE_PACKAGING.md" in onboarding
@@ -854,11 +885,16 @@ def test_deployment_readme_matches_current_installer_contract(
     assert "requires `--start`" in deployment_readme_text
     assert "alembic.ini" in deployment_readme_text
     assert "migrations/" in deployment_readme_text
-    assert "`database-dsn`, `audit-hmac-key`, and `oidc-client-secret`" in deployment_readme_text
+    assert (
+        "`database-dsn`, `audit-hmac-key`, and `oidc-client-secret`"
+        in deployment_readme_text
+    )
     assert '"checks":{"process":"ok"}' in deployment_readme_text
     assert "reconciliation_required" in deployment_readme_text
     assert "instance: /health/ready" in deployment_readme_text
-    assert "completed with degraded readiness; not release-ready" in deployment_readme_text
+    assert (
+        "completed with degraded readiness; not release-ready" in deployment_readme_text
+    )
     assert "ALLOW_DEGRADED_READY=true" in deployment_readme_text
     assert "not a release gate" in deployment_readme_text
     assert "alembic upgrade head` manually" not in deployment_readme_text

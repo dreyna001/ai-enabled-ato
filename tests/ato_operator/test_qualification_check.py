@@ -31,6 +31,17 @@ def test_happy_path_validates_repository_corpus() -> None:
     assert "HS-006" in report.hard_stops_governed
 
 
+def test_qualification_fixtures_use_lf_bytes_only() -> None:
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    corpus_root = (ROOT / manifest["corpus_root"]).resolve()
+    for fixture in manifest["fixtures"]:
+        fixture_path = (corpus_root / fixture["relative_path"]).resolve()
+        content = fixture_path.read_bytes()
+        assert b"\r\n" not in content, (
+            f"{fixture['fixture_id']} must remain LF-normalized for digest verification"
+        )
+
+
 def test_cli_qualification_check_passes() -> None:
     assert main(["qualification-check"]) == 0
 
@@ -96,9 +107,7 @@ def test_empty_corpus_rejected(tmp_path: Path) -> None:
     report = run_qualification_check(project_root=ROOT, manifest_path=bad_manifest)
     assert not report.passed
     assert any(
-        "minItems" in error
-        or "no fixtures" in error
-        or "should be non-empty" in error
+        "minItems" in error or "no fixtures" in error or "should be non-empty" in error
         for error in report.errors
     )
 
@@ -114,10 +123,15 @@ def test_profile_completeness_requires_all_three_profiles(tmp_path: Path) -> Non
     bad_manifest.write_text(json.dumps(manifest), encoding="utf-8")
     report = run_qualification_check(project_root=ROOT, manifest_path=bad_manifest)
     assert not report.passed
-    assert any("missing qualification fixture for profile fisma_agency_security" in error for error in report.errors)
+    assert any(
+        "missing qualification fixture for profile fisma_agency_security" in error
+        for error in report.errors
+    )
 
 
-def test_hostile_coverage_requires_injection_xxe_and_parse_reject(tmp_path: Path) -> None:
+def test_hostile_coverage_requires_injection_xxe_and_parse_reject(
+    tmp_path: Path,
+) -> None:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest["fixtures"] = [
         fixture for fixture in manifest["fixtures"] if fixture.get("split") != "hostile"
@@ -132,7 +146,9 @@ def test_hostile_coverage_requires_injection_xxe_and_parse_reject(tmp_path: Path
 def test_scenario_replay_coverage_required(tmp_path: Path) -> None:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest["fixtures"] = [
-        fixture for fixture in manifest["fixtures"] if fixture.get("split") != "scenario"
+        fixture
+        for fixture in manifest["fixtures"]
+        if fixture.get("split") != "scenario"
     ]
     bad_manifest = tmp_path / "manifest.json"
     bad_manifest.write_text(json.dumps(manifest), encoding="utf-8")
