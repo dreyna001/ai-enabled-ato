@@ -808,6 +808,8 @@ async def confirm_package_revision(
     idempotency_key: str,
     hmac_key: bytes,
     now: datetime,
+    config: Any | None = None,
+    blob_store: Any | None = None,
 ) -> PackageRevisionMutationResult:
     """Confirm a package revision after proposal review without committing."""
     validated_now = _require_aware_utc(now, field_name="now")
@@ -897,6 +899,20 @@ async def confirm_package_revision(
     package_revision.status = PackageRevisionStatus.READY.value
     package_revision.revision_version += 1
     confirm_metadata["revision_version"] = package_revision.revision_version
+
+    if config is not None and blob_store is not None:
+        from ato_service.process_capabilities import resolve_process_capabilities
+        from ato_service.package_search_index import rebuild_revision_search_index
+
+        capabilities = resolve_process_capabilities(config.document)
+        if capabilities is None or capabilities.package_search:
+            await rebuild_revision_search_index(
+                session,
+                package_revision_id=package_revision_id,
+                config=config,
+                blob_store=blob_store,
+                now=validated_now,
+            )
 
     payload = map_package_revision_to_domain(package_revision)
     await append_audit_event(

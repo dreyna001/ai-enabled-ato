@@ -22,7 +22,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ato_service.db.base import Base
@@ -1835,4 +1835,129 @@ class ExportRecord(Base):
             constraint_name="ck_exports_payload_manifest_sha256",
         ),
         Index("ix_exports_approval_id", "approval_id"),
+    )
+
+
+class PackageRevisionSearchChunk(Base):
+    """Immutable searchable evidence chunk for one ready package revision."""
+
+    __tablename__ = "package_revision_search_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    package_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("package_revisions.package_revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("source_artifacts.artifact_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    normalized_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    normalized_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(String(6000), nullable=False)
+    search_vector: Mapped[Any] = mapped_column(TSVECTOR, nullable=False)
+
+    __table_args__ = (
+        ck.sha256_check("chunk_id", constraint_name="ck_package_revision_search_chunks_chunk_id"),
+        ck.sha256_check(
+            "artifact_sha256",
+            constraint_name="ck_package_revision_search_chunks_artifact_sha256",
+        ),
+        CheckConstraint(
+            "normalized_start >= 0",
+            name="ck_package_revision_search_chunks_normalized_start_nonnegative",
+        ),
+        CheckConstraint(
+            "normalized_end > normalized_start",
+            name="ck_package_revision_search_chunks_normalized_end_positive",
+        ),
+        CheckConstraint(
+            "char_length(text) >= 1 AND char_length(text) <= 6000",
+            name="ck_package_revision_search_chunks_text_length",
+        ),
+        Index(
+            "ix_package_revision_search_chunks_revision_rank",
+            "package_revision_id",
+            "chunk_id",
+        ),
+        Index(
+            "ix_package_revision_search_chunks_search_vector",
+            "search_vector",
+            postgresql_using="gin",
+        ),
+    )
+
+
+class PackageRevisionSearchIndex(Base):
+    """Search index readiness marker for one sealed package revision."""
+
+    __tablename__ = "package_revision_search_indexes"
+
+    package_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("package_revisions.package_revision_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        ck.sha256_check(
+            "content_sha256",
+            constraint_name="ck_package_revision_search_indexes_content_sha256",
+        ),
+        CheckConstraint(
+            "chunk_count >= 0",
+            name="ck_package_revision_search_indexes_chunk_count_nonnegative",
+        ),
+    )
+
+
+class PackageRevisionChatUsage(Base):
+    """Bounded per-user chat usage counters for one package revision."""
+
+    __tablename__ = "package_revision_chat_usage"
+
+    package_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("package_revisions.package_revision_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    actor_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    rate_window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    rate_window_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    turn_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    daily_token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(actor_id) >= 1",
+            name="ck_package_revision_chat_usage_actor_id_min_length",
+        ),
+        CheckConstraint(
+            "rate_window_count >= 0",
+            name="ck_package_revision_chat_usage_rate_window_count_nonnegative",
+        ),
+        CheckConstraint(
+            "turn_count >= 0",
+            name="ck_package_revision_chat_usage_turn_count_nonnegative",
+        ),
+        CheckConstraint(
+            "daily_token_count >= 0",
+            name="ck_package_revision_chat_usage_daily_token_count_nonnegative",
+        ),
+        Index(
+            "ix_package_revision_chat_usage_revision_actor",
+            "package_revision_id",
+            "actor_id",
+        ),
     )

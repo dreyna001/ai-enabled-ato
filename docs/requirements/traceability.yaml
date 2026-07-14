@@ -1164,6 +1164,37 @@
       "test_ids": [],
       "verification_type": "P-1 gate recorded; P0 may start; authority-dependent and customer-specific work remains gated by hard stops",
       "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-012",
+      "spec_section": "19",
+      "requirement_text": "Revision-scoped PostgreSQL full-text search and bounded grounded package chat enforce authorization, capability flags, CHAT_* limits, deterministic refusal, and citation validation without cross-revision leakage.",
+      "epic": "EP-07",
+      "implementation_files": [
+        "migrations/versions/20260717_0012_package_search_index.py",
+        "src/ato_service/evidence_chunking.py",
+        "src/ato_service/package_search_index.py",
+        "src/ato_service/package_search.py",
+        "src/ato_service/package_chat.py",
+        "src/ato_service/package_assistant_access.py",
+        "src/ato_service/extended_api_router.py",
+        "src/ato_service/runtime_config.py",
+        "src/ato_operator/search_index.py",
+        "src/ato_operator/cli.py",
+        "docs/CONFIGURATION.md",
+        "docs/OPERATIONS_AND_RECOVERY.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_evidence_chunking.py::test_long_text_chunks_with_overlap_are_deterministic",
+        "tests/ato_service/test_package_search_index.py::test_search_cursor_round_trip_is_opaque_and_stable",
+        "tests/ato_service/test_package_search_api.py::test_require_process_capability_disabled",
+        "tests/ato_service/test_package_search_api.py::test_evaluate_refusal_blocks_authorization_requests",
+        "tests/ato_service/test_downstream_contracts.py::test_chat_refuses_authorization_decision_request",
+        "tests/ato_service/test_hostile_input_regression.py::test_prompt_injection_fixtures_refuse",
+        "tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration"
+      ],
+      "verification_type": "Phase 4 Component G PostgreSQL FTS index lifecycle, bounded chat, operator rebuild command, and focused auth/refusal/injection tests; live PostgreSQL integration runs when ATO_TEST_DATABASE_URL is configured",
+      "status": "implemented"
     }
   ]
 }

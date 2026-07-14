@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
 from ato_operator.checklist import build_operator_checklist, format_checklist
 from ato_operator.preflight import run_operator_preflight_sync
+from ato_operator.search_index import rebuild_package_search_index_sync
 from ato_service.db.dsn import require_database_dsn_from_env
 from ato_service.process_capabilities import resolve_process_capabilities
 from ato_service.runtime_config import (
@@ -269,6 +271,26 @@ def _command_qualification_check(args: argparse.Namespace) -> int:
     return 0 if passed else 1
 
 
+def _command_rebuild_search_index(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    revision_id = uuid.UUID(args.package_revision_id)
+    dsn = _resolve_dsn(config)
+    report = rebuild_package_search_index_sync(
+        config=config,
+        dsn=dsn,
+        package_revision_id=revision_id,
+    )
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(
+            "rebuild-search-index "
+            f"package_revision_id={report.package_revision_id} "
+            f"chunk_count={report.chunk_count}"
+        )
+    return 0
+
+
 def _command_print_checklist(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     items = build_operator_checklist(project_root=project_root)
@@ -342,6 +364,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Set ALLOW_DEGRADED_READY=true for temporary operator checks",
     )
 
+    rebuild_search = subparsers.add_parser(
+        "rebuild-search-index",
+        parents=[parent],
+        help="Rebuild PostgreSQL full-text search index for one ready package revision",
+    )
+    rebuild_search.add_argument(
+        "package_revision_id",
+        help="Package revision UUID to rebuild",
+    )
+
     return parser
 
 
@@ -360,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
         "purge-auth": _command_purge_auth,
         "qualification-check": _command_qualification_check,
         "print-checklist": _command_print_checklist,
+        "rebuild-search-index": _command_rebuild_search_index,
     }
     handler = commands[args.command]
     try:

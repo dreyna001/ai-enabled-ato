@@ -778,6 +778,7 @@ the error.
 | `idempotency_key_required` | 400 | No | Request | None. | `denied` | Yes |
 | `authentication_required` | 401 | No | Request | None. | `denied` | Yes |
 | `authorization_denied` | 403 | No | Target object | None; object existence details remain undisclosed where required. | `denied` | Yes |
+| `capability_disabled` | 403 | No | Request | None; requested process capability is inactive for this deployment. | `denied` | Yes |
 | `csrf_validation_failed` | 403 | No | Request | None. | `denied` | Yes |
 | `resource_not_found` | 404 | No | Requested resource | None. | `denied` | Yes |
 | `request_schema_invalid` | 422 | No | Request | None; populate `field_errors`. | `denied` | Yes |
@@ -889,6 +890,7 @@ replay.
 | Error code | HTTP | Retryable | Owning object | State effect | Audit outcome | LLM zero |
 | --- | ---: | --- | --- | --- | --- | --- |
 | `request_rate_limit_exceeded` | 429 | Yes | Request/principal | None; include `Retry-After`. | `denied` | Yes |
+| `chat_limit_exceeded` | 422 | No | Chat request/principal | No chat call or message write. | `denied` | Yes |
 | `concurrent_run_limit_exceeded` | 429 | Yes | Run request | No run is created; include `Retry-After` when known. | `denied` | Yes |
 | `chat_turn_limit_exceeded` | 429 | No | Chat request/principal | No chat call or message write. | `denied` | Yes |
 | `chat_token_limit_exceeded` | 429 | No | Chat request/principal | No chat call or message write. | `denied` | Yes |

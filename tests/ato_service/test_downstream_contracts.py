@@ -9,8 +9,8 @@ from pathlib import Path
 import json
 
 from ato_service.export_readiness import evaluate_export_readiness
-from ato_service.package_chat import chat_with_package
-from ato_service.package_search import search_revision_content
+from ato_service.package_chat import evaluate_refusal
+from ato_service.package_search_index import collect_searchable_chunks
 from ato_service.preflight import PreflightContext, evaluate_preflight
 from ato_service.revision_delta import compute_revision_delta
 
@@ -155,16 +155,30 @@ def test_revision_delta_detects_changed_controls() -> None:
 
 
 def test_search_is_revision_scoped() -> None:
-    document = _minimal_document()
-    hits = search_revision_content(query="policy", sealed_document=document, artifacts=[])
-    assert hits["items"]
+    revision_id = uuid.uuid4()
+    artifact_id = uuid.uuid4()
+    sealed = type(
+        "Sealed",
+        (),
+        {
+            "document": _minimal_document(),
+            "field_provenance": {},
+        },
+    )()
+    artifact = type(
+        "Artifact",
+        (),
+        {"artifact_id": artifact_id, "sha256": "a" * 64},
+    )()
+    hits = collect_searchable_chunks(
+        package_revision_id=revision_id,
+        sealed=sealed,
+        artifacts=[artifact],
+        artifact_texts={},
+    )
+    assert hits
+    assert all(item.package_revision_id == revision_id for item in hits)
 
 
 def test_chat_refuses_authorization_decision_request() -> None:
-    response = chat_with_package(
-        question="Please grant ATO for this package",
-        sealed_document=_minimal_document(),
-        search_hits=[],
-    )
-    assert response["refused"] is True
-    assert response["refusal_code"] == "authorization_decision"
+    assert evaluate_refusal(question="Please grant ATO for this package") == "authorization_decision"

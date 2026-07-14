@@ -102,10 +102,17 @@ EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
         "exports",
         "evidence_requests",
         "poam_candidates",
+        "package_revision_search_chunks",
+        "package_revision_search_indexes",
+        "package_revision_chat_usage",
     }
 )
-NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states"})
-COMPOSITE_PRIMARY_KEY_TABLES = frozenset({"package_revision_intake_work"})
+NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states", "package_revision_search_chunks"})
+COMPOSITE_PRIMARY_KEY_TABLES = frozenset({"package_revision_intake_work", "package_revision_chat_usage"})
+COMPOSITE_PRIMARY_KEY_COLUMNS = {
+    "package_revision_intake_work": ["package_revision_id", "work_phase"],
+    "package_revision_chat_usage": ["package_revision_id", "actor_id"],
+}
 
 FK_SAFE_UPGRADE_TABLE_ORDER = (
     "systems",
@@ -230,9 +237,8 @@ def test_primary_keys_use_uuid_columns() -> None:
     for table_name in EXPECTED_TABLES:
         pk_columns = _table(table_name).primary_key.columns
         if table_name in COMPOSITE_PRIMARY_KEY_TABLES:
-            assert [column.name for column in pk_columns] == [
-                "package_revision_id",
-                "work_phase",
+            assert [column.name for column in pk_columns] == COMPOSITE_PRIMARY_KEY_COLUMNS[
+                table_name
             ]
             assert isinstance(pk_columns[0].type, UuidType)
             continue
@@ -392,6 +398,7 @@ def test_postgresql_ddl_compiles_for_all_tables() -> None:
         assert "TIMESTAMP WITH TIME ZONE" in ddl or table_name in {
             "source_artifacts",
             "matrix_rows",
+            "package_revision_search_chunks",
         }
         for index in _table(table_name).indexes:
             index_sql = str(CreateIndex(index).compile(dialect=dialect))
@@ -562,10 +569,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_review_export_auth_migration() -> None:
+def test_alembic_head_is_package_search_index_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260716_0011"
+    assert script.get_current_head() == "20260717_0012"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

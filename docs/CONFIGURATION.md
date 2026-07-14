@@ -66,6 +66,11 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | `LOCAL_PASSWORD_AUTH_ENABLED` | **Hard stop** | Must remain `false`. Declares that local password auth is forbidden; it is not a feature switch. |
 | `MALWARE_SCANNER_*` | **Production scanner contract** | `dev_local` uses an **HS-005** integrity-only substitute (re-verifies stored SHA-256/size; no malware detection, no networking). `onprem_production` resolves the local ClamAV adapter when `MALWARE_SCANNER_ENABLED=true` and transport settings are valid (`MALWARE_SCANNER_TRANSPORT`, socket path or loopback TCP host/port, bounded timeout). Daemon-down and protocol errors fail closed with `scanner_unavailable` / `scanner_timeout`. Operator offline signature updates remain customer-owned; **HS-005** live drill is still required before customer extraction claims. |
 | `PROCESS_CAPABILITIES` | **Explicit process flags** | Required object for `onprem_production`. Booleans gate `api`, `intake_worker`, `analyzer_worker`, `portal_static`, `malware_scanning`, `text_model_calls`, `vision_model_calls`, and `oidc_authentication`, with optional `package_search` and `package_chat`. Inactive capabilities are ignored by `ato-operator preflight`; active capabilities fail fast when dependencies are invalid. No bundles or presets. |
+| `CHAT_MAX_RETRIEVED_CHUNKS` | **Package chat retrieval** | Integer `1..8`, default `8`. Maximum authorized chunks passed to grounded chat per response. |
+| `CHAT_RATE_LIMIT_PER_USER` | **Package chat rate limit** | Object with `max_requests` and `window_seconds`. |
+| `CHAT_INPUT_LIMIT` | **Package chat input limit** | Object with `value` and `unit` (`characters` or `tokens`). |
+| `CHAT_TURN_LIMIT` | **Package chat turns** | Maximum turns per user per revision. |
+| `CHAT_DAILY_TOKEN_LIMIT_PER_USER` | **Package chat token budget** | Per-user daily token budget for package chat. |
 | `OIDC_GROUPS_CLAIM` / `OIDC_GROUP_ROLE_MAPPING` | **Identity mapping** | Required when `IDENTITY_PROVIDER_MODE=oidc`. Claim name defaults to `groups`. Role mapping overrides default RBAC group names at startup. |
 | `INTERNAL_EGRESS_ALLOWLIST` | **Outbound allowlist** | Required for `onprem_production`. Closed host/port list for IdP, model endpoints, and backup targets. Operator preflight verifies configured endpoints match entries exactly. |
 | `AUTHORITY_MANIFEST_FILE_REFERENCE` / `FISMA_TEMPLATE_PACK_FILE_REFERENCE` | **Pinned file references** | Optional absolute path plus `expected_sha256` digest. Operator preflight verifies bytes when configured; HS-001/HS-002 govern qualified review separately. |
@@ -254,6 +259,7 @@ Workstream A ships a bounded operator CLI (`pyproject.toml` entrypoint `ato-oper
 | `smoke` | Delegates to `scripts/smoke_service_chain.sh` |
 | `verify-audit` | Ordered HMAC audit chain verification with root/checkpoint summary when PostgreSQL is reachable |
 | `expire-approvals` | Transition `pending_approval` and unexported `approved` drafts past `APPROVAL_EXPIRY_DAYS` to `expired` |
+| `rebuild-search-index` | Rebuild PostgreSQL full-text search chunks and GIN index metadata for one ready package revision |
 | `qualification-check` | Qualification fixture presence only (does not close HS-001..009) |
 | `print-checklist` | Operator onboarding checklist including open hard stops |
 

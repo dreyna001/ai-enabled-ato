@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ato_service.api_dependencies import get_audit_hmac_key, get_db_session, get_runtime_state
+from ato_service.api_dependencies import get_audit_hmac_key, get_blob_store, get_db_session, get_runtime_state
 from ato_service.api_router import get_mutation_principal, get_read_principal
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.authorization_decisions import (
@@ -32,7 +32,26 @@ from ato_service.export_service import (
     submit_export_draft,
 )
 from ato_service.object_authorization import authorize_package_revision_read
+from ato_service.package_assistant_access import (
+    CapabilityDisabledError,
+    require_process_capability,
+)
+from ato_service.package_chat import (
+    ChatContextValidationError,
+    ChatLimitExceededError,
+    ChatRateLimitExceededError,
+    ChatValidationError,
+    chat_with_package,
+    load_chat_context,
+)
 from ato_service.package_revisions import PackageRevisionNotFoundError
+from ato_service.package_search import (
+    InvalidSearchCursorError,
+    InvalidSearchLimitError,
+    InvalidSearchQueryError,
+    SearchIndexNotReadyError,
+    search_revision_content,
+)
 from ato_service.preflight import PreflightContext, evaluate_preflight
 from ato_service.review_revisions import (
     ReviewRevisionNotFoundError,
@@ -88,6 +107,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1, max_length=4000)
+    run_id: uuid.UUID
     review_revision_id: uuid.UUID | None = None
 
 
@@ -235,98 +255,99 @@ def build_extended_router() -> APIRouter:
             now=_utc_now(),
         )
 
-    @router.get("/package-revisions/{id}/search", tags=["Packages"])
+    @router.get("/package-revisions/{id}/search", tags=["Packages"], response_model=None)
     async def search_package_revision(
         id: uuid.UUID,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
-        q: str = "",
-        limit: int = 25,
-    ) -> dict[str, Any]:
-        from ato_service.db.models import SealedPackageContent, SourceArtifact
-        from ato_service.package_search import search_revision_content
-
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        q: str,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any] | JSONResponse:
         try:
-            await authorize_package_revision_read(
+            require_process_capability(runtime_state.config, capability="package_search")
+            scope = await authorize_package_revision_read(
                 session,
                 principal=principal,
                 package_revision_id=id,
                 not_found_error=PackageRevisionNotFoundError,
             )
+            if scope.package_revision.status != "ready":
+                return JSONResponse(status_code=404, content={"error": "resource_not_found"})
+            return await search_revision_content(
+                session,
+                package_revision_id=id,
+                query=q,
+                limit=limit,
+                cursor=cursor,
+            )
         except PackageRevisionNotFoundError:
-            return JSONResponse(status_code=404, content={"error": "not_found"})
+            return JSONResponse(status_code=404, content={"error": "resource_not_found"})
         except AuthorizationDeniedError:
             return JSONResponse(
                 status_code=403,
                 content={"error": "authorization_denied", "error_code": "authorization_denied"},
             )
-        sealed = (
-            await session.execute(
-                select(SealedPackageContent).where(
-                    SealedPackageContent.package_revision_id == id
-                )
-            )
-        ).scalar_one_or_none()
-        artifacts = (
-            await session.execute(
-                select(SourceArtifact).where(SourceArtifact.package_revision_id == id)
-            )
-        ).scalars().all()
-        return search_revision_content(
-            query=q,
-            sealed_document=sealed.document if sealed is not None else None,
-            artifacts=artifacts,
-            limit=limit,
-        )
+        except CapabilityDisabledError:
+            return JSONResponse(status_code=403, content={"error": "capability_disabled"})
+        except InvalidSearchQueryError:
+            return JSONResponse(status_code=422, content={"error": "malformed_request"})
+        except (InvalidSearchCursorError, InvalidSearchLimitError):
+            return JSONResponse(status_code=422, content={"error": "malformed_request"})
+        except SearchIndexNotReadyError:
+            return JSONResponse(status_code=404, content={"error": "resource_not_found"})
 
-    @router.post("/package-revisions/{id}/chat", tags=["Packages"])
+    @router.post("/package-revisions/{id}/chat", tags=["Packages"], response_model=None)
     async def chat_package_revision(
         id: uuid.UUID,
         body: ChatRequest,
-        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
-    ) -> dict[str, Any]:
-        from ato_service.db.models import SealedPackageContent, SourceArtifact
-        from ato_service.package_chat import chat_with_package
-        from ato_service.package_search import search_revision_content
-
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        blob_store: Annotated[Any, Depends(get_blob_store)],
+    ) -> dict[str, Any] | JSONResponse:
         try:
+            require_process_capability(runtime_state.config, capability="package_chat")
             await authorize_package_revision_read(
                 session,
                 principal=principal,
                 package_revision_id=id,
                 not_found_error=PackageRevisionNotFoundError,
             )
+            context = await load_chat_context(
+                session,
+                package_revision_id=id,
+                run_id=body.run_id,
+                review_revision_id=body.review_revision_id,
+            )
+            return await chat_with_package(
+                session,
+                config=runtime_state.config,
+                blob_store=blob_store,
+                principal=principal,
+                context=context,
+                question=body.question,
+                limits=runtime_state.config.chat_limits,
+                now=_utc_now(),
+            )
         except PackageRevisionNotFoundError:
-            return JSONResponse(status_code=404, content={"error": "not_found"})
+            return JSONResponse(status_code=404, content={"error": "resource_not_found"})
         except AuthorizationDeniedError:
             return JSONResponse(
                 status_code=403,
                 content={"error": "authorization_denied", "error_code": "authorization_denied"},
             )
-        sealed = (
-            await session.execute(
-                select(SealedPackageContent).where(
-                    SealedPackageContent.package_revision_id == id
-                )
-            )
-        ).scalar_one_or_none()
-        artifacts = (
-            await session.execute(
-                select(SourceArtifact).where(SourceArtifact.package_revision_id == id)
-            )
-        ).scalars().all()
-        search_hits = search_revision_content(
-            query=body.question,
-            sealed_document=sealed.document if sealed is not None else None,
-            artifacts=artifacts,
-            limit=5,
-        )["items"]
-        return chat_with_package(
-            question=body.question,
-            sealed_document=sealed.document if sealed is not None else None,
-            search_hits=search_hits,
-        )
+        except CapabilityDisabledError:
+            return JSONResponse(status_code=403, content={"error": "capability_disabled"})
+        except ChatContextValidationError:
+            return JSONResponse(status_code=422, content={"error": "request_schema_invalid"})
+        except ChatValidationError:
+            return JSONResponse(status_code=422, content={"error": "request_schema_invalid"})
+        except ChatLimitExceededError:
+            return JSONResponse(status_code=422, content={"error": "chat_limit_exceeded"})
+        except ChatRateLimitExceededError:
+            return JSONResponse(status_code=429, content={"error": "request_rate_limit_exceeded"})
 
     @router.post("/systems/{system_id}/authorization-decisions", status_code=201, tags=["Packages"])
     async def post_authorization_decision(
