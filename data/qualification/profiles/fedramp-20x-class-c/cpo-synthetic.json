@@ -1,0 +1,15 @@
+{
+  "fixture_notice": "Synthetic CPO-shaped fixture for qualification only. Not official FedRAMP authority content.",
+  "serviceIdentification": {
+    "providerName": "Fixture Provider",
+    "serviceName": "Fixture Service",
+    "serviceAcronym": "FS",
+    "serviceDescription": "Internal qualification fixture.",
+    "certificationType": "20x",
+    "fedRampPackageId": "QUAL-FIXTURE-001"
+  },
+  "serviceProperties": {
+    "serviceType": ["SaaS"],
+    "deploymentModel": "Public Cloud"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "scenario": "idempotency_replay",
+  "description": "Repeat POST with the same Idempotency-Key and body returns the stored outcome without duplicate mutation.",
+  "operation": {
+    "method": "POST",
+    "path": "/package-revisions/{id}/runs",
+    "idempotency_key": "qualification-replay-fixture-key"
+  },
+  "expected_outcome": "idempotent_replay"
+}

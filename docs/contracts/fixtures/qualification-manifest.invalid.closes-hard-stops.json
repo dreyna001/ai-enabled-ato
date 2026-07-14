@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "qualification-manifest.invalid.closes-hard-stops",
+  "status": "draft",
+  "created_at": "2026-07-14T16:00:00Z",
+  "corpus_root": "data/qualification",
+  "hard_stop_notice": "Invalid because claim_metadata closes hard stops.",
+  "hard_stops_governed": ["HS-001"],
+  "fixtures": [
+    {
+      "fixture_id": "fixture.bad",
+      "relative_path": "hostile-inputs/malformed-json.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+      "size_bytes": 1,
+      "profile_id": null,
+      "split": "hostile",
+      "purpose": "Invalid claim metadata.",
+      "expected_behavior": "parse_reject",
+      "claim_metadata": {
+        "closes_hard_stops": true,
+        "allowed_claims": ["forbidden_claim"]
+      }
+    }
+  ]
+}

@@ -9,7 +9,6 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
 
 from alembic import command
 from alembic.config import Config
@@ -22,6 +21,7 @@ from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
 from ato_operator.checklist import build_operator_checklist, format_checklist
 from ato_operator.preflight import run_operator_preflight_sync
+from ato_operator.qualification_check import run_qualification_check
 from ato_operator.search_index import rebuild_package_search_index_sync
 from ato_service.db.dsn import require_database_dsn_from_env
 from ato_service.process_capabilities import resolve_process_capabilities
@@ -246,29 +246,25 @@ def _command_purge_auth(args: argparse.Namespace) -> int:
 
 def _command_qualification_check(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
-    qualification_dir = project_root / "data" / "qualification"
-    required_paths = [
-        qualification_dir / "hostile-inputs" / "nessus-xxe.xml",
-        qualification_dir / "hostile-inputs" / "prompt-injection-fixtures.json",
-        qualification_dir / "assessor-import" / "sar-excerpt.json",
-    ]
-    missing = [str(path.relative_to(project_root)) for path in required_paths if not path.is_file()]
-    passed = not missing
-    payload: dict[str, Any] = {
-        "passed": passed,
-        "missing_paths": missing,
-        "note": "Corpus presence only; HS-001..009 remain governed by hard-stops.yaml",
-    }
+    report = run_qualification_check(project_root=project_root)
+    payload = report.to_dict()
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        if missing:
-            print("qualification corpus incomplete:")
-            for path in missing:
-                print(f"  missing: {path}")
+        if report.passed:
+            print(
+                "qualification corpus valid "
+                f"({report.fixture_count} fixtures, "
+                f"profiles={','.join(report.profiles_covered)})"
+            )
         else:
-            print("qualification corpus fixtures present (presence check only)")
-    return 0 if passed else 1
+            print("qualification corpus validation failed:")
+            for error in report.errors:
+                print(f"  {error}")
+        print(report.note)
+        for hard_stop_id in report.hard_stops_governed:
+            print(f"  hard_stop {hard_stop_id}: open (not closed by this check)")
+    return 0 if report.passed else 1
 
 
 def _command_rebuild_search_index(args: argparse.Namespace) -> int:
@@ -335,7 +331,7 @@ def _build_parser() -> argparse.ArgumentParser:
         ("purge-auth", "Delete expired OIDC login states and auth sessions"),
         (
             "qualification-check",
-            "Verify qualification fixture corpus presence (does not close hard stops)",
+            "Validate qualification corpus manifest, digests, and coverage (does not close hard stops)",
         ),
         ("print-checklist", "Print airgapped onboarding checklist"),
     ):

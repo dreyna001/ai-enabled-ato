@@ -1,0 +1,2 @@
+Agency access control policy excerpt (synthetic fixture).
+Quarterly access reviews are documented in the agency GRC tool.

@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "profile_id": "fedramp_rev5_transition",
+  "profile_version": "1.0.0",
+  "authority_manifest_id": "ato-authorities-2026-07-10-draft",
+  "generated_at": "2026-07-14T16:00:00Z",
+  "qualification_status": "draft",
+  "certification_class": null,
+  "impact_level": "moderate",
+  "assessment_items": [
+    {
+      "assessment_item_type": "nist_control",
+      "assessment_item_id": "CM-2",
+      "title": "Baseline Configuration",
+      "requirement_text": "Develop, document, and maintain a current baseline configuration.",
+      "force": "MUST",
+      "owner": "system_owner",
+      "applicability": {
+        "paths": ["rev5_transition"],
+        "classes": [],
+        "impact_levels": ["moderate"],
+        "affects": ["provider"]
+      },
+      "authority_refs": [
+        {
+          "authority_id": "nist.sp.800-53r5",
+          "source_pointer": "/controls/CM-2"
+        }
+      ],
+      "required_evidence_kinds": ["evidence_document"],
+      "model_analysis_allowed": true
+    }
+  ],
+  "artifact_requirements": [
+    {
+      "artifact_id": "ssp_excerpt",
+      "display_name": "SSP excerpt",
+      "required": true,
+      "owner": "provider",
+      "official_schema_authority_id": null,
+      "human_readable_required": true,
+      "machine_readable_required": false,
+      "export_paths": ["human/ssp.md"],
+      "authority_refs": [
+        {
+          "authority_id": "nist.sp.800-53r5",
+          "source_pointer": "/artifacts/ssp_excerpt"
+        }
+      ]
+    }
+  ],
+  "cadence_rules": [],
+  "status_policy": {
+    "allowed_statuses": ["supported", "partial", "unsupported", "insufficient_evidence"],
+    "no_evidence_status": "insufficient_evidence",
+    "incomplete_context_ceiling": "partial",
+    "all_stale_ceiling": "partial",
+    "system_may_be_more_favorable_than_model": false,
+    "exact_row_coverage_required": true,
+    "repair_attempts": 1
+  }
+}

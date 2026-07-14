@@ -1,0 +1,10 @@
+{
+  "scenario": "worker_crash_mid_step",
+  "description": "Worker crash after partial step work leaves no succeeded run; retry resumes from durable checkpoint.",
+  "run": {
+    "status_before": "running",
+    "step_key": "deterministic_analysis",
+    "artifact_manifest_sha256": null
+  },
+  "expected_outcome": "crash_safe_resume"
+}

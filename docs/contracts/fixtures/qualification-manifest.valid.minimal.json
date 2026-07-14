@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "qualification-manifest.valid.minimal",
+  "status": "draft",
+  "created_at": "2026-07-14T16:00:00Z",
+  "corpus_root": "data/qualification",
+  "hard_stop_notice": "Fixture-only manifest for contract validation.",
+  "hard_stops_governed": ["HS-001", "HS-006"],
+  "fixtures": [
+    {
+      "fixture_id": "fixture.one",
+      "relative_path": "hostile-inputs/malformed-json.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+      "size_bytes": 1,
+      "profile_id": null,
+      "split": "hostile",
+      "purpose": "Contract fixture entry.",
+      "expected_behavior": "parse_reject",
+      "claim_metadata": {
+        "closes_hard_stops": false,
+        "allowed_claims": ["contract_fixture"]
+      }
+    }
+  ]
+}

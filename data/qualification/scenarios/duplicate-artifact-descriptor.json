@@ -1,0 +1,17 @@
+{
+  "scenario": "duplicate_artifact_same_digest",
+  "description": "Two upload entries reference the same SHA-256 and size_bytes; finalize must reject duplicate storage keys.",
+  "artifacts": [
+    {
+      "artifact_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "sha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      "size_bytes": 128
+    },
+    {
+      "artifact_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "sha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      "size_bytes": 128
+    }
+  ],
+  "expected_outcome": "duplicate_detected"
+}

@@ -1195,6 +1195,37 @@
       ],
       "verification_type": "Phase 4 Component G PostgreSQL FTS index lifecycle, bounded chat, operator rebuild command, and focused auth/refusal/injection tests; live PostgreSQL integration runs when ATO_TEST_DATABASE_URL is configured",
       "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-013",
+      "spec_section": "7",
+      "requirement_text": "Qualification corpora for all supported profiles are sealed in a schema-validated manifest with digest verification, hostile and replay scenario coverage, and operator validation that reports hard stops without closing them.",
+      "epic": "EP-08-onprem-release",
+      "implementation_files": [
+        "docs/contracts/qualification-manifest.schema.json",
+        "data/qualification/manifest.json",
+        "data/qualification/README.md",
+        "scripts/regenerate_qualification_manifest.py",
+        "src/ato_operator/qualification_check.py",
+        "src/ato_operator/cli.py",
+        "docs/CONFIGURATION.md",
+        "docs/contracts/README.md"
+      ],
+      "test_ids": [
+        "tests/ato_operator/test_qualification_check.py::test_happy_path_validates_repository_corpus",
+        "tests/ato_operator/test_qualification_check.py::test_malformed_manifest_fails_schema_validation",
+        "tests/ato_operator/test_qualification_check.py::test_path_traversal_relative_path_rejected",
+        "tests/ato_operator/test_qualification_check.py::test_missing_fixture_file_reported",
+        "tests/ato_operator/test_qualification_check.py::test_duplicate_relative_path_rejected",
+        "tests/ato_operator/test_qualification_check.py::test_digest_mismatch_reported",
+        "tests/ato_operator/test_qualification_check.py::test_profile_completeness_requires_all_three_profiles",
+        "tests/ato_operator/test_qualification_check.py::test_hostile_coverage_requires_injection_xxe_and_parse_reject",
+        "tests/ato_operator/test_qualification_check.py::test_scenario_replay_coverage_required",
+        "tests/ato_operator/test_cli.py::test_qualification_check_reports_fixture_presence",
+        "tests/test_contracts.py::test_qualification_manifest_validates_and_matches_local_bytes"
+      ],
+      "verification_type": "Deterministic qualification corpus manifest with SHA-256 digests, profile/hostile/replay coverage checks, and HS-001..009 reporting; official qualification and release claims remain blocked by open hard stops",
+      "status": "implemented"
     }
   ]
 }
