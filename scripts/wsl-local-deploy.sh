@@ -16,6 +16,7 @@ readonly DATA_DIR="/var/ato-packages"
 readonly CREDENTIALS_DIR="$CONFIG_DIR/credentials"
 readonly DATABASE_DSN_CREDENTIAL_PATH="$CREDENTIALS_DIR/database-dsn"
 readonly AUDIT_HMAC_CREDENTIAL_PATH="$CREDENTIALS_DIR/audit-hmac-key"
+readonly OIDC_CLIENT_CREDENTIAL_PATH="$CREDENTIALS_DIR/oidc-client-secret"
 readonly RUNTIME_CONFIG_DEST="$INSTALL_DIR/runtime-config.json"
 readonly STORAGE_BIND_TARGET="$INSTALL_DIR/data/ato-storage"
 readonly DB_NAME="${ATO_WSL_DB_NAME:-ato}"
@@ -248,7 +249,6 @@ wait_for_api_loopback() {
 run_smoke_checks() {
     local smoke_script="$REPO_DIR/scripts/smoke_service_chain.sh"
     [[ -f "$smoke_script" ]] || err "Missing smoke script: $smoke_script"
-    chmod +x "$smoke_script"
     wait_for_api_loopback
     ALLOW_DEGRADED_READY=true API_BASE_URL="${API_LOOPBACK_URL}" bash "$smoke_script"
 }
@@ -273,7 +273,15 @@ audit_key="$(generate_token)"
 write_credential_file "$DATABASE_DSN_CREDENTIAL_PATH" "root:root" 600 \
     "postgresql+asyncpg://${DB_USER}:${role_credential}@127.0.0.1:5432/${DB_NAME}"
 write_credential_file "$AUDIT_HMAC_CREDENTIAL_PATH" "root:root" 600 "$audit_key"
-info "Wrote database DSN and audit HMAC credentials under $CREDENTIALS_DIR"
+if [[ ! -s "$OIDC_CLIENT_CREDENTIAL_PATH" ]]; then
+    oidc_credential_value="$(generate_token)"
+    write_credential_file "$OIDC_CLIENT_CREDENTIAL_PATH" "root:root" 600 \
+        "$oidc_credential_value"
+    info "Created OIDC client secret credential"
+else
+    info "OIDC client secret credential already exists"
+fi
+info "Provisioned API credentials under $CREDENTIALS_DIR"
 bootstrap_postgresql "$role_credential"
 
 echo "[3/8] Installing application tree..."

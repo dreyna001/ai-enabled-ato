@@ -88,5 +88,5 @@ systemctl restart ato-api.service
 systemctl restart ato-synthetic-intake-worker.timer 2>/dev/null || true
 
 info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + OpenAI text model)"
-info "Start the UI from Windows: cd portal && npm install && npm run dev"
+info "Start the UI from WSL: bash scripts/start-portal.sh"
 info "Open http://localhost:5173"

@@ -557,7 +557,6 @@ start_service_best_effort() {
 run_smoke_checks() {
     local smoke_script="$REPO_DIR/scripts/smoke_service_chain.sh"
     [[ -f "$smoke_script" ]] || err "Missing smoke script: $smoke_script"
-    chmod +x "$smoke_script" 2>/dev/null || true
     bash "$smoke_script" || err "Smoke checks failed"
 }
 

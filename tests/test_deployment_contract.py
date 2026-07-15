@@ -42,6 +42,7 @@ WSL_PORTAL_RUNTIME_CONFIG = (
     ROOT / "deployment" / "config" / "runtime-config.wsl_portal.json"
 )
 WSL_PORTAL_ENABLE_SCRIPT = ROOT / "scripts" / "wsl-portal-enable.sh"
+PORTAL_START_SCRIPT = ROOT / "scripts" / "start-portal.sh"
 DEPLOYMENT_README = ROOT / "deployment" / "README.md"
 PYPROJECT = ROOT / "pyproject.toml"
 MAIN_MODULE = ROOT / "src" / "ato_service" / "main.py"
@@ -121,6 +122,7 @@ def deployment_readme_text() -> str:
         WSL_RUNTIME_CONFIG,
         WSL_PORTAL_RUNTIME_CONFIG,
         WSL_PORTAL_ENABLE_SCRIPT,
+        PORTAL_START_SCRIPT,
         INTAKE_WORKER_UNIT,
         ANALYZER_WORKER_UNIT,
         PORTAL_NGINX_CONF,
@@ -151,6 +153,7 @@ def test_deployment_assets_exist(path: Path) -> None:
         WSL_RUNTIME_CONFIG,
         WSL_PORTAL_RUNTIME_CONFIG,
         WSL_PORTAL_ENABLE_SCRIPT,
+        PORTAL_START_SCRIPT,
     ],
 )
 def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
@@ -169,6 +172,7 @@ def test_deployment_assets_contain_no_secret_like_values(path: Path) -> None:
         SMOKE_SCRIPT,
         WSL_DEPLOY_SCRIPT,
         WSL_PORTAL_ENABLE_SCRIPT,
+        PORTAL_START_SCRIPT,
         DRAIN_SCRIPT,
         UPGRADE_SCRIPT,
         ROLLBACK_SCRIPT,
@@ -846,6 +850,22 @@ def test_systemd_topology_matches_implemented_process_credentials() -> None:
     assert "LoadCredential=oidc" not in analyzer_text.lower()
     assert "inactive until operator enablement" in intake_text
     assert "inactive until operator enablement" in analyzer_text
+
+
+def test_wsl_deploy_provisions_all_api_credentials_without_mutating_smoke_script() -> None:
+    deploy_text = _read(WSL_DEPLOY_SCRIPT)
+    install_text = _read(INSTALL_SCRIPT)
+    assert "OIDC_CLIENT_CREDENTIAL_PATH" in deploy_text
+    assert 'write_credential_file "$OIDC_CLIENT_CREDENTIAL_PATH"' in deploy_text
+    assert 'chmod +x "$smoke_script"' not in deploy_text
+    assert 'chmod +x "$smoke_script"' not in install_text
+
+
+def test_portal_launcher_targets_wsl_api() -> None:
+    text = _read(PORTAL_START_SCRIPT)
+    assert "VITE_DEV_API_TARGET" in text
+    assert "http://127.0.0.1:8001" in text
+    assert "npm run dev" in text
 
 
 def test_airgap_and_onboarding_docs_retain_json_credential_contract() -> None:

@@ -35,21 +35,6 @@ From the repository root inside WSL:
 sudo bash scripts/wsl-local-deploy.sh
 ```
 
-The current WSL API unit unconditionally loads `oidc-client-secret`, while the
-base deploy script generates only `database-dsn` and `audit-hmac-key`. Until
-that sequencing is corrected in the scripts, a first base run can complete
-PostgreSQL installation and migrations but fail API smoke with
-`status=243/CREDENTIALS`. Use the portal-enable sequence below to provision the
-missing local OIDC secret and restart the API. If portal/OpenAI setup is not
-available yet, create a development-only credential before restarting:
-
-```bash
-sudo openssl rand -hex 16 | sudo tee /etc/ato-analyzer/credentials/oidc-client-secret >/dev/null
-sudo chown root:root /etc/ato-analyzer/credentials/oidc-client-secret
-sudo chmod 600 /etc/ato-analyzer/credentials/oidc-client-secret
-sudo systemctl restart ato-api.service
-```
-
 The script:
 
 1. Installs PostgreSQL and Python 3.12 (apt)
@@ -58,8 +43,8 @@ The script:
 4. Installs `deployment/config/runtime-config.wsl_local.json` to `/opt/ato-analyzer/runtime-config.json`
 5. Bind-mounts `/var/ato-packages` to the dev_local storage path under `/opt/ato-analyzer/data/ato-storage`
 6. Installs WSL systemd units and runs migrations
-7. Attempts to start the API and synthetic worker timer
-8. Runs smoke checks with `ALLOW_DEGRADED_READY=true` (HS-001 draft manifest); on a first install, the missing OIDC credential described above can block API startup
+7. Starts the API and synthetic worker timer
+8. Runs smoke checks with degraded readiness allowed for the HS-001 draft manifest
 
 ## Host layout (inside WSL)
 
@@ -67,8 +52,8 @@ Same paths as production packaging:
 
 ```text
 /opt/ato-analyzer/                 application venv, package, migrations, runtime-config.json
-/etc/ato-analyzer/credentials/     database-dsn, audit-hmac-key (generated; never commit)
-                                   after portal enable: oidc-client-secret, ato-local.env
+/etc/ato-analyzer/credentials/     database-dsn, audit-hmac-key, oidc-client-secret
+                                   (generated; never commit); after portal enable: ato-local.env
 /var/ato-packages/                 mutable package storage (bind-mounted into app storage path)
 /etc/systemd/system/ato-api.service
 /etc/systemd/system/ato-synthetic-intake-worker.service
@@ -125,8 +110,7 @@ sudo bash scripts/wsl-local-deploy.sh --help
 
 After the base WSL files, PostgreSQL database, and migrations are installed,
 enable OIDC dev auth, portal sessions, and OpenAI text-model settings. This step
-creates the local `oidc-client-secret` required by the WSL API unit and restarts
-the API:
+preserves the local OIDC client secret created by the base install and restarts the API:
 
 ```bash
 cp config.local.env.example config.local.env
@@ -160,17 +144,14 @@ is running. The WSL deployment installs a static portal bundle for packaged
 deployment, but it does not start a local UI server. For development, start the
 Vite server separately.
 
-From the repository on Windows (not inside WSL):
+From the repository root inside WSL:
 
-```powershell
-cd portal
-npm install
-npm run dev
-```
+    bash scripts/start-portal.sh
 
-Open `http://localhost:5173`. The Vite dev server proxies API calls to the WSL API on `http://127.0.0.1:8001`.
+Open http://localhost:5173 in Windows. The launcher installs portal dependencies when missing and configures the Vite dev server to proxy API calls to the WSL API on http://127.0.0.1:8001.
 
-Synthetic demo package walkthrough: [`data/synthetic-packages/fisma-demo-portal/README.md`](../data/synthetic-packages/fisma-demo-portal/README.md).
+Synthetic demo package walkthrough:
+`data/synthetic-packages/fisma-demo-portal/README.md`.
 
 ## Out of scope
 
