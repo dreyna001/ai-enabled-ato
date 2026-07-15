@@ -73,10 +73,22 @@ sudo bash scripts/install.sh
 sudo install -o root -g ato -m 640 /path/to/customer/runtime-config.json /etc/ato-analyzer/runtime-config.json
 sudo install -o root -g root -m 600 /path/to/dsn.txt /etc/ato-analyzer/credentials/database-dsn
 sudo install -o root -g root -m 600 /path/to/audit-hmac-key /etc/ato-analyzer/credentials/audit-hmac-key
+sudo install -o root -g root -m 600 /path/to/oidc-client-secret /etc/ato-analyzer/credentials/oidc-client-secret
 
 # 3. Production-readiness: migrate, start, and smoke in one invocation
 sudo bash scripts/install.sh --migrate --start --smoke
 ```
+
+Provisioning means placing customer-approved configuration and secret values on the host through the approved secret-management or secure file-transfer process. The installer creates the directory layout but intentionally does not generate or overwrite production values:
+
+| File | Required value and source |
+| --- | --- |
+| `runtime-config.json` | Non-secret customer settings derived from `deployment/config/runtime-config.onprem.example.json`; keep credential references in the JSON, never secret values. |
+| `database-dsn` | Full SQLAlchemy PostgreSQL DSN issued by the customer database administrator or secrets platform. |
+| `audit-hmac-key` | High-entropy application secret generated and retained by the approved secrets platform. |
+| `oidc-client-secret` | Client secret issued when the ATO API/portal client is registered with the customer identity provider. |
+
+Do not commit, print, or place these values in shell history. Verify ownership and modes before startup with `sudo stat -c '%U:%G %a %n' /etc/ato-analyzer/runtime-config.json /etc/ato-analyzer/credentials/*`; the expected modes are `root:ato 640` for runtime config and `root:root 600` for credentials.
 
 Step 3 is the release gate. It reinstalls package bytes, runs `alembic upgrade head`, validates config and DSN, starts `ato-api.service`, and runs `scripts/smoke_service_chain.sh`. With the current draft authority manifest (HS-001 open), readiness returns HTTP **503** and this command fails unless the manifest is approved.
 
@@ -97,7 +109,7 @@ Installer flags (see `install.sh --help`):
 | `--skip-systemd` | Skip unit install |
 | `--skip-nginx` | Skip nginx template install |
 
-The installer never overwrites an existing `/etc/ato-analyzer/runtime-config.json`, database DSN credential file, audit HMAC credential file, or nginx example file. Worker units are installed but left disabled.
+The installer never overwrites an existing `/etc/ato-analyzer/runtime-config.json`, credential file, or nginx example file. Worker units are installed but left disabled.
 
 ## Upgrade, drain, rollback, and backup contract
 
@@ -108,7 +120,19 @@ sudo bash scripts/rollback.sh
 sudo bash scripts/verify_backup_contract.sh
 ```
 
-Upgrade drains workers, refreshes package bytes, optionally migrates, and restarts `ato-api.service` when it was active. It does not enable workers or activate nginx. Backup verification reads `BACKUP_*` JSON declarations and fails safely when customer target or key ownership is not verified (**HS-008**). No backup vendor is selected by the product.
+`upgrade.sh` first requires `verify_backup_contract.sh --pre-upgrade` to pass, records whether `ato-api.service` is active, drains workers, and invokes `install.sh` to refresh application bytes. By default it runs `alembic upgrade head` and restarts the API only when the API was active before the upgrade. It preserves runtime configuration and credentials, does not enable workers, and does not activate nginx.
+
+Useful upgrade modes:
+
+```bash
+sudo bash scripts/upgrade.sh --dry-run      # validate the upgrade contract without host mutations
+sudo bash scripts/upgrade.sh                # migrate and restart an API that was already active
+sudo bash scripts/upgrade.sh --smoke        # also run the post-restart smoke chain
+sudo bash scripts/upgrade.sh --no-migrate   # refresh package bytes without schema migration
+sudo bash scripts/upgrade.sh --no-restart   # refresh/migrate without restarting the API
+```
+
+Backup verification reads `BACKUP_*` JSON declarations and fails safely when customer target or key ownership is not verified (**HS-008**). No backup vendor is selected by the product. A failed upgrade does not imply database rollback; `rollback.sh` restores install snapshot metadata and package state only, not database schema.
 
 ## systemd credentials
 
