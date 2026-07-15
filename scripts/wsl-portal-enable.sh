@@ -54,6 +54,7 @@ install_local_env_file() {
 install_local_env_file
 
 bind_package_storage() {
+  install -d -o root -g root -m 0755 "$(dirname "$STORAGE_BIND_TARGET")"
   mkdir -p "$DATA_DIR/_tmp" "$STORAGE_BIND_TARGET"
   chown -R ato:ato "$DATA_DIR"
   chmod 750 "$DATA_DIR" "$DATA_DIR/_tmp"

@@ -389,6 +389,17 @@ def test_wsl_deploy_script_reuses_installer_and_smoke_chain() -> None:
     assert "ato-synthetic-intake-worker.timer" in text
 
 
+@pytest.mark.parametrize("script", [WSL_DEPLOY_SCRIPT, WSL_PORTAL_ENABLE_SCRIPT])
+def test_wsl_storage_bind_parent_has_explicit_safe_permissions(script: Path) -> None:
+    text = _read(script)
+    parent_install = (
+        'install -d -o root -g root -m 0755 "$(dirname "$STORAGE_BIND_TARGET")"'
+    )
+    target_mkdir = 'mkdir -p "$DATA_DIR/_tmp" "$STORAGE_BIND_TARGET"'
+    assert parent_install in text
+    assert text.index(parent_install) < text.index(target_mkdir)
+
+
 def test_nginx_template_is_tls_edge_with_loopback_proxy(nginx_text: str) -> None:
     assert "listen 443 ssl" in nginx_text
     assert "ssl_certificate " in nginx_text
