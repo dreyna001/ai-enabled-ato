@@ -26,6 +26,40 @@ export const SENSITIVITY_OPTIONS: Array<{ id: Sensitivity; label: string }> = [
   { id: "unknown", label: "Unknown" },
 ];
 
+export const CERTIFICATION_CLASS_OPTIONS = [
+  { id: "B", label: "Class B" },
+  { id: "C", label: "Class C" },
+] as const;
+
+export const IMPACT_LEVEL_OPTIONS = [
+  { id: "low", label: "Low" },
+  { id: "moderate", label: "Moderate" },
+  { id: "high", label: "High" },
+] as const;
+
+type ProfileFields = Pick<CreateRevisionInput, "certification_class" | "impact_level">;
+
+function isCertificationClass(value: unknown): value is "B" | "C" {
+  return value === "B" || value === "C";
+}
+
+function isImpactLevel(value: unknown): value is "low" | "moderate" | "high" {
+  return value === "low" || value === "moderate" || value === "high";
+}
+
+export function profileFieldsForRevision(profileId: ProfileId, source?: { certification_class?: unknown; impact_level?: unknown } | null): ProfileFields {
+  if (profileId === "fedramp_20x_program") {
+    return {
+      certification_class: isCertificationClass(source?.certification_class) ? source.certification_class : "B",
+      impact_level: null,
+    };
+  }
+  return {
+    certification_class: null,
+    impact_level: isImpactLevel(source?.impact_level) ? source.impact_level : "moderate",
+  };
+}
+
 export function defaultRevisionInput(
   parentRevision?: PackageRevision | null,
 ): CreateRevisionInput {
@@ -33,11 +67,11 @@ export function defaultRevisionInput(
     parentRevision?.data_origin === "customer_production"
       ? "customer_production"
       : "synthetic";
+  const profileId = (parentRevision?.profile_id as ProfileId) ?? "fisma_agency_security";
   return {
     parent_revision_id: parentRevision?.package_revision_id ?? null,
-    profile_id: (parentRevision?.profile_id as ProfileId) ?? "fisma_agency_security",
-    certification_class: null,
-    impact_level: (parentRevision?.impact_level as CreateRevisionInput["impact_level"]) ?? "moderate",
+    profile_id: profileId,
+    ...profileFieldsForRevision(profileId, parentRevision),
     data_origin: dataOrigin,
     sensitivity: (parentRevision?.sensitivity as Sensitivity) ?? "internal_unclassified",
   };

@@ -345,7 +345,7 @@ export async function createRevision(
         parent_revision_id: input.parent_revision_id ?? null,
         profile_id: input.profile_id,
         certification_class: input.certification_class ?? null,
-        impact_level: input.impact_level ?? "moderate",
+        impact_level: input.impact_level ?? null,
         data_origin: input.data_origin,
         sensitivity: input.sensitivity,
       }),

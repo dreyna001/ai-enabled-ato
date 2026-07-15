@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { CreateRevisionInput, PackageRevision } from "@/types";
 import {
+  CERTIFICATION_CLASS_OPTIONS,
   DATA_ORIGIN_OPTIONS,
   defaultRevisionInput,
+  IMPACT_LEVEL_OPTIONS,
+  profileFieldsForRevision,
   PROFILE_OPTIONS,
   SENSITIVITY_OPTIONS,
 } from "@/utils/revisionDefaults";
@@ -64,12 +67,14 @@ export function RevisionCreateForm({
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             value={input.profile_id}
             disabled={busy || Boolean(parent)}
-            onChange={(event) =>
+            onChange={(event) => {
+              const profileId = event.target.value as CreateRevisionInput["profile_id"];
               setInput((current) => ({
                 ...current,
-                profile_id: event.target.value as CreateRevisionInput["profile_id"],
-              }))
-            }
+                profile_id: profileId,
+                ...profileFieldsForRevision(profileId, current),
+              }));
+            }}
           >
             {PROFILE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>
@@ -78,6 +83,21 @@ export function RevisionCreateForm({
             ))}
           </select>
         </div>
+        {input.profile_id === "fedramp_20x_program" ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="certification-class">Certification class</Label>
+            <select id="certification-class" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={input.certification_class ?? ""} disabled={busy} required onChange={(event) => setInput((current) => ({ ...current, certification_class: event.target.value as "B" | "C" }))}>
+              {CERTIFICATION_CLASS_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="impact-level">Impact level</Label>
+            <select id="impact-level" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={input.impact_level ?? ""} disabled={busy} onChange={(event) => setInput((current) => ({ ...current, impact_level: event.target.value as "low" | "moderate" | "high" }))}>
+              {IMPACT_LEVEL_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="data-origin">Data origin</Label>
           <select
