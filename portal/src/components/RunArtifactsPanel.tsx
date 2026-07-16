@@ -55,7 +55,7 @@ export function RunArtifactsPanel({ run }: RunArtifactsPanelProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Run artifacts</CardTitle>
+        <CardTitle className="text-base">Run Artifacts</CardTitle>
         <CardDescription className="flex flex-wrap items-center gap-2">
           {run.artifact_manifest_sha256 ? (
             <>

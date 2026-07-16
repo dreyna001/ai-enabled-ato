@@ -32,6 +32,7 @@ def test_route_role_matrix_covers_all_published_package_routes() -> None:
         ("GET", "/runs/{run_id}"),
         ("POST", "/runs/{run_id}/cancel"),
         ("GET", "/runs/{run_id}/matrix"),
+        ("GET", "/runs/{run_id}/artifacts"),
         ("POST", "/runs/{run_id}/review-revisions"),
         ("POST", "/review-revisions/{id}/submit"),
         ("PATCH", "/review-revisions/{id}/dispositions/{row_id}"),

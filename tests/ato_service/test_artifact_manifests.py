@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ato_service.artifact_manifests import (
+    _cleanup_staging_path,
     write_artifact_manifest,
     write_run_output_file,
 )
@@ -15,6 +16,17 @@ ROOT = Path(__file__).resolve().parents[2]
 RUN_ID = "33333333-3333-4333-8333-333333333333"
 REVISION_ID = "11111111-1111-4111-8111-111111111111"
 NOW = datetime(2026, 7, 11, 12, 0, tzinfo=timezone.utc)
+
+
+def test_cleanup_staging_path_removes_safe_temp_file(tmp_path: Path) -> None:
+    temp_dir = tmp_path / "_tmp"
+    temp_dir.mkdir()
+    temp_path = temp_dir / ("manifest-staging-" + "a" * 32)
+    temp_path.write_bytes(b"partial")
+
+    _cleanup_staging_path(tmp_path, temp_path)
+
+    assert not temp_path.exists()
 
 
 def test_artifact_manifest_orders_files_deterministically(tmp_path: Path) -> None:

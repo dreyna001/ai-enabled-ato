@@ -13,6 +13,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from types import SimpleNamespace
 
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
@@ -21,11 +22,14 @@ from ato_service.idempotency import IdempotencyReplay
 from ato_service.lifecycle_transitions import IllegalStateTransitionError
 from ato_service.package_revision_drafts import (
     PackageRevisionDraftNotFoundError,
+    build_system_context_document,
     compute_sealed_document_digest,
     get_package_revision_draft,
+    normalize_draft_document_for_profile,
     save_package_revision_draft,
 )
 from ato_service.package_revisions import (
+    PackageRevisionValidationError,
     UnconfirmedFactProposalsError,
     confirm_package_revision,
 )
@@ -148,14 +152,22 @@ def _system() -> _SystemRow:
     )
 
 
-def _revision(*, revision_version: int = 4, status: str = "awaiting_confirmation") -> _PackageRevisionRow:
+def _revision(
+    *,
+    revision_version: int = 4,
+    status: str = "awaiting_confirmation",
+    impact_level: str | None = "moderate",
+    profile_id: str = "fisma_agency_security",
+    certification_class: str | None = None,
+) -> _PackageRevisionRow:
     return _PackageRevisionRow(
         package_revision_id=REVISION_ID,
         system_id=SYSTEM_ID,
-        profile_id="fisma_agency_security",
-        impact_level="moderate",
+        profile_id=profile_id,
+        impact_level=impact_level,
         revision_version=revision_version,
         status=status,
+        certification_class=certification_class,
     )
 
 
@@ -375,6 +387,148 @@ def test_save_draft_denied_for_viewer(mock_load: AsyncMock) -> None:
         )
 
     mock_load.assert_not_called()
+
+
+@patch("ato_service.package_revision_drafts.load_idempotency_replay", new_callable=AsyncMock)
+def test_save_draft_rejects_draft_that_cannot_be_sealed(mock_load: AsyncMock) -> None:
+    mock_load.return_value = None
+    revision = _revision(revision_version=4, impact_level=None)
+    draft = _draft()
+    unsealable = json.loads(json.dumps(VALID_DOCUMENT))
+    unsealable["system"] = dict(unsealable["system"])
+    unsealable["system"]["impact_level"] = None
+
+    session = _RecordingSession(
+        [
+            _scalar_result(revision),
+            _scalar_one_result(_system()),
+            _scalar_result(draft),
+        ]
+    )
+
+    with pytest.raises(PackageRevisionValidationError, match="impact_level"):
+        _run(
+            save_package_revision_draft(
+                session,  # type: ignore[arg-type]
+                principal=OWNER_PRINCIPAL,
+                package_revision_id=REVISION_ID,
+                document=unsealable,
+                if_match='"v4"',
+                idempotency_key=IDEM_KEY,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert revision.revision_version == 4
+    assert draft.document == VALID_DOCUMENT
+
+
+def test_normalize_draft_document_for_profile_clears_fedramp_impact_level() -> None:
+    fedramp_document = json.loads(
+        (
+            ROOT / "tests/fixtures/profile_artifacts/fedramp-20x-class-c-sealed.json"
+        ).read_text(encoding="utf-8")
+    )
+    invalid = json.loads(json.dumps(fedramp_document))
+    invalid["system"] = dict(invalid["system"])
+    invalid["system"]["impact_level"] = "low"
+    invalid["system"]["authorization_path"] = "agency"
+
+    normalized = normalize_draft_document_for_profile(
+        invalid,
+        profile_id="fedramp_20x_program",
+    )
+
+    assert normalized["system"]["impact_level"] is None
+    assert normalized["system"]["authorization_path"] == "fedramp"
+
+
+def test_build_system_context_uses_nominal_impact_for_fedramp_20x() -> None:
+    fedramp_document = json.loads(
+        (
+            ROOT / "tests/fixtures/profile_artifacts/fedramp-20x-class-c-sealed.json"
+        ).read_text(encoding="utf-8")
+    )
+    revision = SimpleNamespace(
+        profile_id="fedramp_20x_program",
+        impact_level=None,
+        certification_class="C",
+    )
+    system = SimpleNamespace(
+        display_name="Fixture CSO",
+        external_system_id="ext-1",
+    )
+
+    context = build_system_context_document(
+        draft_document=fedramp_document,
+        system=system,
+        revision=revision,
+    )
+
+    assert context["impact_level"] == "low"
+
+
+def test_build_system_context_uses_draft_impact_for_fisma() -> None:
+    revision = SimpleNamespace(
+        profile_id="fisma_agency_security",
+        impact_level="moderate",
+        certification_class=None,
+    )
+    system = SimpleNamespace(
+        display_name="Customer Records Portal",
+        external_system_id="ext-1",
+    )
+
+    context = build_system_context_document(
+        draft_document=VALID_DOCUMENT,
+        system=system,
+        revision=revision,
+    )
+
+    assert context["impact_level"] == "moderate"
+
+
+@patch("ato_service.package_revision_drafts.load_idempotency_replay", new_callable=AsyncMock)
+def test_save_draft_rejects_control_without_implementation_statement(
+    mock_load: AsyncMock,
+) -> None:
+    mock_load.return_value = None
+    revision = _revision(revision_version=4)
+    draft = _draft()
+    unsealable = json.loads(json.dumps(VALID_DOCUMENT))
+    unsealable["security_controls"] = {
+        "AC-1": {
+            "implementation_status": "implemented",
+            "implementation_statement": "",
+            "responsible_parties": [],
+            "evidence_links": [],
+        }
+    }
+
+    session = _RecordingSession(
+        [
+            _scalar_result(revision),
+            _scalar_one_result(_system()),
+            _scalar_result(draft),
+        ]
+    )
+
+    with pytest.raises(PackageRevisionValidationError, match="implementation statement"):
+        _run(
+            save_package_revision_draft(
+                session,  # type: ignore[arg-type]
+                principal=OWNER_PRINCIPAL,
+                package_revision_id=REVISION_ID,
+                document=unsealable,
+                if_match='"v4"',
+                idempotency_key=IDEM_KEY,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert revision.revision_version == 4
 
 
 @patch("ato_service.package_revisions.record_idempotency_outcome", new_callable=AsyncMock)

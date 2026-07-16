@@ -41,6 +41,9 @@ WSL_RUNTIME_CONFIG = ROOT / "deployment" / "config" / "runtime-config.wsl_local.
 WSL_PORTAL_RUNTIME_CONFIG = (
     ROOT / "deployment" / "config" / "runtime-config.wsl_portal.json"
 )
+WSL_PORTAL_BEDROCK_RUNTIME_CONFIG = (
+    ROOT / "deployment" / "config" / "runtime-config.wsl_portal.bedrock.json"
+)
 WSL_PORTAL_ENABLE_SCRIPT = ROOT / "scripts" / "wsl-portal-enable.sh"
 PORTAL_START_SCRIPT = ROOT / "scripts" / "start-portal.sh"
 DEPLOYMENT_README = ROOT / "deployment" / "README.md"
@@ -121,6 +124,7 @@ def deployment_readme_text() -> str:
         WSL_DEPLOY_SCRIPT,
         WSL_RUNTIME_CONFIG,
         WSL_PORTAL_RUNTIME_CONFIG,
+        WSL_PORTAL_BEDROCK_RUNTIME_CONFIG,
         WSL_PORTAL_ENABLE_SCRIPT,
         PORTAL_START_SCRIPT,
         INTAKE_WORKER_UNIT,
@@ -152,6 +156,7 @@ def test_deployment_assets_exist(path: Path) -> None:
         WSL_DEPLOY_SCRIPT,
         WSL_RUNTIME_CONFIG,
         WSL_PORTAL_RUNTIME_CONFIG,
+        WSL_PORTAL_BEDROCK_RUNTIME_CONFIG,
         WSL_PORTAL_ENABLE_SCRIPT,
         PORTAL_START_SCRIPT,
     ],
@@ -349,6 +354,9 @@ def test_wsl_runtime_config_is_dev_local_with_systemd_credentials() -> None:
 
 def test_wsl_portal_runtime_config_declares_openai_text_model() -> None:
     text = _read(WSL_PORTAL_RUNTIME_CONFIG)
+    assert '"IDENTITY_PROVIDER_MODE": "oidc"' in text
+    assert '"OIDC_GROUPS_CLAIM": "groups"' in text
+    assert '"OIDC_GROUP_ROLE_MAPPING"' in text
     assert '"TEXT_MODEL_PROVIDER": "openai_compatible"' in text
     assert '"TEXT_MODEL_NAME": "gpt-4.1"' in text
     assert '"TEXT_MODEL_ENDPOINT_URL": "https://api.openai.com/v1"' in text
@@ -356,6 +364,19 @@ def test_wsl_portal_runtime_config_declares_openai_text_model() -> None:
     assert '"TEXT_MODEL_TEMPERATURE": 0' in text
     assert '"TEXT_MODEL_ENDPOINT_POLICY_APPROVED": false' in text
     assert '"CUI_MODEL_BOUNDARY_APPROVED": false' in text
+    assert '"TEXT_MODEL_CREDENTIAL_REFERENCE"' not in text
+
+
+def test_wsl_portal_bedrock_runtime_config_declares_bedrock_text_model() -> None:
+    text = _read(WSL_PORTAL_BEDROCK_RUNTIME_CONFIG)
+    assert '"IDENTITY_PROVIDER_MODE": "oidc"' in text
+    assert '"OIDC_GROUPS_CLAIM": "groups"' in text
+    assert '"OIDC_GROUP_ROLE_MAPPING"' in text
+    assert '"PORTAL_PUBLIC_ORIGIN": "http://localhost:5173"' in text
+    assert '"TEXT_MODEL_PROVIDER": "aws_bedrock"' in text
+    assert '"AWS_REGION": "us-east-1"' in text
+    assert '"TEXT_MODEL_NAME": "anthropic.claude-3-haiku-20240307-v1:0"' in text
+    assert '"TEXT_MODEL_ENDPOINT_URL"' not in text
     assert '"TEXT_MODEL_CREDENTIAL_REFERENCE"' not in text
 
 
@@ -370,10 +391,13 @@ def test_wsl_portal_openai_example_config_not_shipped() -> None:
 def test_wsl_portal_enable_script_installs_local_env_file() -> None:
     text = _read(WSL_PORTAL_ENABLE_SCRIPT)
     assert "runtime-config.wsl_portal.json" in text
+    assert "runtime-config.wsl_portal.bedrock.json" in text
     assert "config.local.env" in text
     assert "ato-local.env" in text
-    assert "install_local_env_file" in text
+    assert "install_openai_local_env_file" in text
+    assert "install_bedrock_local_env_file" in text
     assert "ATO_TEXT_MODEL_API_KEY" in text
+    assert "--bedrock" in text
     assert "bind_package_storage" in text
 
 

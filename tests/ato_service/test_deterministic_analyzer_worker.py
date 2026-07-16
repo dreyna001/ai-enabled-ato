@@ -103,6 +103,40 @@ def test_worker_resolves_dependencies_and_disposes_engine(
     assert processed[0].matrix_row_count == 3
 
 
+@patch(
+    "ato_service.deterministic_analyzer_worker.drain_deterministic_analysis",
+    new_callable=AsyncMock,
+)
+def test_worker_discovers_installed_project_root(
+    mock_drain: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    mock_drain.return_value = ()
+
+    async def exercise() -> None:
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        with (
+            patch(
+                "ato_service.deterministic_analyzer_worker.find_project_root",
+                return_value=tmp_path,
+            ) as find_root,
+            patch(
+                "ato_service.deterministic_analyzer_worker.create_async_engine_from_url",
+                return_value=engine,
+            ),
+        ):
+            await run_deterministic_analyzer_worker(
+                _config(tmp_path),
+                dsn="postgresql+asyncpg://ato:secret@localhost/ato",
+                audit_hmac_key=b"audit-test-key",
+            )
+        find_root.assert_called_once_with()
+
+    asyncio.run(exercise())
+    assert mock_drain.await_args.kwargs["project_root"] == tmp_path
+
+
 def test_worker_loop_recovers_and_processes_until_shutdown(tmp_path: Path) -> None:
     process_count = 0
 

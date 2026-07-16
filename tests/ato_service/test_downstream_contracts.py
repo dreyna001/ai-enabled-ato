@@ -174,7 +174,7 @@ def test_search_is_revision_scoped() -> None:
         package_revision_id=revision_id,
         sealed=sealed,
         artifacts=[artifact],
-        artifact_texts={},
+        artifact_texts={artifact_id: "revision-scoped searchable evidence"},
     )
     assert hits
     assert all(item.package_revision_id == revision_id for item in hits)

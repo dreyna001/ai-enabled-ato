@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import {
+  ApiError,
   cancelRun,
   confirmRevision,
   createRevision,
@@ -63,9 +64,12 @@ import {
   resolveSystemsEmptyState,
 } from "@/utils/emptyStates";
 import { formatApiError } from "@/utils/formatApiError";
+import { formatProblemError } from "@/utils/formatProblemError";
 import {
+  revisionStatusLabel,
   revisionStatusVariant,
   runFailureMessage,
+  runStatusLabel,
   runStatusVariant,
 } from "@/utils/statusLabels";
 
@@ -174,6 +178,7 @@ export function WorkflowPage({
 
   const packageDraft = usePackageDraft(session, selectedRevisionId, {
     enabled: draftEnabled,
+    revisionImpactLevel: revision?.impact_level ?? null,
     onSaved: () => setMessage("Draft saved."),
   });
 
@@ -382,7 +387,18 @@ export function WorkflowPage({
       }
       setConfirmState(null);
     } catch (err) {
-      setConfirmError(formatApiError(err));
+      if (
+        confirmState.kind === "confirm-revision" &&
+        err instanceof ApiError &&
+        (err.status === 412 || err.errorCode === "etag_mismatch")
+      ) {
+        setConfirmError(
+          "This draft changed on the server. Reload the latest version before confirming again.",
+        );
+        void packageDraft.reload();
+      } else {
+        setConfirmError(formatProblemError(err));
+      }
     } finally {
       setConfirming(false);
     }
@@ -401,7 +417,7 @@ export function WorkflowPage({
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <div>
             <CardTitle>Systems</CardTitle>
-            <CardDescription>Select or create a system for package revisions.</CardDescription>
+            <CardDescription>Select or create a system for Package Revisions.</CardDescription>
           </div>
           <Button
             type="button"
@@ -414,7 +430,7 @@ export function WorkflowPage({
             }}
           >
             <Plus />
-            Create system
+            Create System
           </Button>
         </CardHeader>
         <CardContent>
@@ -423,7 +439,7 @@ export function WorkflowPage({
             <EmptyState
               {...resolveSystemsEmptyState()}
               action={{
-                label: "Create system",
+                label: "Create System",
                 onClick: () => {
                   void createSystem(session, "System 1")
                     .then(() => refreshSystems())
@@ -453,7 +469,7 @@ export function WorkflowPage({
       {selectedSystemId ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
-            <CardTitle>Package revisions</CardTitle>
+            <CardTitle>Package Revisions</CardTitle>
             <Button
               type="button"
               size="sm"
@@ -476,7 +492,7 @@ export function WorkflowPage({
               }}
             >
               <Plus />
-              Create revision
+              Create Revision
             </Button>
           </CardHeader>
           <CardContent>
@@ -507,7 +523,9 @@ export function WorkflowPage({
                   setSelectedRevisionId(id);
                   syncRoute(selectedSystemId, id);
                 }}
-                renderLabel={(item) => `${item.label} — ${item.status ?? ""}`}
+                renderLabel={(item) =>
+                  `${item.label} — ${revisionStatusLabel(item.status ?? "")}`
+                }
               />
             )}
           </CardContent>
@@ -517,11 +535,11 @@ export function WorkflowPage({
       {revision ? (
         <Card>
           <CardHeader>
-            <CardTitle>Revision workflow</CardTitle>
+            <CardTitle>Revision Workflow</CardTitle>
             <CardDescription className="flex flex-wrap items-center gap-2">
               <span>Status</span>
               <Badge variant={revisionStatusVariant(revision.status)}>
-                {revision.status}
+                {revisionStatusLabel(revision.status)}
               </Badge>
               <span>· version {revision.revision_version}</span>
             </CardDescription>
@@ -593,6 +611,7 @@ export function WorkflowPage({
                     saving={packageDraft.saving}
                     saveError={packageDraft.saveError}
                     staleConflict={packageDraft.staleConflict}
+                    validationIssues={packageDraft.validationIssues}
                     onDocumentChange={packageDraft.updateDocument}
                     onSave={() => void packageDraft.saveDraft()}
                     onReload={() => void packageDraft.reload()}
@@ -649,7 +668,7 @@ export function WorkflowPage({
                 </AlertBanner>
 
                 <div className="flex flex-row flex-wrap items-center justify-between gap-4">
-                  <h3 className="text-base font-semibold">Analysis runs</h3>
+                  <h3 className="text-base font-semibold">Analysis Runs</h3>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -666,7 +685,7 @@ export function WorkflowPage({
                           .catch((err) => setError(formatApiError(err)));
                       }}
                     >
-                      Start deterministic run
+                      Start Deterministic Run
                     </Button>
                     <Button
                       type="button"
@@ -694,7 +713,7 @@ export function WorkflowPage({
                           .catch((err) => setError(formatApiError(err)));
                       }}
                     >
-                      Start targeted run
+                      Start Targeted Run
                     </Button>
                   </div>
                 </div>
@@ -715,17 +734,19 @@ export function WorkflowPage({
                     }))}
                     selectedId={selectedRunId}
                     onSelect={setSelectedRunId}
-                    renderLabel={(item) => `${item.label} — ${item.status ?? ""}`}
+                    renderLabel={(item) =>
+                      `${item.label} — ${runStatusLabel(item.status ?? "")}`
+                    }
                   />
                 )}
 
                 {activeRun ? (
                   <Card className="bg-muted/20">
                     <CardHeader>
-                      <CardTitle className="text-base">Run status</CardTitle>
+                      <CardTitle className="text-base">Run Status</CardTitle>
                       <CardDescription className="flex flex-wrap items-center gap-2">
                         <Badge variant={runStatusVariant(activeRun.status)}>
-                          {activeRun.status}
+                          {runStatusLabel(activeRun.status)}
                         </Badge>
                         <span>· LLM calls: {activeRun.llm_call_count}</span>
                       </CardDescription>
@@ -747,7 +768,7 @@ export function WorkflowPage({
                               })
                             }
                           >
-                            Cancel run
+                            Cancel Run
                           </Button>
                         </>
                       ) : null}
@@ -784,10 +805,10 @@ export function WorkflowPage({
         open={confirmState !== null}
         title={
           confirmState?.kind === "cancel-run"
-            ? "Cancel analysis run"
+            ? "Cancel Analysis Run"
             : confirmState?.kind === "confirm-revision"
-              ? "Confirm package"
-              : "Confirm action"
+              ? "Confirm Package"
+              : "Confirm Action"
         }
         description={
           confirmState?.kind === "cancel-run"
@@ -798,8 +819,8 @@ export function WorkflowPage({
         }
         confirmLabel={
           confirmState?.kind === "cancel-run"
-            ? "Cancel run"
-            : "Confirm package"
+            ? "Cancel Run"
+            : "Confirm Package"
         }
         confirming={confirming}
         error={confirmError}

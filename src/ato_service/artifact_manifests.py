@@ -25,6 +25,17 @@ from ato_service.storage_reconciliation import (
     require_storage_regular_file,
 )
 
+__all__ = (
+    "ArtifactManifestCommitError",
+    "ArtifactManifestError",
+    "ArtifactManifestValidationError",
+    "GeneratedRunFile",
+    "StoredArtifactManifest",
+    "load_run_artifact_manifest",
+    "write_artifact_manifest",
+    "write_run_output_file",
+)
+
 _HASH_BLOCK_SIZE = 1024 * 1024
 _SCHEMA_VERSION = "1.0.0"
 _TEMP_DIR_NAME = "_tmp"
@@ -238,6 +249,58 @@ def write_artifact_manifest(
         _cleanup_staging_path(resolved_root, temp_path)
 
 
+def load_run_artifact_manifest(
+    *,
+    storage_root: Path,
+    run_id: str,
+    expected_sha256: str | None = None,
+    schema_path: Path | None = None,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    """Load and schema-validate one durable run artifact manifest from storage."""
+    validated_run_id = _validate_run_id(run_id)
+    resolved_root = storage_root.resolve()
+    try:
+        manifest_path = require_storage_regular_file(
+            resolved_root,
+            "runs",
+            validated_run_id,
+            _MANIFEST_FILENAME,
+        )
+    except (OSError, StoragePathError) as exc:
+        raise ArtifactManifestError("artifact manifest is missing") from exc
+
+    try:
+        raw_bytes = manifest_path.read_bytes()
+    except OSError as exc:
+        raise ArtifactManifestError("artifact manifest could not be read") from exc
+
+    try:
+        document = json.loads(raw_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ArtifactManifestValidationError("artifact manifest is invalid") from exc
+
+    if not isinstance(document, dict):
+        raise ArtifactManifestValidationError("artifact manifest is invalid")
+
+    validator = _artifact_manifest_validator(
+        schema_path=schema_path,
+        project_root=project_root,
+    )
+    validation_error = next(validator.iter_errors(document), None)
+    if validation_error is not None:
+        raise ArtifactManifestValidationError(_format_schema_error(validation_error))
+
+    if document.get("run_id") != validated_run_id:
+        raise ArtifactManifestValidationError("artifact manifest run_id mismatch")
+
+    manifest_digest = hashlib.sha256(_canonical_manifest_bytes(document)).hexdigest()
+    if expected_sha256 is not None and manifest_digest != expected_sha256:
+        raise ArtifactManifestValidationError("artifact manifest digest mismatch")
+
+    return document
+
+
 def _order_generated_files(
     generated_files: Iterable[GeneratedRunFile] | Sequence[GeneratedRunFile],
 ) -> tuple[GeneratedRunFile, ...]:
@@ -329,7 +392,11 @@ def _cleanup_staging_path(storage_root: Path, temp_path: Path | None) -> None:
     if temp_path is None:
         return
     try:
-        require_storage_regular_file(temp_path, storage_root=storage_root)
-        temp_path.unlink()
+        safe_temp_path = require_storage_regular_file(
+            storage_root,
+            _TEMP_DIR_NAME,
+            temp_path.name,
+        )
+        safe_temp_path.unlink()
     except (OSError, StoragePathError):
         return

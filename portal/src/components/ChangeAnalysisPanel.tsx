@@ -58,7 +58,7 @@ export function ChangeAnalysisPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Change analysis</CardTitle>
+        <CardTitle className="text-base">Change Analysis</CardTitle>
         <CardDescription>
           Delta against parent {parentRevisionId.slice(0, 8)}… for targeted re-analysis.
         </CardDescription>

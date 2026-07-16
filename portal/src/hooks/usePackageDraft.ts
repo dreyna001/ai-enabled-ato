@@ -8,19 +8,25 @@ import {
 } from "@/api/client";
 import type { PackageDraftDocument, PackageRevisionDraft, SessionInfo } from "@/types";
 import { cloneDraftDocument, draftDocumentsEqual } from "@/utils/draftDocument";
-import { formatApiError } from "@/utils/formatApiError";
+import {
+  formatDraftValidationIssues,
+  normalizeDraftDocumentForProfile,
+  validateDraftForSeal,
+} from "@/utils/draftValidation";
+import { formatProblemError } from "@/utils/formatProblemError";
 
 export type DraftLoadState = "idle" | "loading" | "ready" | "empty" | "error";
 
 type UsePackageDraftOptions = {
   enabled: boolean;
+  revisionImpactLevel?: string | null;
   onSaved?: (draft: PackageRevisionDraft) => void;
 };
 
 export function usePackageDraft(
   session: SessionInfo,
   revisionId: string,
-  { enabled, onSaved }: UsePackageDraftOptions,
+  { enabled, revisionImpactLevel, onSaved }: UsePackageDraftOptions,
 ) {
   const [loadState, setLoadState] = useState<DraftLoadState>("idle");
   const [draft, setDraft] = useState<PackageRevisionDraft | null>(null);
@@ -55,7 +61,10 @@ export function usePackageDraft(
       setSaveError("");
       try {
         const result = await getRevisionDraft(revisionId, { signal });
-        const nextDocument = cloneDraftDocument(result.draft.document);
+        const nextDocument = normalizeDraftDocumentForProfile(
+          cloneDraftDocument(result.draft.document),
+          { revisionImpactLevel },
+        );
         setDraft(result.draft);
         setEtag(result.etag);
         setDocument(nextDocument);
@@ -75,10 +84,10 @@ export function usePackageDraft(
           return;
         }
         setLoadState("error");
-        setLoadError(formatApiError(err));
+        setLoadError(formatProblemError(err));
       }
     },
-    [revisionId],
+    [revisionId, revisionImpactLevel],
   );
 
   useEffect(() => {
@@ -91,16 +100,33 @@ export function usePackageDraft(
     return () => controller.abort();
   }, [enabled, reload]);
 
-  const updateDocument = useCallback((next: PackageDraftDocument) => {
-    setDocument(next);
-    setSaveError("");
-    setStaleConflict(false);
-  }, []);
+  const updateDocument = useCallback(
+    (next: PackageDraftDocument) => {
+      setDocument(normalizeDraftDocumentForProfile(next, { revisionImpactLevel }));
+      setSaveError("");
+      setStaleConflict(false);
+    },
+    [revisionImpactLevel],
+  );
+
+  const validationIssues = useMemo(() => {
+    if (!document) {
+      return [];
+    }
+    return validateDraftForSeal(document, { revisionImpactLevel });
+  }, [document, revisionImpactLevel]);
 
   const saveDraft = useCallback(async () => {
     if (!document || !etag) {
       return false;
     }
+    if (validationIssues.length > 0) {
+      setSaveError(formatDraftValidationIssues(validationIssues));
+      return false;
+    }
+    const normalizedDocument = normalizeDraftDocumentForProfile(document, {
+      revisionImpactLevel,
+    });
     setSaving(true);
     setSaveError("");
     setStaleConflict(false);
@@ -108,7 +134,7 @@ export function usePackageDraft(
       const result = await saveRevisionDraft(
         session,
         revisionId,
-        document,
+        normalizedDocument,
         etag,
       );
       const nextDocument = cloneDraftDocument(result.draft.document);
@@ -125,13 +151,13 @@ export function usePackageDraft(
           "This draft changed on the server. Reload the latest version before saving again.",
         );
       } else {
-        setSaveError(formatApiError(err));
+        setSaveError(formatProblemError(err));
       }
       return false;
     } finally {
       setSaving(false);
     }
-  }, [document, etag, onSaved, revisionId, session]);
+  }, [document, etag, onSaved, revisionId, revisionImpactLevel, session, validationIssues]);
 
   const confirmEtag = etag || (draft ? revisionEtag(draft.revision_version) : "");
 
@@ -145,6 +171,7 @@ export function usePackageDraft(
     saveError,
     staleConflict,
     saving,
+    validationIssues,
     reload,
     saveDraft,
     updateDocument,

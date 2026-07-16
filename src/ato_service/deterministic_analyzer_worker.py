@@ -36,6 +36,7 @@ from ato_service.jobs import (
 )
 from ato_service.lifecycle_transitions import AnalysisRunStatus
 from ato_service.main import RUNTIME_CONFIG_PATH_ENV_VAR, resolve_database_dsn
+from ato_service.project_root import find_project_root
 from ato_service.runtime_config import (
     RuntimeConfig,
     load_runtime_config,
@@ -211,7 +212,7 @@ async def run_deterministic_analyzer_worker(
         if audit_hmac_key is not None
         else resolve_runtime_audit_hmac_key(config)
     )
-    resolved_project_root = project_root or Path(__file__).resolve().parents[2]
+    resolved_project_root = project_root or find_project_root()
     engine = create_async_engine_from_url(resolved_dsn)
     session_factory = create_session_factory(engine)
     try:
@@ -247,7 +248,7 @@ async def run_deterministic_analyzer_worker_loop(
         if audit_hmac_key is not None
         else resolve_runtime_audit_hmac_key(config)
     )
-    resolved_project_root = project_root or Path(__file__).resolve().parents[2]
+    resolved_project_root = project_root or find_project_root()
     current_time = now_factory or (lambda: datetime.now(timezone.utc))
     stop_requested = should_stop or (lambda: False)
     max_attempts = int(config.document.get("TEXT_MODEL_MAX_RETRIES", 2)) + 1

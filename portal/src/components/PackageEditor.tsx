@@ -22,12 +22,20 @@ import type {
 import {
   createEmptySecurityControl,
   formatProvenanceDetails,
+  formatProvenanceHint,
   isModelAssistedProvenance,
   listSecurityControlIds,
   lookupProvenance,
   profileSectionLabel,
   provenanceLabel,
 } from "@/utils/draftDocument";
+import {
+  authorizationPathLabel,
+  humanizeDraftPointer,
+  impactLevelEditableForProfile,
+  lookupDraftIssue,
+  type DraftFieldIssue,
+} from "@/utils/draftValidation";
 
 type PackageEditorProps = {
   draft: PackageRevisionDraft;
@@ -36,11 +44,20 @@ type PackageEditorProps = {
   saving: boolean;
   saveError: string;
   staleConflict: boolean;
+  validationIssues: DraftFieldIssue[];
   onDocumentChange: (document: PackageDraftDocument) => void;
   onSave: () => void;
   onReload: () => void;
   onConfirm: () => void;
 };
+
+const IMPLEMENTATION_STATUS_OPTIONS = [
+  "implemented",
+  "partial",
+  "planned",
+  "not_applicable",
+  "not_implemented",
+] as const;
 
 function ProvenanceBadge({ pointer, provenance }: { pointer: string; provenance: FieldProvenanceMap }) {
   const entry = lookupProvenance(provenance, pointer);
@@ -49,37 +66,54 @@ function ProvenanceBadge({ pointer, provenance }: { pointer: string; provenance:
     return null;
   }
   return (
-    <span className="inline-flex flex-wrap items-center gap-2">
+    <span className="inline-flex items-center gap-2">
       <Badge variant={isModelAssistedProvenance(entry) ? "default" : "muted"}>
         {label}
       </Badge>
       {entry ? (
         <span className="text-xs text-muted-foreground" title={formatProvenanceDetails(entry)}>
-          {formatProvenanceDetails(entry)}
+          {formatProvenanceHint(entry)}
         </span>
       ) : null}
     </span>
   );
 }
 
+function FieldHelp({ children }: { children: ReactNode }) {
+  return <p className="text-xs text-muted-foreground">{children}</p>;
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+  return <p className="text-xs text-destructive">{message}</p>;
+}
+
 function FieldRow({
   label,
   pointer,
   provenance,
+  helpText,
+  fieldError,
   children,
 }: {
   label: string;
   pointer: string;
   provenance: FieldProvenanceMap;
+  helpText?: string;
+  fieldError?: string;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Label>{label}</Label>
+        <Label className={fieldError ? "text-destructive" : undefined}>{label}</Label>
         <ProvenanceBadge pointer={pointer} provenance={provenance} />
       </div>
+      {helpText ? <FieldHelp>{helpText}</FieldHelp> : null}
       {children}
+      <FieldError message={fieldError} />
     </div>
   );
 }
@@ -91,6 +125,7 @@ export function PackageEditor({
   saving,
   saveError,
   staleConflict,
+  validationIssues,
   onDocumentChange,
   onSave,
   onReload,
@@ -99,6 +134,13 @@ export function PackageEditor({
   const [activeTab, setActiveTab] = useState("package");
   const provenance = draft.field_provenance;
   const profileLabel = profileSectionLabel(document.package.profile_id);
+  const hasValidationIssues = validationIssues.length > 0;
+
+  const issueFor = (pointer: string) => lookupDraftIssue(validationIssues, pointer)?.message;
+
+  const focusTabForIssue = (issue: DraftFieldIssue) => {
+    setActiveTab(issue.tab);
+  };
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
@@ -175,8 +217,29 @@ export function PackageEditor({
       ) : null}
 
       {saveError && !staleConflict ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-line">
           {saveError}
+        </div>
+      ) : null}
+
+      {hasValidationIssues ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+          <p className="font-medium text-destructive">
+            Fix these fields before saving or confirming:
+          </p>
+          <ul className="mt-2 space-y-1 text-destructive">
+            {validationIssues.map((issue) => (
+              <li key={issue.pointer}>
+                <button
+                  type="button"
+                  className="text-left underline-offset-2 hover:underline"
+                  onClick={() => focusTabForIssue(issue)}
+                >
+                  {humanizeDraftPointer(issue.pointer)}: {issue.message}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -189,11 +252,17 @@ export function PackageEditor({
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
           {profileLabel ? <TabsTrigger value="profile">{profileLabel}</TabsTrigger> : null}
           <TabsTrigger value="privacy">Privacy</TabsTrigger>
-          <TabsTrigger value="assessor">Assessor inputs</TabsTrigger>
+          <TabsTrigger value="assessor">Assessor Inputs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="package" className="space-y-4">
-          <FieldRow label="Title" pointer="/package/title" provenance={provenance}>
+          <FieldRow
+            label="Title"
+            pointer="/package/title"
+            provenance={provenance}
+            helpText="Short package name shown in workflow and exports (max 255 characters)."
+            fieldError={issueFor("/package/title")}
+          >
             <Input
               value={document.package.title}
               onChange={(event) =>
@@ -205,9 +274,10 @@ export function PackageEditor({
             />
           </FieldRow>
           <FieldRow
-            label="Prepared for"
+            label="Prepared For"
             pointer="/package/prepared_for"
             provenance={provenance}
+            helpText="Customer or program audience for this package (for example, agency AO review)."
           >
             <Input
               value={document.package.prepared_for}
@@ -219,16 +289,23 @@ export function PackageEditor({
               }
             />
           </FieldRow>
-          <FieldRow label="Profile" pointer="/package/profile_id" provenance={provenance}>
+          <FieldRow
+            label="Profile"
+            pointer="/package/profile_id"
+            provenance={provenance}
+            helpText="Set when the revision was created. It cannot be changed in the editor."
+          >
             <Input value={document.package.profile_id} readOnly className="bg-muted/40" />
           </FieldRow>
         </TabsContent>
 
         <TabsContent value="system" className="space-y-4">
           <FieldRow
-            label="Display name"
+            label="Display Name"
             pointer="/system/display_name"
             provenance={provenance}
+            helpText="Official system name used in sealed package and system-context records."
+            fieldError={issueFor("/system/display_name")}
           >
             <Input
               value={document.system.display_name}
@@ -241,9 +318,11 @@ export function PackageEditor({
             />
           </FieldRow>
           <FieldRow
-            label="Authorization boundary"
+            label="Authorization Boundary"
             pointer="/system/authorization_boundary"
             provenance={provenance}
+            helpText="Describe what is in scope for authorization (networks, services, data stores)."
+            fieldError={issueFor("/system/authorization_boundary")}
           >
             <textarea
               className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -260,9 +339,11 @@ export function PackageEditor({
             />
           </FieldRow>
           <FieldRow
-            label="Mission summary"
+            label="Mission Summary"
             pointer="/system/mission_summary"
             provenance={provenance}
+            helpText="One or two sentences describing what the system does."
+            fieldError={issueFor("/system/mission_summary")}
           >
             <textarea
               className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -275,26 +356,51 @@ export function PackageEditor({
               }
             />
           </FieldRow>
-          <FieldRow label="Impact level" pointer="/system/impact_level" provenance={provenance}>
-            <Input
-              value={document.system.impact_level ?? ""}
-              onChange={(event) =>
-                updateDocument({
-                  ...document,
-                  system: {
-                    ...document.system,
-                    impact_level: event.target.value || null,
-                  },
-                })
-              }
-            />
+          {impactLevelEditableForProfile(document.package.profile_id) ? (
+            <FieldRow
+              label="Impact Level"
+              pointer="/system/impact_level"
+              provenance={provenance}
+              helpText="Required before confirm. Choose the FIPS 199 impact level (low, moderate, or high)."
+              fieldError={issueFor("/system/impact_level")}
+            >
+              <select
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={document.system.impact_level ?? ""}
+                onChange={(event) =>
+                  updateDocument({
+                    ...document,
+                    system: {
+                      ...document.system,
+                      impact_level: event.target.value || null,
+                    },
+                  })
+                }
+              >
+                <option value="">Select impact level</option>
+                <option value="low">Low</option>
+                <option value="moderate">Moderate</option>
+                <option value="high">High</option>
+              </select>
+            </FieldRow>
+          ) : null}
+          <FieldRow
+            label="Authorization Path"
+            pointer="/system/authorization_path"
+            provenance={provenance}
+            helpText="Set automatically from the package profile. It cannot be changed in the editor."
+            fieldError={issueFor("/system/authorization_path")}
+          >
+            <p className="text-sm text-muted-foreground">
+              {authorizationPathLabel(document.package.profile_id)}
+            </p>
           </FieldRow>
         </TabsContent>
 
         <TabsContent value="contacts" className="space-y-4">
           <Card className="bg-muted/20">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">System owner</CardTitle>
+              <CardTitle className="text-sm">System Owner</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <ContactEditor
@@ -333,7 +439,7 @@ export function PackageEditor({
             </p>
             <Button type="button" size="sm" variant="outline" onClick={addControl}>
               <Plus className="size-4" />
-              Add control
+              Add Control
             </Button>
           </div>
           {controlIds.length === 0 ? (
@@ -359,23 +465,34 @@ export function PackageEditor({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <FieldRow
-                    label="Implementation status"
+                    label="Implementation Status"
                     pointer={`${pointerBase}/implementation_status`}
                     provenance={provenance}
+                    helpText="Use implemented, partial, planned, not applicable, or not implemented."
+                    fieldError={issueFor(`${pointerBase}/implementation_status`)}
                   >
-                    <Input
+                    <select
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       value={control.implementation_status}
                       onChange={(event) =>
                         updateControl(controlId, {
                           implementation_status: event.target.value,
                         })
                       }
-                    />
+                    >
+                      {IMPLEMENTATION_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {status.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
                   </FieldRow>
                   <FieldRow
-                    label="Implementation statement"
+                    label="Implementation Statement"
                     pointer={`${pointerBase}/implementation_statement`}
                     provenance={provenance}
+                    helpText="Describe how this control is implemented in this system."
+                    fieldError={issueFor(`${pointerBase}/implementation_statement`)}
                   >
                     <textarea
                       className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -422,7 +539,7 @@ export function PackageEditor({
 
         <TabsContent value="privacy" className="space-y-4">
           <FieldRow
-            label="Privacy scope notice"
+            label="Privacy Scope Notice"
             pointer="/privacy/scope_notice"
             provenance={provenance}
           >
@@ -470,22 +587,33 @@ export function PackageEditor({
       <Separator />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={!isDirty || saving || staleConflict} onClick={onSave}>
-          {saving ? "Saving…" : "Save draft"}
+        <Button
+          type="button"
+          disabled={!isDirty || saving || staleConflict || hasValidationIssues}
+          onClick={onSave}
+        >
+          {saving ? "Saving…" : "Save Draft"}
         </Button>
         <Button
           type="button"
           variant="default"
-          disabled={isDirty || saving || staleConflict}
+          disabled={isDirty || saving || staleConflict || hasValidationIssues}
           onClick={onConfirm}
+          title={
+            hasValidationIssues
+              ? "Resolve the highlighted validation issues before confirming."
+              : isDirty
+                ? "Save draft before confirming."
+                : undefined
+          }
         >
-          Confirm package
+          Confirm Package
         </Button>
       </div>
 
       <Card className="bg-muted/10">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Draft metadata</CardTitle>
+          <CardTitle className="text-sm">Draft Metadata</CardTitle>
           <CardDescription>
             Updated by {draft.updated_by} at {draft.updated_at}
           </CardDescription>

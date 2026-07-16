@@ -1,9 +1,10 @@
 import { Badge } from "@/components/ui/badge";
+import { revisionStatusLabel } from "@/utils/statusLabels";
 
 const INTAKE_STAGE_LABELS: Record<string, string> = {
-  uploading: "Waiting for upload finalization",
-  scanning: "Scanning uploaded artifacts",
-  extracting: "Extracting and mapping package content",
+  uploading: "Waiting For Upload Finalization",
+  scanning: "Scanning Uploaded Artifacts",
+  extracting: "Extracting and Mapping Package Content",
 };
 
 type IntakeProgressPanelProps = {
@@ -11,7 +12,7 @@ type IntakeProgressPanelProps = {
 };
 
 export function IntakeProgressPanel({ status }: IntakeProgressPanelProps) {
-  const label = INTAKE_STAGE_LABELS[status] ?? "Processing revision";
+  const label = INTAKE_STAGE_LABELS[status] ?? "Processing Revision";
 
   return (
     <div
@@ -19,7 +20,7 @@ export function IntakeProgressPanel({ status }: IntakeProgressPanelProps) {
       className="space-y-3 rounded-md border border-primary/20 bg-primary/5 px-4 py-4"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="muted">{status}</Badge>
+        <Badge variant="muted">{revisionStatusLabel(status)}</Badge>
         <span className="text-sm font-medium">{label}</span>
       </div>
       <p className="text-sm text-muted-foreground">

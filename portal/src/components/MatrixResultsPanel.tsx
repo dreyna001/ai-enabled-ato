@@ -76,7 +76,7 @@ export function MatrixResultsPanel({ run }: MatrixResultsPanelProps) {
     return (
       <Card className="border-destructive/30">
         <CardHeader>
-          <CardTitle className="text-base">Run ended without matrix</CardTitle>
+          <CardTitle className="text-base">Run Ended Without Matrix</CardTitle>
           <CardDescription className="flex flex-wrap items-center gap-2">
             <Badge variant={runStatusVariant(run.status)}>{run.status}</Badge>
             {run.error_code ? <span className="font-mono text-xs">{run.error_code}</span> : null}

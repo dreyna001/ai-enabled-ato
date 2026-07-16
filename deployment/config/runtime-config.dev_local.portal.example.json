@@ -6,6 +6,11 @@
   "IDENTITY_PROVIDER_MODE": "oidc",
   "OIDC_ISSUER_URL": "http://127.0.0.1:8000/dev-oidc",
   "OIDC_AUDIENCE": "ato-portal-dev",
+  "OIDC_GROUPS_CLAIM": "groups",
+  "OIDC_GROUP_ROLE_MAPPING": {
+    "system_owner": ["owners"],
+    "viewer": ["viewers"]
+  },
   "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
     "source": "root_owned_file",
     "path": "/absolute/private/path/oidc-client-secret"

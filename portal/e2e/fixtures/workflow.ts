@@ -36,7 +36,7 @@ export function packageFileForProfile(profileId: SupportedProfileId): string {
 }
 
 export async function createSystem(page: Page, displayName: string): Promise<void> {
-  await page.getByRole("button", { name: "Create system" }).first().click();
+  await page.getByRole("button", { name: "Create System" }).first().click();
   await expect(page.getByText(displayName)).toBeVisible({ timeout: 15_000 });
 }
 
@@ -46,7 +46,7 @@ export async function createRevisionForProfile(
 ): Promise<void> {
   await page.locator("#profile-id").selectOption(profileId);
   await expect(page.locator("#profile-id")).toHaveValue(profileId);
-  await page.getByRole("button", { name: "Create revision with selected options" }).click();
+  await page.getByRole("button", { name: "Create Revision With Selected Options" }).click();
   await expect(page.getByText(PROFILE_LABELS[profileId])).toBeVisible({ timeout: 15_000 });
 }
 
@@ -64,23 +64,23 @@ export async function uploadAndFinalizePackage(
 }
 
 export async function confirmDraftWhenReady(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: "Confirm package" })).toBeVisible({
+  await expect(page.getByRole("button", { name: "Confirm Package" })).toBeVisible({
     timeout: 120_000,
   });
-  await page.getByRole("button", { name: "Confirm package" }).click();
-  await page.getByRole("button", { name: "Confirm package" }).last().click();
+  await page.getByRole("button", { name: "Confirm Package" }).click();
+  await page.getByRole("button", { name: "Confirm Package" }).last().click();
   await expect(page.getByText(/ready/i)).toBeVisible({ timeout: 30_000 });
 }
 
 export async function runDeterministicAnalysis(page: Page): Promise<string> {
-  await expect(page.getByRole("button", { name: "Start deterministic run" })).toBeEnabled({
+  await expect(page.getByRole("button", { name: "Start Deterministic Run" })).toBeEnabled({
     timeout: 60_000,
   });
-  await page.getByRole("button", { name: "Start deterministic run" }).click();
-  await expect(page.getByText(/Deterministic analysis run started|succeeded/i)).toBeVisible({
+  await page.getByRole("button", { name: "Start Deterministic Run" }).click();
+  await expect(page.getByText(/Deterministic analysis run started|Succeeded/i)).toBeVisible({
     timeout: 30_000,
   });
-  const runButton = page.locator("button").filter({ hasText: /— succeeded/ }).first();
+  const runButton = page.locator("button").filter({ hasText: /— Succeeded/ }).first();
   await expect(runButton).toBeVisible({ timeout: 120_000 });
   const label = await runButton.textContent();
   const match = label?.match(/([0-9a-f]{8})/i);

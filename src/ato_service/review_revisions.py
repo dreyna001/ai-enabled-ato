@@ -237,7 +237,7 @@ async def create_review_revision(
         outcome="succeeded",
         reason_code=None,
         metadata={"run_id": str(run_id).lower()},
-        now=now,
+        occurred_at=now,
     )
     await record_idempotency_outcome(
         session,
@@ -276,7 +276,7 @@ async def submit_review_revision(
         require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
-    assert_if_match(if_match=if_match, current_version=review_revision.version)
+    assert_if_match(if_match, review_revision.version)
 
     disposition_result = await session.execute(
         select(Disposition).where(Disposition.review_revision_id == review_revision_id)
@@ -308,7 +308,7 @@ async def submit_review_revision(
         outcome="succeeded",
         reason_code=None,
         metadata={"run_id": str(run.run_id).lower()},
-        now=now,
+        occurred_at=now,
     )
     return ReviewRevisionMutationResult(payload=payload, status=200, etag=etag, replayed=False)
 
@@ -345,7 +345,7 @@ async def update_disposition(
         require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
-    assert_if_match(if_match=if_match, current_version=review_revision.version)
+    assert_if_match(if_match, review_revision.version)
     _validate_disposition_decision(decision=decision, edited_summary=edited_summary)
 
     disposition_result = await session.execute(
@@ -419,7 +419,7 @@ async def update_disposition(
             "poam_candidate_created": routing_result.poam_candidate_id is not None
             and routing_result.created,
         },
-        now=now,
+        occurred_at=now,
     )
     return payload, etag
 
@@ -510,7 +510,7 @@ async def create_review_comment(
         outcome="succeeded",
         reason_code=None,
         metadata={"review_revision_id": str(review_revision_id).lower()},
-        now=now,
+        occurred_at=now,
     )
     await record_idempotency_outcome(
         session,

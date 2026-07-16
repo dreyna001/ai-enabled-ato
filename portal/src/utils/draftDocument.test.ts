@@ -4,6 +4,7 @@ import {
   cloneDraftDocument,
   createEmptySecurityControl,
   draftDocumentsEqual,
+  formatProvenanceDetails,
   isModelAssistedProvenance,
   listSecurityControlIds,
   lookupProvenance,
@@ -76,12 +77,16 @@ describe("draftDocument utilities", () => {
       ...deterministic,
       extraction_method: "llm_normalize",
     };
-    expect(provenanceLabel(deterministic)).toBe("Extracted");
+    expect(provenanceLabel(deterministic)).toBe("From upload");
     expect(provenanceLabel(modelAssisted)).toBe("Model-assisted");
     expect(isModelAssistedProvenance(modelAssisted)).toBe(true);
     expect(lookupProvenance({ "/package/title": deterministic }, "/package/title")).toBe(
       deterministic,
     );
+    expect(formatProvenanceDetails({
+      ...deterministic,
+      source_locator: { kind: "json_pointer", json_pointer: "/package/title" },
+    })).toContain("Package title");
   });
 
   it("maps profile section labels", () => {

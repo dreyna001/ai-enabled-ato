@@ -366,7 +366,7 @@ export function ReviewExportWorkbench({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Review and export</CardTitle>
+        <CardTitle className="text-base">Review and Export</CardTitle>
         <CardDescription>
           Resolve matrix dispositions, submit review, and complete hash-bound export approval.
         </CardDescription>

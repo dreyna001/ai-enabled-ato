@@ -68,7 +68,9 @@ export function ConfirmDialog({
           <p className="text-sm text-muted-foreground" id="confirm-dialog-description">
             {description}
           </p>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="whitespace-pre-line text-sm text-destructive">{error}</p>
+          ) : null}
         </CardContent>
         <div className="flex justify-end gap-2 border-t border-border/60 px-6 pb-6 pt-4">
           <Button

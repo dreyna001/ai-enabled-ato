@@ -14,11 +14,11 @@ type DependencyCapabilityPanelProps = {
 };
 
 const FEATURES = [
-  { id: "preflight", label: "Preflight checks", requiresReady: true },
-  { id: "analysis", label: "Analysis runs", requiresReady: true },
-  { id: "search", label: "Package search", requiresReady: true },
-  { id: "chat", label: "Package assistant", requiresReady: true },
-  { id: "export", label: "Export workflow", requiresReady: true },
+  { id: "preflight", label: "Preflight Checks", requiresReady: true },
+  { id: "analysis", label: "Analysis Runs", requiresReady: true },
+  { id: "search", label: "Package Search", requiresReady: true },
+  { id: "chat", label: "Package Assistant", requiresReady: true },
+  { id: "export", label: "Export Workflow", requiresReady: true },
 ] as const;
 
 export function DependencyCapabilityPanel({
@@ -30,7 +30,7 @@ export function DependencyCapabilityPanel({
   return (
     <Card className="bg-muted/10">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Dependencies and capabilities</CardTitle>
+        <CardTitle className="text-sm">Dependencies and Capabilities</CardTitle>
         <CardDescription>
           Read-only status from /health/ready and current revision state.
         </CardDescription>

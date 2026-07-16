@@ -27,7 +27,7 @@ export function SystemsListSkeleton({ rows = 4 }: { rows?: number }) {
 
 export function RevisionWorkflowSkeleton() {
   return (
-    <LoadingRegion className="space-y-4" label="Loading revision workflow">
+    <LoadingRegion className="space-y-4" label="Loading Revision Workflow">
       <Skeleton className="h-5 w-48" />
       <Skeleton className="h-24 w-full rounded-lg" />
       <Skeleton className="h-10 w-40 rounded-md" />

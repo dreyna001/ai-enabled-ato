@@ -44,7 +44,7 @@ export function RevisionCreateForm({
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="parent-revision">Parent revision (optional)</Label>
+          <Label htmlFor="parent-revision">Parent Revision (Optional)</Label>
           <select
             id="parent-revision"
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -85,21 +85,21 @@ export function RevisionCreateForm({
         </div>
         {input.profile_id === "fedramp_20x_program" ? (
           <div className="space-y-1.5">
-            <Label htmlFor="certification-class">Certification class</Label>
+            <Label htmlFor="certification-class">Certification Class</Label>
             <select id="certification-class" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={input.certification_class ?? ""} disabled={busy} required onChange={(event) => setInput((current) => ({ ...current, certification_class: event.target.value as "B" | "C" }))}>
               {CERTIFICATION_CLASS_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </div>
         ) : (
           <div className="space-y-1.5">
-            <Label htmlFor="impact-level">Impact level</Label>
+            <Label htmlFor="impact-level">Impact Level</Label>
             <select id="impact-level" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={input.impact_level ?? ""} disabled={busy} onChange={(event) => setInput((current) => ({ ...current, impact_level: event.target.value as "low" | "moderate" | "high" }))}>
               {IMPACT_LEVEL_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </div>
         )}
         <div className="space-y-1.5">
-          <Label htmlFor="data-origin">Data origin</Label>
+          <Label htmlFor="data-origin">Data Origin</Label>
           <select
             id="data-origin"
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -152,7 +152,7 @@ export function RevisionCreateForm({
           })
         }
       >
-        Create revision with selected options
+        Create Revision With Selected Options
       </Button>
     </div>
   );

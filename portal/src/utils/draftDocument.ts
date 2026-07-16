@@ -4,6 +4,7 @@ import type {
   PackageDraftDocument,
   SecurityControlEntry,
 } from "@/types";
+import { humanizeDraftPointer } from "@/utils/draftValidation";
 
 export function cloneDraftDocument(document: PackageDraftDocument): PackageDraftDocument {
   return structuredClone(document);
@@ -34,12 +35,38 @@ export function provenanceLabel(entry: FieldProvenanceEntry | undefined): string
   if (entry.extraction_method === "llm_normalize") {
     return "Model-assisted";
   }
-  return "Extracted";
+  return "From upload";
+}
+
+function provenanceSourceField(entry: FieldProvenanceEntry): string | null {
+  const locator = entry.source_locator;
+  if (!locator || typeof locator !== "object") {
+    return null;
+  }
+  if (locator.kind === "json_pointer" && typeof locator.json_pointer === "string") {
+    return humanizeDraftPointer(locator.json_pointer);
+  }
+  if (typeof locator.json_pointer === "string") {
+    return humanizeDraftPointer(locator.json_pointer);
+  }
+  return null;
 }
 
 export function formatProvenanceDetails(entry: FieldProvenanceEntry): string {
-  const locator = JSON.stringify(entry.source_locator);
-  return `Artifact ${entry.source_artifact_id.slice(0, 8)}… · ${entry.extraction_method} · ${locator}`;
+  const artifactRef = `Upload ${entry.source_artifact_id.slice(0, 8)}`;
+  const sourceField = provenanceSourceField(entry);
+  if (sourceField) {
+    return `${artifactRef} · pre-filled ${sourceField}`;
+  }
+  return `${artifactRef} · extracted during intake`;
+}
+
+export function formatProvenanceHint(entry: FieldProvenanceEntry): string {
+  const sourceField = provenanceSourceField(entry);
+  if (sourceField) {
+    return `Pre-filled from upload (${sourceField})`;
+  }
+  return "Pre-filled from uploaded artifact";
 }
 
 export function listSecurityControlIds(document: PackageDraftDocument): string[] {

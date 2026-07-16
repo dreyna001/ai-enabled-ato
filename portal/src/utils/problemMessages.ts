@@ -14,6 +14,10 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   if_match_required: "Missing concurrency token. Reload and try again.",
   reconciliation_required: "Operator reconciliation is required before continuing.",
   package_not_ready: "Package is not ready for export.",
+  request_schema_invalid:
+    "Fix the highlighted package fields before saving or confirming.",
+  unsupported_authorization_path:
+    "Authorization path is outside product scope. Use agency or fedramp for supported profiles.",
 };
 
 export function problemMessageForCode(code: string | undefined, fallback: string): string {

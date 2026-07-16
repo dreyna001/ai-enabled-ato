@@ -45,6 +45,31 @@ _MAX_SEARCH_CURSOR_JSON_BYTES = 512
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _URLSAFE_BASE64_CURSOR_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
+_INSERT_SEARCH_CHUNK_SQL = text(
+    """
+    INSERT INTO package_revision_search_chunks (
+        chunk_id,
+        package_revision_id,
+        artifact_id,
+        artifact_sha256,
+        normalized_start,
+        normalized_end,
+        text,
+        search_vector
+    )
+    VALUES (
+        :chunk_id,
+        :package_revision_id,
+        :artifact_id,
+        :artifact_sha256,
+        :normalized_start,
+        :normalized_end,
+        :chunk_text,
+        to_tsvector('english', CAST(:search_text AS text))
+    )
+    """
+)
+
 
 class SearchIndexError(Exception):
     """Base error for package search index operations."""
@@ -180,6 +205,8 @@ def collect_searchable_chunks(
     )
     for source in citable_sources.values():
         artifact_id = _artifact_id_for_source(source=source, artifacts=artifacts)
+        if artifact_id is None:
+            continue
         for chunk in chunk_normalized_text(
             source_sha256=source.source_sha256,
             text=source.text,
@@ -287,21 +314,12 @@ async def rebuild_revision_search_index(
                 "artifact_sha256": chunk.artifact_sha256,
                 "normalized_start": chunk.normalized_start,
                 "normalized_end": chunk.normalized_end,
-                "text": chunk.text,
+                "chunk_text": chunk.text,
+                "search_text": chunk.text,
             }
             for chunk in pending
         ]
-        await session.execute(insert(PackageRevisionSearchChunk), rows)
-        await session.execute(
-            text(
-                """
-                UPDATE package_revision_search_chunks
-                SET search_vector = to_tsvector('english', text)
-                WHERE package_revision_id = :package_revision_id
-                """
-            ),
-            {"package_revision_id": package_revision_id},
-        )
+        await session.execute(_INSERT_SEARCH_CHUNK_SQL, rows)
 
     await session.execute(
         insert(PackageRevisionSearchIndex).values(
@@ -472,14 +490,23 @@ def _artifact_id_for_source(
     *,
     source: CitableSource,
     artifacts: Sequence[SourceArtifact],
-) -> uuid.UUID:
+) -> uuid.UUID | None:
+    artifacts_by_id = {artifact.artifact_id: artifact for artifact in artifacts}
     try:
-        return uuid.UUID(source.source_id)
+        source_artifact_id = uuid.UUID(source.source_id)
     except ValueError:
-        pass
-    if artifacts:
-        return artifacts[0].artifact_id
-    return uuid.uuid5(uuid.NAMESPACE_URL, f"ato.search-source:{source.source_id}")
+        source_artifact_id = None
+
+    if source_artifact_id in artifacts_by_id:
+        return source_artifact_id
+
+    for artifact in artifacts:
+        if artifact.sha256 == source.source_sha256:
+            return artifact.artifact_id
+
+    # Never invent or substitute an evidence relationship. Extracted text from
+    # persisted artifacts is indexed separately below.
+    return None
 
 
 def _chunk_row_citation(chunk: PackageRevisionSearchChunk) -> dict[str, Any]:

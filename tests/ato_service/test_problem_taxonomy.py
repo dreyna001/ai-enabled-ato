@@ -173,16 +173,20 @@ def _assert_nonretryable_problem(
     expected_status: int,
     expected_code: str,
     expected_instance: str,
+    expected_detail: str | None = None,
+    expected_field_errors: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     assert response.status_code == expected_status
     payload = _problem_payload(response)
     assert payload["error_code"] == expected_code
     assert payload["status"] == expected_status
     assert payload["title"] == ERROR_TITLES[expected_code]
-    assert payload["detail"] == DEFAULT_DETAILS[expected_code]
+    assert payload["detail"] == (
+        expected_detail if expected_detail is not None else DEFAULT_DETAILS[expected_code]
+    )
     assert payload["type"] == f"{PROBLEM_TYPE_BASE}{expected_code}"
     assert payload["instance"] == expected_instance
-    assert payload["field_errors"] == []
+    assert payload["field_errors"] == (expected_field_errors or [])
     assert payload["retryable"] is False
     assert "Retry-After" not in response.headers
     assert UUID_V4_PATTERN.match(payload["request_id"])
@@ -630,7 +634,7 @@ def test_package_revision_validation_error_maps_dynamic_code() -> None:
     @app.post("/api/v1/package-revisions/{revision_id}/confirm")
     async def confirm_revision(revision_id: str) -> None:
         raise PackageRevisionValidationError(
-            f"blocked by {SENSITIVE_LEAK_MARKERS[0]}",
+            "draft package section is required",
             error_code="request_schema_invalid",
         )
 
@@ -643,6 +647,109 @@ def test_package_revision_validation_error_maps_dynamic_code() -> None:
         expected_status=422,
         expected_code="request_schema_invalid",
         expected_instance=path,
+        expected_detail="draft package section is required",
+        expected_field_errors=[
+            {
+                "path": "/package",
+                "code": "request_schema_invalid",
+                "message": "draft package section is required",
+            }
+        ],
+    )
+    _assert_no_sensitive_leaks(payload)
+
+
+def test_package_revision_validation_error_maps_control_statement_pointer() -> None:
+    app = _create_problem_test_app()
+
+    @app.post("/api/v1/package-revisions/{revision_id}/confirm")
+    async def confirm_revision(revision_id: str) -> None:
+        raise PackageRevisionValidationError(
+            "security control AC-1 requires an implementation statement",
+            error_code="request_schema_invalid",
+        )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    path = "/api/v1/package-revisions/confirm-target/confirm"
+    response = client.post(path)
+
+    payload = _assert_nonretryable_problem(
+        response,
+        expected_status=422,
+        expected_code="request_schema_invalid",
+        expected_instance=path,
+        expected_detail="security control AC-1 requires an implementation statement",
+        expected_field_errors=[
+            {
+                "path": "/security_controls/AC-1/implementation_statement",
+                "code": "request_schema_invalid",
+                "message": "security control AC-1 requires an implementation statement",
+            }
+        ],
+    )
+    _assert_no_sensitive_leaks(payload)
+
+
+def test_package_revision_validation_error_maps_field_pointer() -> None:
+    app = _create_problem_test_app()
+
+    @app.post("/api/v1/package-revisions/{revision_id}/confirm")
+    async def confirm_revision(revision_id: str) -> None:
+        raise PackageRevisionValidationError(
+            "system impact_level is required to seal package content",
+            error_code="request_schema_invalid",
+        )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    path = "/api/v1/package-revisions/confirm-target/confirm"
+    response = client.post(path)
+
+    payload = _assert_nonretryable_problem(
+        response,
+        expected_status=422,
+        expected_code="request_schema_invalid",
+        expected_instance=path,
+        expected_detail="system impact_level is required to seal package content",
+        expected_field_errors=[
+            {
+                "path": "/system/impact_level",
+                "code": "request_schema_invalid",
+                "message": "system impact_level is required to seal package content",
+            }
+        ],
+    )
+    _assert_no_sensitive_leaks(payload)
+
+
+def test_draft_build_error_maps_to_request_schema_invalid() -> None:
+    from ato_service.draft_builder import DraftBuildError
+
+    app = _create_problem_test_app()
+
+    @app.post("/api/v1/package-revisions/{revision_id}/draft")
+    async def save_draft(revision_id: str) -> None:
+        raise DraftBuildError(
+            "system.impact_level: 'low' is not of type 'null'",
+            error_code="draft_schema_invalid",
+        )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    path = "/api/v1/package-revisions/draft-target/draft"
+    response = client.post(path)
+
+    payload = _assert_nonretryable_problem(
+        response,
+        expected_status=422,
+        expected_code="request_schema_invalid",
+        expected_instance=path,
+        expected_detail="system.impact_level: 'low' is not of type 'null'",
+        expected_field_errors=[
+            {
+                "path": "/system/impact_level",
+                "code": "request_schema_invalid",
+                "message": "system.impact_level: 'low' is not of type 'null'",
+            }
+        ],
     )
     _assert_no_sensitive_leaks(payload)
 

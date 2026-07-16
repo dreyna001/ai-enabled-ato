@@ -79,7 +79,7 @@ export function PackageAssistantPanel({
     return (
       <Card className="opacity-80">
         <CardHeader>
-          <CardTitle className="text-base">Package assistant</CardTitle>
+          <CardTitle className="text-base">Package Assistant</CardTitle>
           <CardDescription>
             Search and chat are unavailable while API readiness is degraded or the revision is
             not ready.
@@ -92,7 +92,7 @@ export function PackageAssistantPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Package assistant</CardTitle>
+        <CardTitle className="text-base">Package Assistant</CardTitle>
         <CardDescription>
           Revision-scoped search and bounded Q&amp;A with citation-backed answers.
         </CardDescription>

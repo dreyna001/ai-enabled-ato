@@ -50,24 +50,33 @@ import { parseContentDispositionFilename } from "@/utils/downloadFilename";
 
 export type ApiErrorKind = "cancelled" | "timeout" | "http" | "invalid_response";
 
+export type ProblemFieldError = {
+  path: string;
+  code: string;
+  message: string;
+};
+
 export const INVALID_RESPONSE_STATUS = 502;
 
 export class ApiError extends Error {
   status: number;
   kind: ApiErrorKind;
   errorCode?: string;
+  fieldErrors?: ProblemFieldError[];
 
   constructor(
     status: number,
     message: string,
     kind: ApiErrorKind = "http",
     errorCode?: string,
+    fieldErrors?: ProblemFieldError[],
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.kind = kind;
     this.errorCode = errorCode;
+    this.fieldErrors = fieldErrors;
   }
 }
 
@@ -83,24 +92,53 @@ export function isCancelledRequest(
 
 type ResponseParser<T> = (value: unknown) => T | null;
 
+function parseProblemFieldErrors(value: unknown): ProblemFieldError[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const fieldErrors: ProblemFieldError[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.path === "string" &&
+      typeof record.code === "string" &&
+      typeof record.message === "string"
+    ) {
+      fieldErrors.push({
+        path: record.path,
+        code: record.code,
+        message: record.message,
+      });
+    }
+  }
+  return fieldErrors.length > 0 ? fieldErrors : undefined;
+}
+
 async function readProblemBody(response: Response): Promise<{
   detail: string;
   errorCode?: string;
+  fieldErrors?: ProblemFieldError[];
 }> {
   let detail = response.statusText;
   let errorCode: string | undefined;
+  let fieldErrors: ProblemFieldError[] | undefined;
   try {
     const body = (await response.json()) as {
       detail?: unknown;
       error_code?: unknown;
       error?: unknown;
       title?: unknown;
+      field_errors?: unknown;
     };
     if (typeof body.error_code === "string") {
       errorCode = body.error_code;
     } else if (typeof body.error === "string") {
       errorCode = body.error;
     }
+    fieldErrors = parseProblemFieldErrors(body.field_errors);
     if (typeof body.detail === "string") {
       detail = body.detail;
     } else if (typeof body.title === "string") {
@@ -111,7 +149,7 @@ async function readProblemBody(response: Response): Promise<{
   } catch {
     // ignore parse errors
   }
-  return { detail, errorCode };
+  return { detail, errorCode, fieldErrors };
 }
 
 async function readValidatedJson<T>(
@@ -119,8 +157,8 @@ async function readValidatedJson<T>(
   parse: ResponseParser<T>,
 ): Promise<T> {
   if (!response.ok) {
-    const { detail, errorCode } = await readProblemBody(response);
-    throw new ApiError(response.status, detail, "http", errorCode);
+    const { detail, errorCode, fieldErrors } = await readProblemBody(response);
+    throw new ApiError(response.status, detail, "http", errorCode, fieldErrors);
   }
 
   let body: unknown;
@@ -391,8 +429,8 @@ export async function uploadPackageFile(
     },
   );
   if (!response.ok) {
-    const { detail, errorCode } = await readProblemBody(response);
-    throw new ApiError(response.status, detail, "http", errorCode);
+    const { detail, errorCode, fieldErrors } = await readProblemBody(response);
+    throw new ApiError(response.status, detail, "http", errorCode, fieldErrors);
   }
 }
 
@@ -867,8 +905,8 @@ export async function downloadExport(
     ...options,
   });
   if (!response.ok) {
-    const { detail, errorCode } = await readProblemBody(response);
-    throw new ApiError(response.status, detail, "http", errorCode);
+    const { detail, errorCode, fieldErrors } = await readProblemBody(response);
+    throw new ApiError(response.status, detail, "http", errorCode, fieldErrors);
   }
   const blob = await response.blob();
   const header = response.headers.get("Content-Disposition");

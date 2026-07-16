@@ -14,8 +14,54 @@ readonly OIDC_SECRET_PATH="$CREDENTIALS_DIR/oidc-client-secret"
 readonly LOCAL_ENV_DEST="$CREDENTIALS_DIR/ato-local.env"
 readonly DATABASE_DSN_CREDENTIAL_PATH="$CREDENTIALS_DIR/database-dsn"
 
+TEXT_MODEL_MODE="${ATO_WSL_PORTAL_TEXT_MODEL:-openai}"
+
+usage() {
+  cat <<'EOF'
+Usage: wsl-portal-enable.sh [options]
+
+Enable dev OIDC, portal sessions, and text-model settings on an existing WSL
+local deploy (API on 8001).
+
+Options:
+  --openai     Use OpenAI-compatible text model (default)
+  --bedrock    Use AWS Bedrock text model (no OpenAI API key)
+  -h, --help   Show this help
+
+Environment:
+  ATO_LOCAL_ENV_FILE           Source env file (default: <repo>/config.local.env)
+  ATO_WSL_PORTAL_TEXT_MODEL    openai or bedrock (default: openai)
+EOF
+}
+
 err() { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "  $*"; }
+warn() { echo "WARN: $*" >&2; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --openai)
+      TEXT_MODEL_MODE="openai"
+      shift
+      ;;
+    --bedrock)
+      TEXT_MODEL_MODE="bedrock"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      err "Unknown argument: $1"
+      ;;
+  esac
+done
+
+case "$TEXT_MODEL_MODE" in
+  openai|bedrock) ;;
+  *) err "ATO_WSL_PORTAL_TEXT_MODEL must be openai or bedrock (got: $TEXT_MODEL_MODE)" ;;
+esac
 
 [[ "$(id -u)" -eq 0 ]] || err "Run as root (sudo bash scripts/wsl-portal-enable.sh)"
 grep -Eiq 'microsoft|wsl' /proc/version || err "Run inside WSL"
@@ -27,8 +73,56 @@ LOCAL_ENV_SOURCE="${ATO_LOCAL_ENV_FILE:-$REPO_DIR/config.local.env}"
 [[ -d "$INSTALL_DIR/venv" ]] || err "Missing WSL install at $INSTALL_DIR; run scripts/wsl-local-deploy.sh first"
 [[ -f "$DATABASE_DSN_CREDENTIAL_PATH" ]] || err "Missing database DSN credential"
 
-info "Installing portal runtime config"
-cp "$REPO_DIR/deployment/config/runtime-config.wsl_portal.json" "$RUNTIME_CONFIG_DEST"
+select_runtime_config() {
+  case "$TEXT_MODEL_MODE" in
+    openai)
+      echo "$REPO_DIR/deployment/config/runtime-config.wsl_portal.json"
+      ;;
+    bedrock)
+      echo "$REPO_DIR/deployment/config/runtime-config.wsl_portal.bedrock.json"
+      ;;
+  esac
+}
+
+install_openai_local_env_file() {
+  [[ -f "$LOCAL_ENV_SOURCE" ]] \
+    || err "Missing $LOCAL_ENV_SOURCE. Copy config.local.env.example to config.local.env and set ATO_TEXT_MODEL_API_KEY=your-key"
+  grep -Eq '^[[:space:]]*ATO_TEXT_MODEL_API_KEY=.+$' "$LOCAL_ENV_SOURCE" \
+    || err "$LOCAL_ENV_SOURCE must set a non-empty ATO_TEXT_MODEL_API_KEY=... line"
+  install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
+  info "Installed local env secrets from $(basename "$LOCAL_ENV_SOURCE")"
+}
+
+local_env_has_assignments() {
+  [[ -f "$LOCAL_ENV_SOURCE" ]] || return 1
+  grep -Eq '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=.+$' "$LOCAL_ENV_SOURCE"
+}
+
+install_bedrock_local_env_file() {
+  if local_env_has_assignments; then
+    install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
+    info "Installed AWS/local env secrets from $(basename "$LOCAL_ENV_SOURCE")"
+    return 0
+  fi
+  if [[ -f "$LOCAL_ENV_DEST" ]]; then
+    info "Keeping existing $LOCAL_ENV_DEST"
+    return 0
+  fi
+  warn "No KEY=VALUE assignments in $LOCAL_ENV_SOURCE; skipping ato-local.env install"
+  warn "Portal OIDC works without it. For Bedrock calls, add AWS_PROFILE or AWS_ACCESS_KEY_ID to config.local.env and rerun."
+}
+
+install_bedrock_dependencies() {
+  info "Ensuring Bedrock dependencies are installed in service venv"
+  "$INSTALL_DIR/venv/bin/pip" install "$INSTALL_DIR[bedrock]" \
+    || err "Failed to install Bedrock dependencies in $INSTALL_DIR/venv"
+}
+
+RUNTIME_CONFIG_SRC="$(select_runtime_config)"
+[[ -f "$RUNTIME_CONFIG_SRC" ]] || err "Missing runtime config: $RUNTIME_CONFIG_SRC"
+
+info "Installing portal runtime config ($(basename "$RUNTIME_CONFIG_SRC"))"
+cp "$RUNTIME_CONFIG_SRC" "$RUNTIME_CONFIG_DEST"
 chown root:ato "$RUNTIME_CONFIG_DEST"
 chmod 640 "$RUNTIME_CONFIG_DEST"
 
@@ -42,16 +136,12 @@ else
   info "OIDC client secret credential already exists"
 fi
 
-install_local_env_file() {
-  [[ -f "$LOCAL_ENV_SOURCE" ]] \
-    || err "Missing $LOCAL_ENV_SOURCE. Copy config.local.env.example to config.local.env and set ATO_TEXT_MODEL_API_KEY=your-key"
-  grep -Eq '^[[:space:]]*ATO_TEXT_MODEL_API_KEY=.+$' "$LOCAL_ENV_SOURCE" \
-    || err "$LOCAL_ENV_SOURCE must set a non-empty ATO_TEXT_MODEL_API_KEY=... line"
-  install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
-  info "Installed local env secrets from $(basename "$LOCAL_ENV_SOURCE")"
-}
-
-install_local_env_file
+if [[ "$TEXT_MODEL_MODE" == "openai" ]]; then
+  install_openai_local_env_file
+else
+  install_bedrock_local_env_file
+  install_bedrock_dependencies
+fi
 
 bind_package_storage() {
   install -d -o root -g root -m 0755 "$(dirname "$STORAGE_BIND_TARGET")"
@@ -71,6 +161,10 @@ bind_package_storage() {
 info "Refreshing application package and migrations"
 bash "$REPO_DIR/scripts/install.sh" --skip-nginx --skip-systemd
 
+if [[ "$TEXT_MODEL_MODE" == "bedrock" ]]; then
+  install_bedrock_dependencies
+fi
+
 info "Restoring package storage ownership and bind mount"
 bind_package_storage
 
@@ -88,6 +182,13 @@ info "Running database migrations"
 systemctl restart ato-api.service
 systemctl restart ato-synthetic-intake-worker.timer 2>/dev/null || true
 
-info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + OpenAI text model)"
+case "$TEXT_MODEL_MODE" in
+  openai)
+    info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + OpenAI text model)"
+    ;;
+  bedrock)
+    info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + AWS Bedrock text model)"
+    ;;
+esac
 info "Start the UI from WSL: bash scripts/start-portal.sh"
 info "Open http://localhost:5173"

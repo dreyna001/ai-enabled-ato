@@ -1,7 +1,8 @@
 import type { BadgeProps } from "@/components/ui/badge";
+import { toTitleCaseWords } from "@/utils/labelFormatting";
 
 export function revisionStatusLabel(status: string): string {
-  return status.replaceAll("_", " ");
+  return toTitleCaseWords(status);
 }
 
 export function revisionStatusVariant(
@@ -28,6 +29,10 @@ export function revisionStatusVariant(
     default:
       return "muted";
   }
+}
+
+export function runStatusLabel(status: string): string {
+  return toTitleCaseWords(status);
 }
 
 export function runStatusVariant(

@@ -27,6 +27,7 @@ from ato_service.auth_context import AuthenticatedPrincipal
 from ato_service.lifecycle_transitions import IllegalStateTransitionError
 from ato_service.main import AppRuntimeSnapshot, AppRuntimeState, create_app
 from ato_service.problems import PROBLEM_MEDIA_TYPE
+from ato_service.run_artifacts import RunArtifactsPage
 from ato_service.runtime_config import load_runtime_config_from_dict
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -196,6 +197,30 @@ def test_get_matrix_returns_envelope(client: TestClient, monkeypatch: pytest.Mon
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["assessment_item_id"] == "AC-1"
+
+
+def test_get_artifacts_returns_envelope(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_list_artifacts(*_args: Any, **_kwargs: Any) -> RunArtifactsPage:
+        return RunArtifactsPage(
+            items=[
+                {
+                    "artifact_id": "matrix",
+                    "path": "machine/matrix.json",
+                    "media_type": "application/json",
+                    "sha256": "a" * 64,
+                    "size_bytes": 12,
+                    "official_schema_id": None,
+                }
+            ],
+            next_cursor=None,
+        )
+
+    monkeypatch.setattr("ato_service.api_router.list_run_artifacts", fake_list_artifacts)
+    response = client.get(f"/api/v1/runs/{RUN_ID}/artifacts")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["artifact_id"] == "matrix"
+    assert payload["next_cursor"] is None
 
 
 def test_list_runs_returns_envelope(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

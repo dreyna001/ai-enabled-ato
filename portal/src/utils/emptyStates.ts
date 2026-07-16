@@ -6,9 +6,9 @@ export function resolveSystemsEmptyState(): {
   action?: EmptyStateAction;
 } {
   return {
-    title: "No systems yet",
+    title: "No Systems Yet",
     description:
-      "Create a system to start a synthetic package revision and run the intake workflow.",
+      "Create a system to start a synthetic Package Revision and run the Intake Workflow.",
   };
 }
 
@@ -17,7 +17,7 @@ export function resolveRevisionsEmptyState(): {
   description: string;
 } {
   return {
-    title: "No package revisions",
+    title: "No Package Revisions",
     description:
       "Create a revision for the selected system to upload synthetic JSON evidence.",
   };
@@ -28,8 +28,8 @@ export function resolveRunsEmptyState(): {
   description: string;
 } {
   return {
-    title: "No analysis runs",
+    title: "No Analysis Runs",
     description:
-      "Start a deterministic run after the revision reaches ready status.",
+      "Start a deterministic run after the revision reaches Ready status.",
   };
 }

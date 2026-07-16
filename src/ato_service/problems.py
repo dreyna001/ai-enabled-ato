@@ -22,6 +22,7 @@ DEFAULT_RETRY_AFTER_SECONDS = 30
 KNOWN_ERROR_CODES = frozenset(
     {
         "artifact_digest_mismatch",
+        "artifact_manifest_missing",
         "analysis_not_eligible",
         "authentication_required",
         "authorization_denied",
@@ -62,6 +63,7 @@ KNOWN_ERROR_CODES = frozenset(
 
 ERROR_TITLES: dict[str, str] = {
     "artifact_digest_mismatch": "Artifact digest mismatch",
+    "artifact_manifest_missing": "Artifact manifest missing",
     "analysis_not_eligible": "Analysis not eligible",
     "authentication_required": "Authentication required",
     "authorization_denied": "Authorization denied",
@@ -102,6 +104,9 @@ ERROR_TITLES: dict[str, str] = {
 DEFAULT_DETAILS: dict[str, str] = {
     "artifact_digest_mismatch": (
         "Stored artifact bytes do not match the recorded digest."
+    ),
+    "artifact_manifest_missing": (
+        "The durable artifact manifest for this run is missing."
     ),
     "analysis_not_eligible": "The package revision is not eligible for analysis.",
     "authentication_required": "An authenticated principal is required.",
@@ -183,6 +188,7 @@ DEFAULT_DETAILS: dict[str, str] = {
 
 ERROR_HTTP_METADATA: dict[str, tuple[int, bool]] = {
     "artifact_digest_mismatch": (500, False),
+    "artifact_manifest_missing": (500, False),
     "analysis_not_eligible": (422, False),
     "authentication_required": (401, False),
     "authorization_denied": (403, False),
@@ -519,15 +525,132 @@ def _register_domain_problem_handler(
         field_errors: list[FieldError] = []
         if field_errors_for is not None:
             field_errors = field_errors_for(exc)
+        detail = _detail_from_domain_error(exc)
         problem = build_problem(
             error_code=resolved_code,
             status=status,
             instance=request.url.path,
             request_id=get_request_id(request),
+            detail=detail,
             retryable=retryable,
             field_errors=field_errors,
         )
         return problem_json_response(problem)
+
+
+def _detail_from_domain_error(exc: Exception) -> str | None:
+    from ato_service.draft_builder import DraftBuildError
+    from ato_service.package_revisions import PackageRevisionValidationError
+
+    if not isinstance(exc, (DraftBuildError, PackageRevisionValidationError)):
+        return None
+    message = getattr(exc, "message", None)
+    if isinstance(message, str) and message.strip():
+        return message
+    return None
+
+
+def _field_errors_from_package_revision_validation(
+    exc: Exception,
+) -> list[FieldError]:
+    from ato_service.package_revisions import PackageRevisionValidationError
+
+    if not isinstance(exc, PackageRevisionValidationError):
+        return []
+
+    pointer = _package_revision_validation_pointer(exc.message)
+    return [
+        FieldError(
+            path=pointer,
+            code=exc.error_code,
+            message=sanitize_detail(exc.message),
+        )
+    ]
+
+
+def _field_errors_from_draft_build_error(exc: Exception) -> list[FieldError]:
+    from ato_service.draft_builder import DraftBuildError
+
+    if not isinstance(exc, DraftBuildError):
+        return []
+
+    pointer = _package_revision_validation_pointer(exc.message)
+    if not pointer:
+        return []
+    return [
+        FieldError(
+            path=pointer,
+            code="request_schema_invalid",
+            message=sanitize_detail(exc.message),
+        )
+    ]
+
+
+def _package_revision_validation_pointer(message: str) -> str:
+    known_pointers = {
+        "system impact_level is required to seal package content": "/system/impact_level",
+        "draft system section is required to seal package content": "/system",
+        "draft package section is required": "/package",
+        "authorization path is outside product scope": "/system/authorization_path",
+        "draft profile_id does not match package revision profile": "/package/profile_id",
+        "package title is required to seal package content": "/package/title",
+        "system display_name is required to seal package content": "/system/display_name",
+        "system authorization_boundary is required to seal package content": (
+            "/system/authorization_boundary"
+        ),
+        "system mission_summary is required to seal package content": "/system/mission_summary",
+        "system authorization_path is required to seal package content": (
+            "/system/authorization_path"
+        ),
+        "FedRAMP 20x drafts must leave system impact_level empty; certification class on the package revision replaces FIPS 199 impact here": (
+            "/system/impact_level"
+        ),
+    }
+    if message in known_pointers:
+        return known_pointers[message]
+
+    control_statement_match = re.fullmatch(
+        r"security control (.+) requires an implementation statement",
+        message,
+    )
+    if control_statement_match is not None:
+        control_id = control_statement_match.group(1)
+        escaped = control_id.replace("/", "~1")
+        return f"/security_controls/{escaped}/implementation_statement"
+
+    control_status_match = re.fullmatch(
+        r"security control (.+) requires a supported implementation status",
+        message,
+    )
+    if control_status_match is not None:
+        control_id = control_status_match.group(1)
+        escaped = control_id.replace("/", "~1")
+        return f"/security_controls/{escaped}/implementation_status"
+
+    if message.startswith("system authorization_path must be "):
+        return "/system/authorization_path"
+
+    if ":" in message:
+        field_name = message.split(":", 1)[0].strip()
+        if field_name.startswith("system."):
+            leaf = field_name.split(".", 1)[1]
+            if leaf in {
+                "display_name",
+                "authorization_boundary",
+                "mission_summary",
+                "impact_level",
+                "authorization_path",
+            }:
+                return f"/system/{leaf}"
+        if field_name in {
+            "display_name",
+            "authorization_boundary",
+            "mission_summary",
+            "impact_level",
+            "authorization_path",
+        }:
+            return f"/system/{field_name}"
+    return ""
 
 
 def _register_p11_problem_handlers(app: FastAPI) -> None:
@@ -666,7 +789,19 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         ),
     )
     _register_domain_problem_handler(app, SourceRequestSchemaInvalidError)
-    _register_domain_problem_handler(app, PackageRevisionValidationError)
+    _register_domain_problem_handler(
+        app,
+        PackageRevisionValidationError,
+        field_errors_for=_field_errors_from_package_revision_validation,
+    )
+    from ato_service.draft_builder import DraftBuildError
+
+    _register_domain_problem_handler(
+        app,
+        DraftBuildError,
+        error_code="request_schema_invalid",
+        field_errors_for=_field_errors_from_draft_build_error,
+    )
     _register_domain_problem_handler(app, AnalysisRunValidationError)
     _register_domain_problem_handler(app, AnalysisRunPolicyError)
     _register_domain_problem_handler(app, ConcurrentRunLimitExceededError)
@@ -732,6 +867,19 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
             audit_error_type,
             error_code="reconciliation_required",
         )
+
+    from ato_service.run_artifacts import (
+        RunArtifactDescriptorError,
+        RunArtifactDigestMismatchError,
+        RunArtifactManifestMissingError,
+    )
+
+    for run_artifact_error_type in (
+        RunArtifactManifestMissingError,
+        RunArtifactDigestMismatchError,
+        RunArtifactDescriptorError,
+    ):
+        _register_domain_problem_handler(app, run_artifact_error_type)
 
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(

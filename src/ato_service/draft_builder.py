@@ -15,6 +15,7 @@ from jsonschema.exceptions import ValidationError
 
 from ato_service.db.models import PackageRevision, SourceArtifact, System
 from ato_service.extraction.types import ExtractionOutcome, ExtractedSegment
+from ato_service.project_root import contract_path
 
 DOCUMENT_SCHEMA_VERSION = "1.0.0"
 _DEFAULT_PRIVACY_SCOPE_NOTICE = "Privacy review is external to this product."
@@ -40,6 +41,7 @@ class DraftBuildError(ValueError):
 
     def __init__(self, message: str, *, error_code: str) -> None:
         self.error_code = error_code
+        self.message = message
         super().__init__(message)
 
 
@@ -959,12 +961,7 @@ def _format_validation_error(error: ValidationError) -> str:
 
 @cache
 def _package_draft_schema_path() -> Path:
-    return (
-        Path(__file__).resolve().parents[2]
-        / "docs"
-        / "contracts"
-        / "package-draft-document.schema.json"
-    )
+    return contract_path("package-draft-document.schema.json")
 
 
 @cache

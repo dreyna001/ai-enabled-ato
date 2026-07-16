@@ -46,6 +46,7 @@ from ato_service.domain_mapping import (
 )
 from ato_service.draft_builder import validate_package_draft_document
 from ato_service.legacy_proposal_compat import ensure_legacy_draft_for_read
+from ato_service.project_root import contract_path
 from ato_service.idempotency import (
     IdempotencyReplay,
     canonical_json_bytes,
@@ -75,6 +76,16 @@ def _revision_not_found(*, package_revision_id: uuid.UUID) -> Exception:
 OPERATION_SAVE_DRAFT = "package_revisions.save_draft"
 
 HTTP_OK = 200
+
+_ALLOWED_IMPLEMENTATION_STATUSES = frozenset(
+    {
+        "implemented",
+        "partial",
+        "planned",
+        "not_applicable",
+        "not_implemented",
+    }
+)
 
 
 class PackageRevisionDraftNotFoundError(Exception):
@@ -144,13 +155,10 @@ def build_system_context_document(
     if isinstance(control_set, dict) and isinstance(control_set.get("source"), dict):
         control_source = dict(control_set["source"])
 
-    impact_level = system_section.get("impact_level")
-    if impact_level is None:
-        impact_level = revision.impact_level
-    if impact_level is None:
-        raise _validation_error(
-            "system impact_level is required to seal package content",
-        )
+    impact_level = _resolve_system_context_impact_level(
+        draft_document=draft_document,
+        revision=revision,
+    )
 
     return {
         "display_name": system_section.get("display_name") or system.display_name,
@@ -195,6 +203,203 @@ def validate_draft_profile_match(
         raise _validation_error(
             "draft profile_id does not match package revision profile",
         )
+
+
+_FEDRAMP_20X_IMPACT_LEVEL_MESSAGE = (
+    "FedRAMP 20x drafts must leave system impact_level empty; "
+    "certification class on the package revision replaces FIPS 199 impact here"
+)
+_ALLOWED_DRAFT_IMPACT_LEVELS = frozenset({"low", "moderate", "high"})
+_FEDRAMP_PROFILE_IDS = frozenset({"fedramp_20x_program", "fedramp_rev5_transition"})
+
+
+def _expected_authorization_path(profile_id: str) -> str:
+    if profile_id in _FEDRAMP_PROFILE_IDS:
+        return "fedramp"
+    return "agency"
+
+
+def normalize_draft_document_for_profile(
+    document: dict[str, Any],
+    *,
+    profile_id: str,
+    revision_impact_level: str | None = None,
+) -> dict[str, Any]:
+    """Coerce profile-specific draft fields so invalid combinations cannot persist."""
+    normalized = json.loads(json.dumps(document))
+    package = normalized.get("package")
+    if isinstance(package, dict) and isinstance(package.get("profile_id"), str):
+        profile_id = package["profile_id"]
+
+    system = normalized.get("system")
+    if not isinstance(system, dict):
+        return normalized
+
+    if profile_id == "fedramp_20x_program":
+        system["impact_level"] = None
+    elif system.get("impact_level") is None and revision_impact_level in _ALLOWED_DRAFT_IMPACT_LEVELS:
+        system["impact_level"] = revision_impact_level
+
+    system["authorization_path"] = _expected_authorization_path(profile_id)
+    return normalized
+
+
+def _nominal_impact_for_fedramp_20x(certification_class: str | None) -> str:
+    """Map FedRAMP 20x certification class to a nominal FIPS 199 impact for shared snapshots."""
+    if certification_class == "C":
+        return "low"
+    if certification_class == "B":
+        return "moderate"
+    return "moderate"
+
+
+def _resolve_system_context_impact_level(
+    *,
+    draft_document: dict[str, Any],
+    revision: PackageRevision,
+) -> str:
+    """Resolve the impact level stored on the sealed system-context snapshot."""
+    package = draft_document.get("package")
+    profile_id = revision.profile_id
+    if isinstance(package, dict) and isinstance(package.get("profile_id"), str):
+        profile_id = package["profile_id"]
+
+    system_section = draft_document.get("system")
+    if not isinstance(system_section, dict):
+        raise _validation_error(
+            "draft system section is required to seal package content",
+        )
+
+    if profile_id == "fedramp_20x_program":
+        draft_impact = system_section.get("impact_level")
+        if draft_impact in _ALLOWED_DRAFT_IMPACT_LEVELS:
+            return str(draft_impact)
+        return _nominal_impact_for_fedramp_20x(revision.certification_class)
+
+    impact_level = system_section.get("impact_level")
+    if impact_level is None:
+        impact_level = revision.impact_level
+    if impact_level not in _ALLOWED_DRAFT_IMPACT_LEVELS:
+        raise _validation_error(
+            "system impact_level is required to seal package content",
+        )
+    return str(impact_level)
+
+
+def validate_draft_profile_field_combinations(document: dict[str, Any]) -> None:
+    """Reject profile-specific field combinations before JSON schema validation."""
+    package = document.get("package")
+    if not isinstance(package, dict):
+        return
+
+    profile_id = package.get("profile_id")
+    system = document.get("system")
+    if not isinstance(system, dict):
+        return
+
+    impact_level = system.get("impact_level")
+    if profile_id == "fedramp_20x_program":
+        if impact_level is not None:
+            raise _validation_error(_FEDRAMP_20X_IMPACT_LEVEL_MESSAGE)
+    elif impact_level is not None and impact_level not in _ALLOWED_DRAFT_IMPACT_LEVELS:
+        raise _validation_error(
+            "system impact_level must be low, moderate, high, or null",
+        )
+
+    authorization_path = system.get("authorization_path")
+    if isinstance(authorization_path, str) and authorization_path.strip():
+        expected_path = _expected_authorization_path(str(profile_id))
+        if authorization_path.strip().lower() != expected_path:
+            raise _validation_error(
+                f"system authorization_path must be {expected_path} for this profile",
+            )
+
+
+def _require_non_empty_text(
+    value: Any,
+    *,
+    label: str,
+) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise _validation_error(f"{label} is required to seal package content")
+
+
+def validate_draft_editor_requirements(document: dict[str, Any]) -> None:
+    """Validate operator-facing draft content required before sealing."""
+    package = document.get("package")
+    if not isinstance(package, dict):
+        raise _validation_error("draft package section is required")
+
+    _require_non_empty_text(package.get("title"), label="package title")
+
+    system = document.get("system")
+    if not isinstance(system, dict):
+        raise _validation_error("draft system section is required to seal package content")
+
+    _require_non_empty_text(system.get("display_name"), label="system display_name")
+    _require_non_empty_text(
+        system.get("authorization_boundary"),
+        label="system authorization_boundary",
+    )
+    _require_non_empty_text(system.get("mission_summary"), label="system mission_summary")
+    _require_non_empty_text(
+        system.get("authorization_path"),
+        label="system authorization_path",
+    )
+
+    security_controls = document.get("security_controls")
+    if not isinstance(security_controls, dict):
+        return
+
+    for control_id, control in security_controls.items():
+        if not isinstance(control, dict):
+            raise _validation_error(
+                f"security control {control_id} must be an object",
+            )
+        status = control.get("implementation_status")
+        if status not in _ALLOWED_IMPLEMENTATION_STATUSES:
+            raise _validation_error(
+                f"security control {control_id} requires a supported implementation status",
+            )
+        statement = control.get("implementation_statement")
+        if not isinstance(statement, str) or not statement.strip():
+            raise _validation_error(
+                f"security control {control_id} requires an implementation statement",
+            )
+
+
+def validate_draft_ready_to_seal(
+    *,
+    document: dict[str, Any],
+    profile_id: str,
+    system: System,
+    revision: PackageRevision,
+) -> dict[str, Any]:
+    """Validate that one draft can be sealed and return its system-context document."""
+    document = normalize_draft_document_for_profile(
+        document,
+        profile_id=profile_id,
+        revision_impact_level=revision.impact_level,
+    )
+    validate_draft_profile_match(document=document, profile_id=profile_id)
+    validate_draft_profile_field_combinations(document)
+    validate_package_draft_document(document)
+    validate_draft_editor_requirements(document)
+    try:
+        validate_system_context_authorization_path(document)
+    except UnsupportedAuthorizationPathError as exc:
+        raise _validation_error(
+            "authorization path is outside product scope",
+            error_code=exc.error_code,
+        ) from exc
+
+    system_context_document = build_system_context_document(
+        draft_document=document,
+        system=system,
+        revision=revision,
+    )
+    validate_system_context_document(system_context_document)
+    return system_context_document
 
 
 def _copy_string_list(value: Any) -> list[str]:
@@ -255,9 +460,18 @@ def _draft_view_payload(
     draft: PackageRevisionDraft,
     *,
     revision_version: int,
+    profile_id: str,
+    revision_impact_level: str | None = None,
 ) -> dict[str, Any]:
     payload = map_package_revision_draft_to_domain(draft)
     payload["revision_version"] = revision_version
+    document = payload.get("document")
+    if isinstance(document, dict):
+        payload["document"] = normalize_draft_document_for_profile(
+            document,
+            profile_id=profile_id,
+            revision_impact_level=revision_impact_level,
+        )
     return payload
 
 
@@ -300,7 +514,7 @@ def _format_validation_error(error: ValidationError) -> str:
 
 @cache
 def _system_context_schema_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "docs" / "contracts" / "domain.schema.json"
+    return contract_path("domain.schema.json")
 
 
 @cache
@@ -349,7 +563,12 @@ async def get_package_revision_draft(
 
     revision_version = package_revision.revision_version
     return PackageRevisionDraftViewResult(
-        payload=_draft_view_payload(draft, revision_version=revision_version),
+        payload=_draft_view_payload(
+            draft,
+            revision_version=revision_version,
+            profile_id=package_revision.profile_id,
+            revision_impact_level=package_revision.impact_level,
+        ),
         etag=format_package_revision_etag(revision_version),
     )
 
@@ -423,15 +642,18 @@ async def save_package_revision_draft(
 
     assert_if_match(if_match, package_revision.revision_version)
 
-    validate_package_draft_document(document)
-    validate_draft_profile_match(document=document, profile_id=package_revision.profile_id)
-    try:
-        validate_system_context_authorization_path(document)
-    except UnsupportedAuthorizationPathError as exc:
-        raise _validation_error(
-            "authorization path is outside product scope",
-            error_code=exc.error_code,
-        ) from exc
+    document = normalize_draft_document_for_profile(
+        document,
+        profile_id=package_revision.profile_id,
+        revision_impact_level=package_revision.impact_level,
+    )
+
+    validate_draft_ready_to_seal(
+        document=document,
+        profile_id=package_revision.profile_id,
+        system=system,
+        revision=package_revision,
+    )
 
     draft.document = document
     draft.updated_by = principal.actor_id
@@ -441,6 +663,8 @@ async def save_package_revision_draft(
     payload = _draft_view_payload(
         draft,
         revision_version=package_revision.revision_version,
+        profile_id=package_revision.profile_id,
+        revision_impact_level=package_revision.impact_level,
     )
     await append_audit_event(
         session,
@@ -481,19 +705,19 @@ async def seal_package_revision_draft(
     now: datetime,
 ) -> tuple[str, uuid.UUID]:
     """Seal the current draft into immutable content and a system-context snapshot."""
-    validate_package_draft_document(draft.document)
-    validate_draft_profile_match(
+    draft.document = normalize_draft_document_for_profile(
+        draft.document,
+        profile_id=package_revision.profile_id,
+        revision_impact_level=package_revision.impact_level,
+    )
+    system_context_document = validate_draft_ready_to_seal(
         document=draft.document,
         profile_id=package_revision.profile_id,
-    )
-
-    content_sha256 = compute_sealed_document_digest(draft.document)
-    system_context_document = build_system_context_document(
-        draft_document=draft.document,
         system=system,
         revision=package_revision,
     )
-    validate_system_context_document(system_context_document)
+
+    content_sha256 = compute_sealed_document_digest(draft.document)
     system_context_sha256 = compute_sealed_document_digest(system_context_document)
 
     version_result = await session.execute(

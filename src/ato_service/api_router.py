@@ -55,6 +55,7 @@ from ato_service.package_revisions import (
 )
 from ato_service.source_artifacts import UploadSourceArtifactResult, upload_source_artifact
 from ato_service.systems import create_system, get_system, list_systems
+from ato_service.run_artifacts import list_run_artifacts
 
 ProfileId = Literal[
     "fedramp_20x_program",
@@ -179,6 +180,15 @@ class StartRunRequest(BaseModel):
 
 class PaginatedRunsResponse(BaseModel):
     """OpenAPI-aligned analysis run list envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(max_length=100)
+    next_cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class PaginatedArtifactsResponse(BaseModel):
+    """OpenAPI-aligned run artifact list envelope."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -694,6 +704,29 @@ def create_api_router() -> APIRouter:
             items=page.items,
             next_cursor=page.next_cursor,
             total=page.total,
+        )
+
+    @router.get("/runs/{run_id}/artifacts", tags=["Runs"])
+    async def get_run_artifact_descriptors(
+        run_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> PaginatedArtifactsResponse:
+        page = await list_run_artifacts(
+            session,
+            principal=principal,
+            run_id=run_id,
+            cursor=cursor,
+            limit=limit,
+            storage_root=runtime_state.snapshot.storage_root,
+            project_root=runtime_state.snapshot.project_root,
+        )
+        return PaginatedArtifactsResponse(
+            items=page.items,
+            next_cursor=page.next_cursor,
         )
 
     return router

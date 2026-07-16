@@ -212,7 +212,7 @@ test.describe("mocked security · rendering and authorization surfaces", () => {
     });
 
     await page.goto("/workflow");
-    await expect(page.getByText(/No systems yet|Create system/i)).toBeVisible();
+    await expect(page.getByText(/No Systems Yet|Create System/i)).toBeVisible();
   });
 
   test("readiness degradation surfaces dependency error", async ({ page }) => {

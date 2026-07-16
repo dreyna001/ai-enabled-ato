@@ -13,6 +13,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from ato_service.project_root import contract_path
+
 
 class FismaTemplatePackError(ValueError):
     """Raised when a template pack cannot be loaded or validated safely."""
@@ -203,12 +205,7 @@ def _stringify_template_value(value: Any) -> str:
 
 @cache
 def _manifest_schema_path() -> Path:
-    return (
-        Path(__file__).resolve().parents[2]
-        / "docs"
-        / "contracts"
-        / "fisma-template-pack.schema.json"
-    )
+    return contract_path("fisma-template-pack.schema.json")
 
 
 @cache

@@ -106,17 +106,31 @@ sudo bash scripts/wsl-local-deploy.sh --no-start --no-migrate
 sudo bash scripts/wsl-local-deploy.sh --help
 ```
 
-## Enable portal + OpenAI
+## Enable portal + text model
 
 After the base WSL files, PostgreSQL database, and migrations are installed,
-enable OIDC dev auth, portal sessions, and OpenAI text-model settings. This step
-preserves the local OIDC client secret created by the base install and restarts the API:
+enable OIDC dev auth, portal sessions, and text-model settings. This step
+preserves the local OIDC client secret created by the base install and restarts the API.
+
+### OpenAI-compatible (default)
 
 ```bash
 cp config.local.env.example config.local.env
 # edit config.local.env and set ATO_TEXT_MODEL_API_KEY=your-key
 sudo bash scripts/wsl-portal-enable.sh
 ```
+
+### AWS Bedrock (no OpenAI key)
+
+```bash
+# optional: copy config.local.env.bedrock.example and set AWS_PROFILE or AWS keys
+sudo bash scripts/wsl-portal-enable.sh --bedrock
+```
+
+The API service runs as user `ato` with `ProtectHome=yes`, so Bedrock credentials
+must be installed into `/etc/ato-analyzer/credentials/ato-local.env` via
+`config.local.env` (see `config.local.env.bedrock.example`), not only `~/.aws/`.
+Portal OIDC works without AWS env assignments; Bedrock model calls require them.
 
 ### OpenAI API key (`config.local.env`)
 

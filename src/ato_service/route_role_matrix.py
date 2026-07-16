@@ -44,6 +44,7 @@ ROUTE_ROLE_MATRIX: dict[tuple[str, str], tuple[str, ...]] = {
     ("GET", "/runs/{run_id}"): (ROLE_VIEWER,),
     ("POST", "/runs/{run_id}/cancel"): (ROLE_SYSTEM_OWNER,),
     ("GET", "/runs/{run_id}/matrix"): (ROLE_VIEWER,),
+    ("GET", "/runs/{run_id}/artifacts"): (ROLE_VIEWER,),
     ("POST", "/runs/{run_id}/review-revisions"): (ROLE_REVIEWER,),
     ("POST", "/review-revisions/{id}/submit"): (ROLE_REVIEWER,),
     ("PATCH", "/review-revisions/{id}/dispositions/{row_id}"): (ROLE_REVIEWER,),

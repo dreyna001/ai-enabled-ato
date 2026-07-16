@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from ato_service.project_root import contract_path
+
 PROMPT_VERSION = "1.0.0"
 RESPONSE_SCHEMA_VERSION = "1.0.0"
 MAX_PROPOSALS = 64
@@ -28,17 +30,12 @@ DETERMINISTIC_EXTRACTION_METHODS: frozenset[str] = frozenset(
     {"deterministic", "text", "vision"}
 )
 
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def response_schema_path() -> Path:
-    return _repo_root() / "docs" / "contracts" / "normalize-proposal-response.schema.json"
+    return contract_path("normalize-proposal-response.schema.json")
 
 
 def package_draft_schema_path() -> Path:
-    return _repo_root() / "docs" / "contracts" / "package-draft-document.schema.json"
+    return contract_path("package-draft-document.schema.json")
 
 
 def sha256_text(text: str) -> str:

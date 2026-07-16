@@ -26,7 +26,7 @@ export function PortalNavHeader() {
         >
           <span className="inline-flex items-center gap-1">
             <ClipboardList className="size-3" />
-            Package workflow
+            Package Workflow
           </span>
         </NavLink>
       </nav>
@@ -63,7 +63,7 @@ export function PortalNavSidebar({
         {footer}
         <Button className="w-full" size="sm" type="button" variant="outline" onClick={onSignOut}>
           <LogOut />
-          Sign out
+          Sign Out
         </Button>
       </div>
     </aside>
