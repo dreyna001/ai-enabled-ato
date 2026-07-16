@@ -519,16 +519,19 @@ def build_extended_router() -> APIRouter:
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
-        result = await create_export_draft(
-            session,
-            principal=principal,
-            review_revision_id=id,
-            project_root=runtime_state.snapshot.project_root,
-            authority_manifest_id=runtime_state.authority_manifest_id,
-            idempotency_key=idempotency_key,
-            hmac_key=audit_hmac_key,
-            now=_utc_now(),
-        )
+        try:
+            result = await create_export_draft(
+                session,
+                principal=principal,
+                review_revision_id=id,
+                project_root=runtime_state.snapshot.project_root,
+                authority_manifest_id=runtime_state.authority_manifest_id,
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except ExportValidationError as exc:
+            return _export_error_response(exc)
         return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
 
     @router.post("/export-drafts/{id}/submit", status_code=201, tags=["Exports"])
