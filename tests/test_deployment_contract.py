@@ -362,8 +362,8 @@ def test_wsl_portal_runtime_config_declares_openai_text_model() -> None:
     assert '"TEXT_MODEL_ENDPOINT_URL": "https://api.openai.com/v1"' in text
     assert '"TEXT_MODEL_ENDPOINT_PROFILE": "external_openai"' in text
     assert '"TEXT_MODEL_TEMPERATURE": 0' in text
-    assert '"TEXT_MODEL_ENDPOINT_POLICY_APPROVED": false' in text
-    assert '"CUI_MODEL_BOUNDARY_APPROVED": false' in text
+    assert '"TEXT_MODEL_ENDPOINT_POLICY_APPROVED": true' in text
+    assert '"CUI_MODEL_BOUNDARY_APPROVED": true' in text
     assert '"TEXT_MODEL_CREDENTIAL_REFERENCE"' not in text
 
 
@@ -398,7 +398,8 @@ def test_wsl_portal_enable_script_installs_local_env_file() -> None:
     assert "install_bedrock_local_env_file" in text
     assert "ATO_TEXT_MODEL_API_KEY" in text
     assert "--bedrock" in text
-    assert "bind_package_storage" in text
+    assert "ato-analyzer-worker.wsl-local.service" in text
+    assert "start_wsl_analyzer_worker" in text
 
 
 def test_wsl_deploy_script_reuses_installer_and_smoke_chain() -> None:

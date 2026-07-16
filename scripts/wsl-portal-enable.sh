@@ -112,7 +112,33 @@ install_bedrock_local_env_file() {
   warn "Portal OIDC works without it. For Bedrock calls, add AWS_PROFILE or AWS_ACCESS_KEY_ID to config.local.env and rerun."
 }
 
-install_bedrock_dependencies() {
+install_wsl_analyzer_worker_unit() {
+  local worker_src="$REPO_DIR/deployment/systemd/ato-analyzer-worker.wsl-local.service"
+  cp "$worker_src" /etc/systemd/system/ato-analyzer-worker.service
+  systemctl daemon-reload
+  info "Installed WSL analyzer worker unit (model-assisted + deterministic runs)"
+}
+
+start_wsl_analyzer_worker() {
+  systemctl enable ato-analyzer-worker.service
+  systemctl restart ato-analyzer-worker.service
+  info "Started ato-analyzer-worker.service"
+}
+
+warn_bedrock_credentials_missing() {
+  if [[ "$TEXT_MODEL_MODE" != "bedrock" ]]; then
+    return 0
+  fi
+  if [[ -f "$LOCAL_ENV_DEST" ]] && grep -Eq '^[[:space:]]*(AWS_PROFILE|AWS_ACCESS_KEY_ID)=' "$LOCAL_ENV_DEST"; then
+    return 0
+  fi
+  if local_env_has_assignments && grep -Eq '^[[:space:]]*(AWS_PROFILE|AWS_ACCESS_KEY_ID)=' "$LOCAL_ENV_SOURCE"; then
+    return 0
+  fi
+  warn "Bedrock is configured but no AWS_PROFILE or AWS_ACCESS_KEY_ID found in config.local.env."
+  warn "Add AWS credentials and rerun this script. LLM paths (targeted runs, chat, intake normalize) will fail until then."
+}
+
   info "Ensuring Bedrock dependencies are installed in service venv"
   "$INSTALL_DIR/venv/bin/pip" install "$INSTALL_DIR[bedrock]" \
     || err "Failed to install Bedrock dependencies in $INSTALL_DIR/venv"
@@ -170,6 +196,9 @@ bind_package_storage
 
 info "Installing updated WSL API unit (OIDC credential mapping)"
 cp "$REPO_DIR/deployment/systemd/ato-api.wsl-local.service" /etc/systemd/system/ato-api.service
+cp "$REPO_DIR/deployment/systemd/ato-synthetic-intake-worker.service" \
+  /etc/systemd/system/ato-synthetic-intake-worker.service
+install_wsl_analyzer_worker_unit
 systemctl daemon-reload
 
 info "Running database migrations"
@@ -181,13 +210,17 @@ info "Running database migrations"
 
 systemctl restart ato-api.service
 systemctl restart ato-synthetic-intake-worker.timer 2>/dev/null || true
+start_wsl_analyzer_worker
+warn_bedrock_credentials_missing
 
 case "$TEXT_MODEL_MODE" in
   openai)
     info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + OpenAI text model)"
+    info "Analyzer worker enabled for targeted/model-assisted runs (use Start Targeted Run in portal)"
     ;;
   bedrock)
     info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + AWS Bedrock text model)"
+    info "Analyzer worker enabled for targeted/model-assisted runs (use Start Targeted Run in portal)"
     ;;
 esac
 info "Start the UI from WSL: bash scripts/start-portal.sh"

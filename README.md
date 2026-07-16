@@ -10,6 +10,7 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 | [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md) | Non-normative product vision and delivery summary |
 | [`ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md`](ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md) | User workflow and epic acceptance map |
 | [`ATO_PORTAL_DEMO_TALKING_TRACK.md`](ATO_PORTAL_DEMO_TALKING_TRACK.md) | Approved demo language and glossary |
+| [`docs/PORTAL_WORKFLOW_GUIDE.md`](docs/PORTAL_WORKFLOW_GUIDE.md) | Portal UI walkthrough, LLM usage, checks, and ATO artifacts by stage |
 | [`docs/contracts/README.md`](docs/contracts/README.md) | P-1 machine-contract index and validation rules |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Threat model and required security controls |
 | [`docs/AI_EVALUATION_GUIDE.md`](docs/AI_EVALUATION_GUIDE.md) | AI labels, qualification data, metrics, and hard stops |

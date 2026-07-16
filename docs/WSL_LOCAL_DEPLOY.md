@@ -8,6 +8,16 @@ Run the **implemented** ATO stack inside Windows WSL with production-shaped host
 
 This is a developer-only WSL bootstrap. It is not RHEL validation, not a production release, and does not implement OIDC, production malware scanning (**HS-005**), or production customer extraction.
 
+For a full walkthrough of portal screens, workflow stages, LLM usage, validation
+checks, and ATO artifacts produced at each step, see
+[`PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md).
+
+**LLM in WSL:** Bedrock or OpenAI is configured by `wsl-portal-enable.sh`, not
+by hosting a local model. **Start Deterministic Run** never calls an LLM
+(`llm_call_count=0` by design). For model-assisted sufficiency matrix runs, use
+**Start Targeted Run** after selecting items in Change Analysis. Package chat
+and intake normalization also use the configured remote model when routing allows.
+
 ## Prerequisites
 
 1. **WSL 2** with **systemd enabled**. In `/etc/wsl.conf`:
@@ -58,9 +68,10 @@ Same paths as production packaging:
 /etc/systemd/system/ato-api.service
 /etc/systemd/system/ato-synthetic-intake-worker.service
 /etc/systemd/system/ato-synthetic-intake-worker.timer
+/etc/systemd/system/ato-analyzer-worker.service   (after portal enable)
 ```
 
-Runtime profile is **`dev_local`** so the API and synthetic worker share one config and storage layout. This is intentional for the current P1.2 slice; it is not `onprem_production`.
+Runtime profile is **`dev_local`** so the API, intake worker, and analyzer worker share one config and storage layout. This is intentional for the current P1.2 slice; it is not `onprem_production`.
 
 ## Verify
 
@@ -94,6 +105,7 @@ cd ~/ai-enabled-ato
 sudo mount --bind /var/ato-packages /opt/ato-analyzer/data/ato-storage
 sudo systemctl restart ato-api.service
 sudo systemctl restart ato-synthetic-intake-worker.timer
+sudo systemctl restart ato-analyzer-worker.service
 ```
 
 Or rerun the full deploy script (idempotent for credentials unless regenerated).
@@ -149,7 +161,17 @@ Optional override for the source file path: `sudo ATO_LOCAL_ENV_FILE=/path/to/co
 
 **Model:** `gpt-4.1` at `https://api.openai.com/v1` (`TEXT_MODEL_ENDPOINT_PROFILE`: `external_openai`). Production on-prem config is unchanged.
 
-**Portal deterministic runs:** The portal **Start deterministic run** workflow does not call the text LLM today (`llm_call_count=0`). OpenAI config enables `text_llm` for dev and future model-backed paths; it does not change deterministic run behavior.
+**Portal runs and LLM:**
+
+| Action | LLM calls |
+| --- | --- |
+| Start Deterministic Run | **None** (by design; smoke / matrix scaffold only) |
+| Start Targeted Run | **Yes** — sufficiency matrix via configured Bedrock or OpenAI |
+| Package Assistant (chat) | **Yes** when model routing allows; otherwise excerpt fallback |
+| Intake normalization | **Yes** when empty draft fields need LLM fill (0–2 calls per revision) |
+
+`wsl-portal-enable.sh` starts `ato-analyzer-worker.service` and loads AWS/OpenAI
+secrets into API, intake, and analyzer units via `ato-local.env`.
 
 ### Portal UI (Windows)
 
@@ -173,6 +195,9 @@ Synthetic demo package walkthrough:
 - nginx TLS edge
 - Production OIDC (dev OIDC issuer on loopback only)
 - Production malware scanner / customer extraction (HS-005)
-- Analyzer worker
+- Hosting a local LLM (use Bedrock or OpenAI via `wsl-portal-enable.sh`)
+- Customer-production package uploads (synthetic/redacted dev paths only in this slice)
+- Vision model calls
+- HS-001 authority manifest closure (`/health/ready` may stay degraded until then)
 
 See [`deployment/README.md`](../deployment/README.md) for the RHEL operator packaging contract.

@@ -1,11 +1,12 @@
 [Unit]
-Description=ATO unified intake worker drain (WSL local)
+Description=ATO analyzer worker (WSL local — deterministic and model-assisted runs)
 Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
 After=network-online.target postgresql.service ato-api.service
 Wants=network-online.target
+Requires=ato-api.service
 
 [Service]
-Type=oneshot
+Type=simple
 User=ato
 Group=ato
 
@@ -18,18 +19,38 @@ LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
 LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
 EnvironmentFile=-/etc/ato-analyzer/credentials/ato-local.env
 
-ExecStart=/opt/ato-analyzer/venv/bin/ato-synthetic-intake-worker
+ExecStart=/opt/ato-analyzer/venv/bin/ato-analyzer-worker
+
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
 
 NoNewPrivileges=yes
 CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/var/ato-packages /opt/ato-analyzer/data/ato-storage
 
+MemoryMax=2G
+CPUQuota=200%
+
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ato-synthetic-intake-worker
+SyslogIdentifier=ato-analyzer-worker
 
 [Install]
 WantedBy=multi-user.target
