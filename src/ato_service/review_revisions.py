@@ -164,6 +164,30 @@ async def _load_run_context(
     return run, revision, system, matrix_rows
 
 
+async def _load_dispositions(
+    session: AsyncSession,
+    *,
+    review_revision_id: uuid.UUID,
+) -> list[Any]:
+    from ato_service.db.models import Disposition
+
+    disposition_result = await session.execute(
+        select(Disposition).where(Disposition.review_revision_id == review_revision_id)
+    )
+    return list(disposition_result.scalars().all())
+
+
+def _review_mutation_result(
+    review_revision: Any,
+    *,
+    dispositions: list[Any],
+    status: int,
+) -> ReviewRevisionMutationResult:
+    payload = map_review_revision_to_domain(review_revision, dispositions=dispositions)
+    etag = format_package_revision_etag(review_revision.version)
+    return ReviewRevisionMutationResult(payload=payload, status=status, etag=etag, replayed=False)
+
+
 async def create_review_revision(
     session: AsyncSession,
     *,
@@ -180,6 +204,32 @@ async def create_review_revision(
         require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
+
+    existing_draft_result = await session.execute(
+        select(ReviewRevision).where(
+            ReviewRevision.run_id == run_id,
+            ReviewRevision.status == "draft",
+        )
+    )
+    existing_draft = existing_draft_result.scalar_one_or_none()
+    if existing_draft is not None:
+        dispositions = await _load_dispositions(
+            session,
+            review_revision_id=existing_draft.review_revision_id,
+        )
+        return _review_mutation_result(existing_draft, dispositions=dispositions, status=200)
+
+    submitted_result = await session.execute(
+        select(ReviewRevision).where(
+            ReviewRevision.run_id == run_id,
+            ReviewRevision.status == "submitted",
+        )
+    )
+    if submitted_result.scalar_one_or_none() is not None:
+        raise ReviewRevisionValidationError(
+            "a submitted review revision already exists for this run",
+            error_code="review_already_submitted",
+        )
 
     request_digest = request_digest_from_payload({"run_id": str(run_id).lower()})
     replay = await load_idempotency_replay(
@@ -294,7 +344,6 @@ async def submit_review_revision(
         )
 
     review_revision.status = "submitted"
-    review_revision.version += 1
     payload = map_review_revision_to_domain(review_revision, dispositions=dispositions)
     etag = format_package_revision_etag(review_revision.version)
     await append_audit_event(

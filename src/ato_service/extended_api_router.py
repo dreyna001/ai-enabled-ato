@@ -398,14 +398,20 @@ def build_extended_router() -> APIRouter:
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
-        result = await create_review_revision(
-            session,
-            principal=principal,
-            run_id=run_id,
-            idempotency_key=idempotency_key,
-            hmac_key=audit_hmac_key,
-            now=_utc_now(),
-        )
+        try:
+            result = await create_review_revision(
+                session,
+                principal=principal,
+                run_id=run_id,
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except ReviewRevisionValidationError as exc:
+            return JSONResponse(
+                status_code=422,
+                content={"error": exc.error_code, "error_code": exc.error_code},
+            )
         return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
 
     @router.post("/review-revisions/{id}/submit", tags=["Reviews"])
@@ -417,15 +423,26 @@ def build_extended_router() -> APIRouter:
         audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
         idempotency_key: IdempotencyKeyHeader,
     ) -> JSONResponse:
-        result = await submit_review_revision(
-            session,
-            principal=principal,
-            review_revision_id=id,
-            if_match=request.headers.get("if-match"),
-            idempotency_key=idempotency_key,
-            hmac_key=audit_hmac_key,
-            now=_utc_now(),
-        )
+        try:
+            result = await submit_review_revision(
+                session,
+                principal=principal,
+                review_revision_id=id,
+                if_match=request.headers.get("if-match"),
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except ReviewRevisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "not_found"})
+        except ReviewRevisionValidationError as exc:
+            status = 422
+            if exc.error_code == "illegal_state_transition":
+                status = 409
+            return JSONResponse(
+                status_code=status,
+                content={"error": exc.error_code, "error_code": exc.error_code},
+            )
         return JSONResponse(status_code=result.status, content=result.payload, headers={"ETag": result.etag})
 
     @router.patch("/review-revisions/{id}/dispositions/{row_id}", tags=["Reviews"])

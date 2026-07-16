@@ -8,6 +8,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   approval_payload_mismatch: "Export payload changed. Create a new export draft.",
   illegal_state_transition: "This action is not allowed in the current workflow state.",
   review_incomplete: "Resolve every matrix disposition before submitting review.",
+  review_already_submitted: "This analysis run already has a submitted review revision.",
   export_not_ready: "Export readiness blockers remain. Check preflight warnings.",
   review_not_submitted: "Submit the review revision before creating an export draft.",
   etag_mismatch: "The server version changed. Reload and try again.",

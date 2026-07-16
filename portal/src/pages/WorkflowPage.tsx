@@ -65,6 +65,7 @@ import {
 } from "@/utils/emptyStates";
 import { formatApiError } from "@/utils/formatApiError";
 import { formatProblemError } from "@/utils/formatProblemError";
+import { formatRunListLabel } from "@/utils/runLabels";
 import {
   revisionStatusLabel,
   revisionStatusVariant,
@@ -729,7 +730,7 @@ export function WorkflowPage({
                   <SelectionList
                     items={runs.map((item) => ({
                       id: item.run_id,
-                      label: `${item.run_id.slice(0, 8)}…`,
+                      label: formatRunListLabel(item),
                       status: item.status,
                     }))}
                     selectedId={selectedRunId}
@@ -749,6 +750,9 @@ export function WorkflowPage({
                           {runStatusLabel(activeRun.status)}
                         </Badge>
                         <span>· LLM calls: {activeRun.llm_call_count}</span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          · {activeRun.run_id.slice(0, 8)}…
+                        </span>
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">

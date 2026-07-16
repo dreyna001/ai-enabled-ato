@@ -192,6 +192,8 @@ def test_review_revision_mutations_pass_occurred_at_to_append_audit_event(
                 _scalar_result(revision),
                 _scalar_result(system),
                 _scalars_result([matrix_row]),
+                _scalar_result(None),
+                _scalar_result(None),
             ]
         )
         with (
@@ -244,6 +246,8 @@ def test_review_revision_mutations_pass_occurred_at_to_append_audit_event(
                 )
             )
         assert result.status == 200
+        assert result.payload["status"] == "submitted"
+        assert result.payload["version"] == 1
     elif mutation == "disposition":
         disposition = _disposition()
         session = _RecordingSession(
@@ -323,3 +327,37 @@ def test_review_revision_mutations_pass_occurred_at_to_append_audit_event(
     assert len(audit_spy.calls) == 1
     assert audit_spy.calls[0]["occurred_at"] == NOW
     assert audit_spy.calls[0]["action"] == expected_action
+
+
+def test_create_review_revision_returns_existing_draft_for_run() -> None:
+    existing = _review_revision(status="draft", version=3)
+    disposition = _disposition()
+    session = _RecordingSession(
+        [
+            _scalar_result(_run_row()),
+            _scalar_result(_revision()),
+            _scalar_result(_system()),
+            _scalars_result([]),
+            _scalar_result(existing),
+        ]
+    )
+
+    with patch(
+        "ato_service.review_revisions._load_dispositions",
+        new=AsyncMock(return_value=[disposition]),
+    ):
+        result = _run(
+            create_review_revision(
+                session,
+                principal=OWNER_PRINCIPAL,
+                run_id=RUN_ID,
+                idempotency_key=IDEM_KEY,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert result.status == 200
+    assert result.payload["review_revision_id"] == str(REVIEW_REVISION_ID).lower()
+    assert result.payload["version"] == 3
+    assert not session.added
