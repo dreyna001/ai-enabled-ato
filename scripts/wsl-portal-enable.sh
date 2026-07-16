@@ -139,6 +139,7 @@ warn_bedrock_credentials_missing() {
   warn "Add AWS credentials and rerun this script. LLM paths (targeted runs, chat, intake normalize) will fail until then."
 }
 
+install_bedrock_dependencies() {
   info "Ensuring Bedrock dependencies are installed in service venv"
   "$INSTALL_DIR/venv/bin/pip" install "$INSTALL_DIR[bedrock]" \
     || err "Failed to install Bedrock dependencies in $INSTALL_DIR/venv"
