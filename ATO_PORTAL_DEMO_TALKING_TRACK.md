@@ -1,9 +1,12 @@
 # ATO Portal Demo Talking Track
 
-**Status:** Approved product language for demos
+**Status:** Approved product language for demos (reconciled 2026-07-17)
 **Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)
+**Portal click-path reference:** [`docs/PORTAL_WORKFLOW_GUIDE.md`](docs/PORTAL_WORKFLOW_GUIDE.md)
 
 Use this script only for capabilities implemented in the demonstrated build. Clearly label planned screens or sample outputs.
+
+**Default WSL/synthetic demo:** deterministic analysis run (no matrix LLM). Use targeted or full runs to demo model-assisted matrix rows. Local dev may use an integrity-only malware substitute (**HS-005**), not production ClamAV.
 
 ## 30-second leadership pitch
 
@@ -116,14 +119,15 @@ These labels are not official compliance or authorization results.
 
 Say:
 
-> Each System can have many immutable package revisions. The supported profile and authorization path belong to each PackageRevision, so a System is not locked to one path. Users see only systems their customer identity groups permit.
+> Each System is a long-lived workspace. Every upload cycle is a PackageRevision — an immutable snapshot once confirmed. Revisions form a lineage over time; a System may also hold revisions under different profiles when the team needs that. Profile and path are chosen per revision, not per system. Users see only systems their customer identity groups permit.
 
 Show:
 
 - System name
-- Latest PackageRevision and its profile and path
+- Selected or latest PackageRevision with profile and path
 - Data origin and sensitivity
-- Readiness and run state
+- Revision status, preflight eligibility, and run state
+- Change Analysis panel when the revision has a parent (optional)
 
 Do not say:
 
@@ -135,14 +139,15 @@ Do not say:
 
 Say:
 
-> Before analysis, files are streamed, size-checked, malware-scanned, type-checked, and safely extracted. Every source is hashed. If the format is unfamiliar, AI may propose field mappings, but a person must confirm them before they become trusted package facts. After review, confirmation seals the current revision as ready. Any later source, confirmed fact, profile, label, or link change creates a child revision rather than changing the ready revision.
+> Before analysis, files are streamed, size-checked, malware-scanned, type-checked, and safely extracted. Every source is hashed. Intake may use bounded AI to map unfamiliar formats into the draft, but a person edits the package draft and confirms once to seal it as ready — not field-by-field accept or reject cards. Any later source, confirmed fact, profile, label, or link change creates a child revision rather than changing the ready revision.
 
 Show:
 
-- Per-file status
+- Per-file scan and extraction status
 - Rejected or quarantined reason
-- Extracted source locator
-- Pending proposals
+- Package Editor tabs with pre-filled fields
+- Provenance badges (from upload vs model-assisted)
+- Save Draft and Confirm Package actions
 
 ### 3. Preflight readiness
 
@@ -163,43 +168,43 @@ Do not describe the percentage as the decision.
 
 Say:
 
-> The matrix gives exactly one row for every expected assessment item. The model proposes an evidence-based result, and deterministic code checks citations, row coverage, stale evidence, missing context, and status limits.
+> The matrix gives exactly one row for every expected assessment item. On a deterministic run, status comes from rules without a model call — the usual WSL demo path. On full or targeted runs, a model proposes an evidence-based result. In all cases, deterministic code checks citations, row coverage, stale evidence, missing context, and status limits.
 
 Show:
 
-- Status and context-complete marker
+- Run type (deterministic vs targeted/full)
+- Row status and context-complete marker
 - Source citations
 - Gaps and questions
-- Model output separately from human disposition
+- Model-proposed status separately from human disposition (when the run used a model)
 
-### 5. FedRAMP package view
+### 5. FedRAMP 20x content
 
 Say:
 
-> For the FedRAMP 20x Program path, the portal organizes the package around the official CPO, SDR, OCR, SCG reference, KSI material, and imported independent assessment inputs. Official JSON is validated against the pinned schema, then separate semantic rules check whether the package is actually ready.
+> For the FedRAMP 20x Program path, the sealed package and export bundle carry CPO, SDR, OCR, SCG reference, KSI material, and imported independent assessment inputs. Official JSON is validated against the pinned schema at export; preflight and semantic rules surface readiness blockers before that.
 
 Show:
 
-- Official schema result
-- Semantic readiness blockers
-- Assessor-owned fields marked import-only
-- KSI methods and metric history
-- Freshness and next-report dates
+- Package Editor **Profile** tab (FedRAMP 20x JSON sections)
+- **Assessor Inputs** tab (import-only fields)
+- Preflight export blockers (assessor inputs, KSI, schema messages)
+- Approved export ZIP manifest and profile artifacts — not a separate FedRAMP dashboard
 
 Do not describe an SSP/SAR/POA&M bundle as the primary 20x package.
 
-### 6. Agency FISMA view
+### 6. Agency FISMA content
 
 Say:
 
-> For an agency system, the customer supplies the tailored control list and agency templates. We analyze the security evidence and prepare security drafts. The product does not choose tailoring or cover the privacy package.
+> For an agency system, the customer supplies the tailored control list and agency templates. We analyze the security evidence and prepare security drafts in the export bundle. The product does not choose tailoring or cover the privacy package.
 
 Show:
 
-- Control inventory
-- SSP security draft
-- SAR input pack
-- Security readiness and privacy-scope notice
+- Package Editor **Controls** tab (control inventory and implementation statements)
+- **Profile** and **Privacy** tabs (FISMA sections and privacy-scope notice)
+- Matrix and preflight readiness
+- Approved export ZIP (SSP sections, SAR input, POA&M candidates when weaknesses were confirmed in review)
 
 ### 7. Human review
 
@@ -209,7 +214,7 @@ Say:
 
 Show:
 
-- Model proposal
+- Matrix row status (model-proposed when the run used a model)
 - Human disposition
 - Comment history
 - Evidence request
@@ -238,7 +243,7 @@ Good demo questions:
 - "What evidence supports this assessment item?"
 - "Why is this row partial?"
 - "Which package fields are still missing?"
-- "What changed from the previous run?"
+- "What changed from the previous revision?" (child revisions; Change Analysis panel)
 
 Refusal demo:
 
