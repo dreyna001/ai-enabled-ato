@@ -25,16 +25,19 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PreflightCheckList, buildPreflightCheckMessageMap } from "@/components/PreflightCheckList";
 import type {
   Approval,
   Disposition,
   ExportDraft,
   MatrixRow,
+  PreflightResult,
   ReviewComment,
   ReviewRevision,
   SessionInfo,
 } from "@/types";
 import { formatApiError } from "@/utils/formatApiError";
+import { exportNotReadyMessage } from "@/utils/preflightLabels";
 import { problemMessageForCode } from "@/utils/problemMessages";
 import {
   clearStoredReviewRevisionId,
@@ -55,12 +58,14 @@ type ReviewExportWorkbenchProps = {
   session: SessionInfo;
   runId: string;
   matrixRows: MatrixRow[];
+  preflight?: PreflightResult | null;
 };
 
 export function ReviewExportWorkbench({
   session,
   runId,
   matrixRows,
+  preflight = null,
 }: ReviewExportWorkbenchProps) {
   const [review, setReview] = useState<ReviewRevision | null>(null);
   const [exportDraft, setExportDraft] = useState<ExportDraft | null>(null);
@@ -94,7 +99,7 @@ export function ReviewExportWorkbench({
     [review],
   );
 
-  const exportBlocked =
+  const exportDraftUnavailable =
     exportDraft?.status === "expired" ||
     exportDraft?.status === "superseded" ||
     exportDraft?.status === "rejected";
@@ -129,8 +134,18 @@ export function ReviewExportWorkbench({
       .catch(() => setComments([]));
   }, [review?.review_revision_id, review?.status, runId]);
 
+  const exportReadinessBlocked = preflight !== null && !preflight.export_eligible;
+  const exportBlockers = preflight?.export_blockers ?? [];
+  const preflightCheckMessages = buildPreflightCheckMessageMap(
+    preflight?.deterministic_checks,
+  );
+
   const handleApiError = (err: unknown) => {
     if (err instanceof ApiError) {
+      if (err.errorCode === "export_not_ready" && exportBlockers.length > 0) {
+        setError(exportNotReadyMessage(exportBlockers));
+        return;
+      }
       setError(problemMessageForCode(err.errorCode, formatApiError(err)));
       if (err.status === 412 || err.errorCode === "etag_mismatch") {
         setError("Review version changed on the server. Reload the page to continue.");
@@ -384,7 +399,7 @@ export function ReviewExportWorkbench({
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span>Review status</span>
               <Badge variant="muted">{review.status}</Badge>
-              <span>· version {review.version}</span>
+              <span className="font-mono">· version {review.version}</span>
               {unresolvedCount > 0 ? (
                 <Badge variant="destructive">{unresolvedCount} unresolved</Badge>
               ) : (
@@ -423,7 +438,7 @@ export function ReviewExportWorkbench({
                     />
                   );
                 })}
-                <div className="space-y-2 rounded-md border p-4">
+                <div className="space-y-2 rounded-sm border p-4">
                   <Label htmlFor="review-comment">Package-level review comment</Label>
                   <Input
                     id="review-comment"
@@ -461,13 +476,20 @@ export function ReviewExportWorkbench({
               <div className="space-y-2">
                 <p className="text-sm font-medium">Comments</p>
                 {comments.map((comment) => (
-                  <div key={comment.comment_id} className="rounded-md border p-3 text-sm">
+                  <div key={comment.comment_id} className="rounded-sm border p-3 text-sm">
                     <p>{comment.body}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {comment.created_by} · {comment.created_at}
-                      {comment.matrix_row_id
-                        ? ` · row ${comment.matrix_row_id.slice(0, 8)}…`
-                        : " · package"}
+                      {comment.matrix_row_id ? (
+                        <>
+                          {" · row "}
+                          <span className="font-mono">
+                            {comment.matrix_row_id.slice(0, 8)}…
+                          </span>
+                        </>
+                      ) : (
+                        " · package"
+                      )}
                     </p>
                   </div>
                 ))}
@@ -475,26 +497,48 @@ export function ReviewExportWorkbench({
             ) : null}
 
             {review.status === "submitted" ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void createDraft()}
-                >
-                  Create export draft
-                </Button>
-                {exportDraft ? (
+              <div className="space-y-4">
+                {exportReadinessBlocked ? (
+                  <div className="space-y-3 rounded-sm border border-destructive/30 bg-destructive/5 p-4">
+                    <p className="text-sm font-medium text-foreground">
+                      Export is blocked until these sealed-package items are resolved
+                    </p>
+                    <PreflightCheckList
+                      title="Export blockers"
+                      codes={exportBlockers}
+                      checkMessages={preflightCheckMessages}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      These blockers must be resolved before confirm on a new revision (upload
+                      assessor and privacy artifacts during intake). Sealed revisions cannot be
+                      edited in place.{" "}
+                      <a className="text-link underline underline-offset-4" href="#preflight">
+                        View full Preflight
+                      </a>
+                    </p>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    disabled={busy || exportDraft.status !== "draft"}
-                    onClick={() => void submitDraft()}
+                    disabled={busy || exportReadinessBlocked}
+                    onClick={() => void createDraft()}
                   >
-                    Submit for approval
+                    Create export draft
                   </Button>
-                ) : null}
+                  {exportDraft ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || exportDraft.status !== "draft"}
+                      onClick={() => void submitDraft()}
+                    >
+                      Submit for approval
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
@@ -510,7 +554,7 @@ export function ReviewExportWorkbench({
               </div>
             ) : null}
 
-            {exportBlocked ? (
+            {exportDraftUnavailable ? (
               <p className="text-sm text-destructive">
                 Export is no longer available ({exportDraft?.status}). Create a new export draft
                 after review changes.
@@ -614,7 +658,7 @@ function DispositionEditor({
   }, [initialDecision, initialSummary]);
 
   return (
-    <div className="rounded-md border p-4 space-y-3">
+    <div className="rounded-sm border p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs">{row.assessment_item_id}</span>
         <Badge variant="muted">{row.model_proposed_status}</Badge>
@@ -636,7 +680,7 @@ function DispositionEditor({
           <Label htmlFor={`decision-${row.matrix_row_id}`}>Disposition</Label>
           <select
             id={`decision-${row.matrix_row_id}`}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            className="w-full rounded-sm border bg-background px-3 py-2 text-sm"
             value={decision}
             disabled={disabled}
             onChange={(event) => setDecision(event.target.value)}

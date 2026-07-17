@@ -228,25 +228,26 @@ Harden the `ato_service` safety foundation:
 
 ## Current state
 
-Implemented:
+The code-complete product stack landed with Phase 6 (2026-07-14). See [`README.md`](README.md) for local verification commands and contract-test entry points.
 
-- Contract-first `ato_service` safety foundation
-- Schema-validated runtime JSON with secret references and explicit vision gating
-- Deterministic model-routing policy, configured limits, matrix completeness, and failure taxonomy
-- Content-addressed storage, immutable manifests, replay/crash reconciliation, and PostgreSQL models/migrations
-- Health/Problem API boundary
-- OIDC session auth, fact proposal review API, React/Vite portal, and long-running synthetic intake worker
-- Deterministic-only analysis-run APIs, durable analyzer worker, exact matrix persistence, and portal run results
-- Portal/API deployment scaffold with `ato-portal.conf`, `ato-intake-worker.service`, and contract tests
+**Delivered (code-complete, contract-tested):**
 
-Not yet implemented:
+- `ato_service` API with OIDC-backed server sessions
+- React/Vite portal
+- `ato-intake-worker` and `ato-analyzer-worker` long-running workers
+- Full `/api/v1` surface: systems, package revisions, draft editor, intake, deterministic and model-assisted analysis runs, review dispositions, export approval/download, package search and bounded chat
+- `ato-operator` CLI (preflight, migration verify, qualification check, validation drills, audit verify, search-index rebuild)
+- Deployment scaffold (API, portal nginx, intake/analyzer workers, install/smoke scripts)
+- Sealed qualification corpus under `data/qualification/`
 
-- FedRAMP 20x official package contract
-- Full and targeted model-backed analysis runs
-- Secure multi-file extraction and production malware scanning
-- Review dispositions, approval workflow, and ZIP export
-- Live-validated production on-prem deployment, upgrade, rollback, backup, and restore
-- SME-labeled AI qualification
+**Not claimed (customer/environment evidence):**
+
+- Live RHEL install/upgrade/rollback drills
+- Customer IdP verification (**HS-003**)
+- Production malware scan drill (**HS-005**)
+- Real model qualification (**HS-004** / **HS-006**)
+- Qualified authority review (**HS-001**)
+- Backup-target verification (**HS-008**)
 
 The historical Block 1 developer CLI is retired. Future work extends `ato_service` in the normative phase order and preserves the runtime/deployment contract in every phase.
 

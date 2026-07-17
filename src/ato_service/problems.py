@@ -35,6 +35,7 @@ KNOWN_ERROR_CODES = frozenset(
         "database_unavailable",
         "duplicate_canonical_id",
         "etag_mismatch",
+        "export_not_ready",
         "idempotency_key_conflict",
         "idempotency_key_required",
         "if_match_required",
@@ -76,6 +77,7 @@ ERROR_TITLES: dict[str, str] = {
     "database_unavailable": "Database unavailable",
     "duplicate_canonical_id": "Duplicate canonical id",
     "etag_mismatch": "ETag mismatch",
+    "export_not_ready": "Export not ready",
     "idempotency_key_conflict": "Idempotency key conflict",
     "idempotency_key_required": "Idempotency key required",
     "if_match_required": "If-Match required",
@@ -130,6 +132,9 @@ DEFAULT_DETAILS: dict[str, str] = {
         "The package revision already contains an artifact with this digest."
     ),
     "etag_mismatch": "The supplied If-Match value is stale.",
+    "export_not_ready": (
+        "Required assessor, privacy, or profile export content is missing from the package draft."
+    ),
     "idempotency_key_conflict": (
         "The Idempotency-Key was reused with a different request digest."
     ),
@@ -201,6 +206,7 @@ ERROR_HTTP_METADATA: dict[str, tuple[int, bool]] = {
     "database_unavailable": (503, True),
     "duplicate_canonical_id": (422, False),
     "etag_mismatch": (412, True),
+    "export_not_ready": (422, False),
     "idempotency_key_conflict": (409, False),
     "idempotency_key_required": (400, False),
     "if_match_required": (428, False),
@@ -692,6 +698,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         ParentRevisionNotFoundError,
         SystemNotFoundError,
         UnconfirmedFactProposalsError,
+        ExportNotReadyForConfirmError,
     )
     from ato_service.pagination import (
         InvalidPageLimitError,
@@ -811,6 +818,7 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         retryable_for=lambda exc: exc.retryable,
     )
     _register_domain_problem_handler(app, UnconfirmedFactProposalsError)
+    _register_domain_problem_handler(app, ExportNotReadyForConfirmError)
 
     for malformed_error_type in (
         InvalidPaginationCursorError,

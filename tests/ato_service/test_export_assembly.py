@@ -135,6 +135,10 @@ def test_assemble_export_bundle_reproduces_approved_manifest_hash() -> None:
         assert "manifest.json" in names
         assert "README.txt" in names
         assert "machine/assessment-matrix.json" in names
+        assert "validation/schema-purity.json" not in names
+        assert "human/readiness-summary.md" not in names
+        assert "validation/export-readiness.json" not in names
+        assert "validation/fisma-export-readiness.json" in names
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["export_id"] == APPROVAL_ID
         for entry in manifest["files"]:

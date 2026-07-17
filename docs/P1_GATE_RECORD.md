@@ -58,7 +58,7 @@ third-party deprecation warning noted above.
 1. **HS-001 stays open.** Vendored authority bytes are pinned and digest-verified, but qualified human authority review is not complete. Authority-dependent implementation and release remain blocked.
 2. **Other customer-specific hard stops** (`HS-002` through `HS-009`, and customer overrides for `HS-010`) remain open and scoped to the phases that need them. They are recorded, not resolved.
 3. **P0 core safety work may proceed.** Section 34 requires hard stops to be resolved or recorded and authority sources to be pinned and hashed. P-1 satisfies those publication criteria. P0 does not require qualified authority review, customer IdP values, production scanner operation, or AI qualification.
-4. **Unresolved lifecycle details do not block P0.** Job `status` enum, `attempt_count` increment timing, `pending_approval -> expired` deadline, and Disposition decision graphs remain explicitly deferred in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 6 until a later contract amendment.
+4. **Unresolved lifecycle details do not block P0.** Job `status` enum, `attempt_count` increment timing, `pending_approval -> expired` deadline, and Disposition decision graphs remain explicitly deferred in `docs/contracts/LIFECYCLE_AND_ERRORS.md` Section 6 until a later contract amendment (superseded by later addenda and LIFECYCLE §6 reconciliation).
 5. **No external approvals are claimed.** This gate records internal repository evidence only.
 
 ## Next phase

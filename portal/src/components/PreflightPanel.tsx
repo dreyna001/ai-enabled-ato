@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { PreflightCheckList, buildPreflightCheckMessageMap } from "@/components/PreflightCheckList";
 import { getPreflight, isCancelledRequest } from "@/api/client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -47,9 +47,11 @@ export function PreflightPanel({ revisionId, onPreflightChange }: PreflightPanel
     return () => controller.abort();
   }, [revisionId]);
 
+  const checkMessages = buildPreflightCheckMessageMap(preflight?.deterministic_checks);
+
   if (error) {
     return (
-      <Card>
+      <Card id="preflight">
         <CardHeader>
           <CardTitle className="text-base">Preflight</CardTitle>
         </CardHeader>
@@ -65,7 +67,7 @@ export function PreflightPanel({ revisionId, onPreflightChange }: PreflightPanel
 
   if (loading || !preflight) {
     return (
-      <Card>
+      <Card id="preflight">
         <CardHeader>
           <CardTitle className="text-base">Preflight</CardTitle>
           <CardDescription>Evaluating analysis and export readiness…</CardDescription>
@@ -75,64 +77,51 @@ export function PreflightPanel({ revisionId, onPreflightChange }: PreflightPanel
   }
 
   return (
-    <Card>
+    <Card id="preflight">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div>
           <CardTitle className="text-base">Preflight</CardTitle>
-          <CardDescription className="flex flex-wrap items-center gap-2">
-            <span>Analysis eligible</span>
-            <Badge variant={preflight.analysis_eligible ? "default" : "destructive"}>
-              {preflight.analysis_eligible ? "yes" : "no"}
-            </Badge>
-            <span>· Export eligible</span>
-            <Badge variant={preflight.export_eligible ? "default" : "destructive"}>
-              {preflight.export_eligible ? "yes" : "no"}
-            </Badge>
-            <span>
-              · Score {preflight.readiness.numerator}/{preflight.readiness.denominator}
-            </span>
+          <CardDescription>
+            {preflight.analysis_eligible &&
+            preflight.analysis_blockers.length === 0 &&
+            preflight.export_blockers.length === 0 &&
+            preflight.warnings.length === 0
+              ? "Analysis and export checks passed."
+              : "Readiness checks for analysis runs and export drafts."}
           </CardDescription>
         </div>
         <Button type="button" size="sm" variant="ghost" onClick={() => void refresh()}>
           Refresh
         </Button>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="space-y-4 text-sm">
         {!preflight.analysis_eligible ? (
-          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-50">
+          <p className="rounded-sm border border-border border-l-4 border-l-amber-500 bg-card px-3 py-2 text-foreground">
             Analysis runs are blocked until preflight blockers are resolved.
           </p>
         ) : null}
-        {preflight.analysis_blockers.length > 0 ? (
-          <div>
-            <p className="font-medium">Analysis blockers</p>
-            <ul className="list-disc pl-5 text-muted-foreground">
-              {preflight.analysis_blockers.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
+        {!preflight.export_eligible ? (
+          <p className="rounded-sm border border-border border-l-4 border-l-destructive bg-card px-3 py-2 text-foreground">
+            Export drafts are blocked until the export blockers below are resolved in the
+            sealed package.
+          </p>
         ) : null}
-        {preflight.export_blockers.length > 0 ? (
-          <div>
-            <p className="font-medium">Export blockers</p>
-            <ul className="list-disc pl-5 text-muted-foreground">
-              {preflight.export_blockers.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {preflight.warnings.length > 0 ? (
-          <div>
-            <p className="font-medium">Warnings</p>
-            <ul className="list-disc pl-5 text-muted-foreground">
-              {preflight.warnings.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <PreflightCheckList
+          title="Analysis blockers"
+          codes={preflight.analysis_blockers}
+          checkMessages={checkMessages}
+        />
+        <PreflightCheckList
+          title="Export blockers"
+          codes={preflight.export_blockers}
+          checkMessages={checkMessages}
+        />
+        <PreflightCheckList
+          title="Warnings"
+          codes={preflight.warnings}
+          checkMessages={checkMessages}
+          tone="warning"
+        />
       </CardContent>
     </Card>
   );

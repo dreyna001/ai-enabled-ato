@@ -57,10 +57,12 @@ def generate_fisma_security_artifacts(
     dispositions: list[dict[str, Any]] | None,
     matrix_rows: list[dict[str, Any]] | None,
     template_pack: LoadedFismaTemplatePack | None = None,
+    additional_readiness_blockers: tuple[str, ...] | None = None,
+    additional_readiness_warnings: tuple[str, ...] | None = None,
 ) -> FismaGenerationResult:
     """Generate deterministic FISMA security-only draft artifacts and provenance."""
-    blockers: list[str] = []
-    warnings: list[str] = []
+    blockers: list[str] = list(additional_readiness_blockers or ())
+    warnings: list[str] = list(additional_readiness_warnings or ())
     rendering_mode = "generic_draft"
     mapped_fields: dict[str, dict[str, Any]] = {}
 

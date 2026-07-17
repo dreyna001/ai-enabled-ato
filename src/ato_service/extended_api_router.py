@@ -17,6 +17,8 @@ from ato_service.api_router import get_mutation_principal, get_read_principal
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.authorization_decisions import (
     AttachAuthorizationDecisionInput,
+    AuthorizationDecisionNotFoundError,
+    AuthorizationDecisionValidationError,
     attach_authorization_decision,
     list_authorization_decisions,
 )
@@ -359,35 +361,54 @@ def build_extended_router() -> APIRouter:
         idempotency_key: IdempotencyKeyHeader,
         package_revision_id: uuid.UUID | None = None,
     ) -> JSONResponse:
-        result = await attach_authorization_decision(
-            session,
-            principal=principal,
-            system_id=system_id,
-            package_revision_id=package_revision_id,
-            request=AttachAuthorizationDecisionInput(
-                decision_type=body.decision_type,
-                decision_date=body.decision_date,
-                issuing_authority=body.issuing_authority,
-                artifact_id=body.artifact_id,
-                notes=body.notes,
-            ),
-            idempotency_key=idempotency_key,
-            hmac_key=audit_hmac_key,
-            now=_utc_now(),
-        )
+        try:
+            result = await attach_authorization_decision(
+                session,
+                principal=principal,
+                system_id=system_id,
+                package_revision_id=package_revision_id,
+                request=AttachAuthorizationDecisionInput(
+                    decision_type=body.decision_type,
+                    decision_date=body.decision_date,
+                    issuing_authority=body.issuing_authority,
+                    artifact_id=body.artifact_id,
+                    notes=body.notes,
+                ),
+                idempotency_key=idempotency_key,
+                hmac_key=audit_hmac_key,
+                now=_utc_now(),
+            )
+        except AuthorizationDecisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "resource_not_found"})
+        except AuthorizationDecisionValidationError as exc:
+            return JSONResponse(
+                status_code=422,
+                content={"error": exc.error_code, "error_code": exc.error_code},
+            )
+        except AuthorizationDeniedError:
+            return JSONResponse(status_code=403, content={"error": "authorization_denied"})
         return JSONResponse(status_code=result.status, content=result.payload)
 
-    @router.get("/systems/{system_id}/authorization-decisions", tags=["Packages"])
+    @router.get(
+        "/systems/{system_id}/authorization-decisions",
+        tags=["Packages"],
+        response_model=None,
+    )
     async def get_authorization_decisions(
         system_id: uuid.UUID,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
-    ) -> dict[str, Any]:
-        items = await list_authorization_decisions(
-            session,
-            principal=principal,
-            system_id=system_id,
-        )
+    ):
+        try:
+            items = await list_authorization_decisions(
+                session,
+                principal=principal,
+                system_id=system_id,
+            )
+        except AuthorizationDecisionNotFoundError:
+            return JSONResponse(status_code=404, content={"error": "resource_not_found"})
+        except AuthorizationDeniedError:
+            return JSONResponse(status_code=403, content={"error": "authorization_denied"})
         return {"items": list(items)}
 
     @router.post("/runs/{run_id}/review-revisions", status_code=201, tags=["Reviews"])

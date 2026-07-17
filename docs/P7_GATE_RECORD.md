@@ -1,7 +1,7 @@
 # P7 Gate Record (Complete on-prem release)
 
 **Gate:** Section 31 P7 — Complete on-prem release  
-**Outcome:** TEMPLATE — deployment contracts PASS (code); live-host drills environment-not-run  
+**Outcome:** PASS (code) — deployment contracts verified; live-host drills environment-not-run  
 **Recorded:** 2026-07-14  
 **Classification:** PASS (code) | environment-not-run (live RHEL) | customer-gated (HS-005, HS-008)
 
@@ -37,6 +37,6 @@ python -m pytest tests/test_deployment_contract.py tests/ato_operator/test_drill
 - Customer backup target and key ownership (**HS-008**)
 - Production readiness while **HS-001**, **HS-003**, **HS-004** remain open for claimed scope
 
-## Record template for live drill evidence
+## Live drill record format
 
 When a live drill completes on a customer or lab host, append an immutable record under `/var/lib/ato/validation-drill-records/` per [`validation-drill-record.schema.json`](contracts/validation-drill-record.schema.json). Set `hard_stop_claims` explicitly; never mark a hard stop `closed` without customer/authority evidence paths listed in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).

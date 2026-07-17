@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { listMatrixRows, isCancelledRequest } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,7 +139,7 @@ export function MatrixResultsPanel({ run }: MatrixResultsPanelProps) {
               </Button>
             </div>
           </div>
-          <div className="overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-sm border">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
@@ -152,9 +153,11 @@ export function MatrixResultsPanel({ run }: MatrixResultsPanelProps) {
                 {rows.map((row) => (
                   <tr
                     key={row.matrix_row_id}
-                    className={`border-b border-border/60 last:border-0 cursor-pointer ${
-                      row.matrix_row_id === selectedRowId ? "bg-muted/30" : ""
-                    }`}
+                    className={cn(
+                      "cursor-pointer border-b border-border/60 last:border-0",
+                      row.matrix_row_id === selectedRowId &&
+                        "bg-muted ring-1 ring-inset ring-link",
+                    )}
                     onClick={() => setSelectedRowId(row.matrix_row_id)}
                   >
                     <td className="px-4 py-3 align-top font-mono text-xs">
@@ -215,7 +218,7 @@ function MatrixRowDetail({ row }: { row: MatrixRow }) {
             <p className="font-medium">Citations</p>
             <ul className="space-y-2">
               {row.citations.map((citation, index) => (
-                <li key={`${citation.source_sha256 ?? index}-${index}`} className="rounded border p-2 text-xs">
+                <li key={`${citation.source_sha256 ?? index}-${index}`} className="rounded-sm border p-2 text-xs">
                   <span className="font-mono">
                     {citation.source_kind ?? "source"} ·{" "}
                     {(citation.source_sha256 ?? citation.sha256 ?? "").slice(0, 16)}

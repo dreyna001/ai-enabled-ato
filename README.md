@@ -4,6 +4,8 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 
 ## Docs
 
+### Core docs
+
 | File | Purpose |
 | --- | --- |
 | [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md) | **Normative** product, security, and implementation contract |
@@ -20,10 +22,23 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 | [`docs/contracts/LIFECYCLE_AND_ERRORS.md`](docs/contracts/LIFECYCLE_AND_ERRORS.md) | Legal transitions and stable error taxonomy |
 | [`docs/requirements/traceability.yaml`](docs/requirements/traceability.yaml) | Normative requirement ownership and verification status |
 | [`docs/requirements/hard-stops.yaml`](docs/requirements/hard-stops.yaml) | Customer and authority inputs that implementation must not infer |
-| [`docs/P1_GATE_RECORD.md`](docs/P1_GATE_RECORD.md) | P-1 / EP-00 gate outcome, evidence, and constraints |
-| [`docs/P0_GATE_RECORD.md`](docs/P0_GATE_RECORD.md) | P0 deterministic foundation gate outcome, evidence, and residuals |
-| [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md) | Contract tests, qualification manifests, CI jobs, migration head, gate records, and missing live evidence |
 | [`docs/P6_GATE_RECORD.md`](docs/P6_GATE_RECORD.md) | Phase 6 documentation and contract reconciliation gate |
+
+### Plans, operator, and evidence
+
+| File | Purpose |
+| --- | --- |
+| **Plans** | |
+| [`docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md`](docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md) | Master plan — components, phases, delivered-status reconciliation |
+| [`docs/PACKAGE_EDITOR_PLAN.md`](docs/PACKAGE_EDITOR_PLAN.md) | Component A — intake, extraction, draft editor, sealed confirm |
+| [`docs/THIRD_PARTY_HARDENING_PLAN.md`](docs/THIRD_PARTY_HARDENING_PLAN.md) | OIDC and ClamAV production adapters; optional dependency hardening |
+| **Operator / release** | |
+| [`docs/CUSTOMER_ONBOARDING.md`](docs/CUSTOMER_ONBOARDING.md) | Customer operator onboarding checklist for on-prem installs |
+| [`docs/AIRGAP_PRESTAGE.md`](docs/AIRGAP_PRESTAGE.md) | Airgap dependency prestaging on a connected bastion |
+| [`docs/RELEASE_PACKAGING.md`](docs/RELEASE_PACKAGING.md) | Deterministic release archives and offline verification |
+| [`docs/WSL_LOCAL_DEPLOY.md`](docs/WSL_LOCAL_DEPLOY.md) | WSL local deploy with production-shaped paths and systemd |
+| **Gate records** | |
+| [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md) | P0–P7 gate records, [`P6 analysis gate`](docs/P6_ANALYSIS_GATE_RECORD.md), contract tests, and missing live evidence |
 
 ## Current state
 

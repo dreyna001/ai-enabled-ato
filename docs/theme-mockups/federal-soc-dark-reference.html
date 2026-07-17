@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Federal SOC Dark — full theme reference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --page: #0d1117;
+      --surface: #161b22;
+      --surface-alt: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #1f6feb;
+      --accent-text: #ffffff;
+      --danger: #f85149;
+      --success: #3fb950;
+      --warning: #d29922;
+      --radius: 2px;
+      --font: "Public Sans", "Source Sans Pro", system-ui, sans-serif;
+      --mono: "Roboto Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--page);
+      color: var(--text);
+      font-family: var(--font);
+      padding: 40px 24px 64px;
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      max-width: 640px;
+    }
+
+    .subtitle code {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    h2 {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+    }
+
+    /* ---- mockup ---- */
+    .mockup {
+      background: var(--page);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-width: 560px;
+      overflow: hidden;
+    }
+
+    .mockup-inner {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h3 {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .header .meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      margin-top: 2px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: var(--radius);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--page);
+    }
+
+    .badge-success { background: var(--success); }
+    .badge-warning { background: var(--warning); }
+
+    .preflight {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--warning);
+      border-radius: var(--radius);
+      padding: 10px;
+    }
+
+    .preflight h4 {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .preflight p { font-size: 11px; color: var(--text-muted); }
+
+    .preflight .blockers {
+      font-size: 11px;
+      color: var(--danger);
+      font-family: var(--mono);
+      margin-top: 4px;
+    }
+
+    .run-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .run-row.selected {
+      border-color: var(--accent);
+      background: var(--surface-alt);
+    }
+
+    .actions { display: flex; gap: 8px; }
+
+    .btn {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: default;
+    }
+
+    .btn-primary { background: var(--accent); color: var(--accent-text); }
+
+    .btn-outline {
+      background: transparent;
+      color: #58a6ff;
+      border: 1px solid #58a6ff;
+    }
+
+    /* ---- swatches ---- */
+    .swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .swatch { display: flex; align-items: center; gap: 5px; }
+
+    .swatch-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+
+    .swatch code { font-family: var(--mono); font-size: 10px; }
+
+    /* ---- tables ---- */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 720px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+    }
+
+    th, td {
+      text-align: left;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--surface);
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-muted);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    td code { font-family: var(--mono); font-size: 11px; }
+
+    td .chip {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      border: 1px solid var(--border);
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+
+    .pass { color: var(--success); font-weight: 700; }
+
+    .note {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--success);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      max-width: 720px;
+    }
+
+    .note strong { color: var(--text); }
+
+    .note code { font-family: var(--mono); font-size: 11px; color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <h1>Federal SOC Dark — full theme reference</h1>
+      <p class="subtitle" style="margin-top:8px">
+        The shipped portal theme: SOC dark-console palette, USWDS square edges
+        (2px radius), Public Sans for UI text, Roboto Mono for identifiers.
+        Source of truth: <code>portal/src/index.css</code> and
+        <code>docs/PORTAL_THEME.md</code>.
+      </p>
+    </div>
+
+    <div>
+      <h2>Workflow mockup</h2>
+      <div class="mockup" style="margin-top:10px">
+        <div class="mockup-inner">
+          <div class="header">
+            <div>
+              <h3>Revision Workflow</h3>
+              <div class="meta">dd28a575 · version 9</div>
+            </div>
+            <span class="badge badge-success">Ready</span>
+          </div>
+
+          <div class="preflight">
+            <h4>Preflight — Score 3/5</h4>
+            <p>
+              Analysis eligible: <strong style="color:var(--success)">yes</strong>
+              · Export eligible: <strong style="color:var(--danger)">no</strong>
+            </p>
+            <div class="blockers">assessor.inputs_present · privacy.artifacts_present</div>
+          </div>
+
+          <div class="run-row selected">
+            <span>Deterministic · Jul 16, 10:45 PM</span>
+            <span class="badge badge-success">Succeeded</span>
+          </div>
+          <div class="run-row">
+            <span>Targeted · Jul 16, 11:02 PM</span>
+            <span class="badge badge-warning">Running</span>
+          </div>
+
+          <div class="actions">
+            <span class="btn btn-primary">Start Deterministic Run</span>
+            <span class="btn btn-outline">Start Targeted Run</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Palette</h2>
+      <div class="swatches" style="margin-top:10px">
+        <div class="swatch"><span class="swatch-dot" style="background:#0d1117"></span> page <code>#0d1117</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#161b22"></span> surface <code>#161b22</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#1c2129"></span> muted <code>#1c2129</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#30363d"></span> border <code>#30363d</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#1f6feb"></span> primary <code>#1f6feb</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#f85149"></span> danger <code>#f85149</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#3fb950"></span> success <code>#3fb950</code></div>
+        <div class="swatch"><span class="swatch-dot" style="background:#d29922"></span> warning <code>#d29922</code></div>
+      </div>
+    </div>
+
+    <div>
+      <h2>shadcn CSS variables (as applied in index.css)</h2>
+      <table style="margin-top:10px">
+        <thead>
+          <tr><th>Variable</th><th>Value</th><th>Usage</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>--radius</code></td><td><code>0.125rem</code></td><td>2px corners; sm/md steps clamp to square</td></tr>
+          <tr><td><code>--background</code></td><td><span class="chip" style="background:#0d1117"></span><code>#0d1117</code></td><td>Page background</td></tr>
+          <tr><td><code>--card</code></td><td><span class="chip" style="background:#161b22"></span><code>#161b22</code></td><td>Cards, panels, popovers</td></tr>
+          <tr><td><code>--muted</code> / <code>--secondary</code></td><td><span class="chip" style="background:#1c2129"></span><code>#1c2129</code></td><td>Muted fills, selected rows</td></tr>
+          <tr><td><code>--border</code> / <code>--input</code></td><td><span class="chip" style="background:#30363d"></span><code>#30363d</code></td><td>Borders, input outlines</td></tr>
+          <tr><td><code>--foreground</code></td><td><span class="chip" style="background:#e6edf3"></span><code>#e6edf3</code></td><td>Primary text</td></tr>
+          <tr><td><code>--muted-foreground</code></td><td><span class="chip" style="background:#8b949e"></span><code>#8b949e</code></td><td>Secondary text</td></tr>
+          <tr><td><code>--primary</code> / <code>--ring</code></td><td><span class="chip" style="background:#1f6feb"></span><code>#1f6feb</code></td><td>Buttons, focus ring</td></tr>
+          <tr><td><code>--destructive</code></td><td><span class="chip" style="background:#f85149"></span><code>#f85149</code></td><td>Errors, blockers</td></tr>
+          <tr><td><code>--sidebar</code></td><td><span class="chip" style="background:#10141a"></span><code>#10141a</code></td><td>Sidebar background</td></tr>
+          <tr><td>Badge success</td><td><code>emerald-400</code> on 15% fill</td><td>Succeeded / Ready states</td></tr>
+          <tr><td>Badge warning</td><td><code>amber-400</code> on 15% fill</td><td>Running / caution states</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>Accessibility (WCAG contrast on #0d1117)</h2>
+      <table style="margin-top:10px">
+        <thead>
+          <tr><th>Pair</th><th>Ratio</th><th>AA (4.5:1)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>White on primary <code>#1f6feb</code> (buttons)</td><td>4.6:1</td><td class="pass">Pass</td></tr>
+          <tr><td>Body text <code>#e6edf3</code></td><td>≈15:1</td><td class="pass">Pass</td></tr>
+          <tr><td>Muted text <code>#8b949e</code></td><td>6.2:1</td><td class="pass">Pass</td></tr>
+          <tr><td>Destructive <code>#f85149</code></td><td>5.6:1</td><td class="pass">Pass</td></tr>
+        </tbody>
+      </table>
+      <p class="subtitle" style="margin-top:8px">
+        The brighter SOC-mockup blue <code>#2f81f7</code> fails AA at 3.7:1
+        with white text and is not used for filled buttons.
+      </p>
+    </div>
+
+    <div class="note">
+      <strong>Not ephemeral.</strong> This file lives in git at
+      <code>docs/theme-mockups/federal-soc-dark-reference.html</code>.
+      The live theme is <code>portal/src/index.css</code>; the written spec is
+      <code>docs/PORTAL_THEME.md</code>. Open this file in any browser — no
+      Cursor required.
+    </div>
+  </div>
+</body>
+</html>

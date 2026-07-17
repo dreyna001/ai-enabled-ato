@@ -209,6 +209,9 @@ def test_profile_artifacts_and_export_bundle_are_reproducible() -> None:
         assert "machine/ssp-security-draft.json" in names
         assert "human/poam-draft.md" in names
         assert "validation/fisma-export-readiness.json" in names
+        assert "validation/schema-purity.json" not in names
+        assert "human/readiness-summary.md" not in names
+        assert "validation/export-readiness.json" not in names
         assert "machine/fisma-agency-security-draft.json" not in names
         for entry in bundle.manifest["files"]:
             payload = archive.read(entry["path"])

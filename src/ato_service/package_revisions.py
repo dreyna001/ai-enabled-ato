@@ -40,6 +40,7 @@ from ato_service.content_manifests import (
 )
 from ato_service.db import enums as ev
 from ato_service.domain_mapping import format_uuid, map_package_revision_to_domain
+from ato_service.package_preparation_status import resolve_preparation_status_batch
 from ato_service.idempotency import (
     IdempotencyReplay,
     load_idempotency_replay,
@@ -137,6 +138,16 @@ class UnconfirmedFactProposalsError(Exception):
     """Raised when confirm is blocked by pending fact proposals."""
 
     error_code = "unconfirmed_fact_proposals"
+
+
+class ExportNotReadyForConfirmError(Exception):
+    """Raised when confirm is blocked by export-readiness blockers on the draft."""
+
+    error_code = "export_not_ready"
+
+    def __init__(self, blockers: tuple[str, ...]) -> None:
+        self.blockers = blockers
+        super().__init__("export readiness blockers remain")
 
 
 class PackageRevisionStorageError(Exception):
@@ -458,6 +469,50 @@ def _mutation_result_from_replay(
     )
 
 
+async def _domain_payload_with_preparation_status(
+    session: AsyncSession,
+    package_revision: Any,
+    *,
+    project_root: Path | None,
+    now: datetime,
+) -> dict[str, Any]:
+    statuses = await resolve_preparation_status_batch(
+        session,
+        (package_revision.package_revision_id,),
+        project_root=project_root,
+        now=now,
+    )
+    return map_package_revision_to_domain(
+        package_revision,
+        package_preparation_status=statuses[package_revision.package_revision_id],
+    )
+
+
+async def _domain_payloads_with_preparation_status(
+    session: AsyncSession,
+    package_revisions: list[Any],
+    *,
+    project_root: Path | None,
+    now: datetime,
+) -> tuple[dict[str, Any], ...]:
+    if not package_revisions:
+        return ()
+    revision_ids = tuple(revision.package_revision_id for revision in package_revisions)
+    statuses = await resolve_preparation_status_batch(
+        session,
+        revision_ids,
+        project_root=project_root,
+        now=now,
+    )
+    return tuple(
+        map_package_revision_to_domain(
+            revision,
+            package_preparation_status=statuses[revision.package_revision_id],
+        )
+        for revision in package_revisions
+    )
+
+
 def _manifest_source_entries(artifacts: list[Any]) -> tuple[ManifestSourceEntry, ...]:
     return tuple(
         ManifestSourceEntry(
@@ -499,6 +554,8 @@ async def get_package_revision(
     *,
     principal: AuthenticatedPrincipal,
     package_revision_id: uuid.UUID,
+    project_root: Path | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Load one package revision after read authorization."""
     result = await session.execute(
@@ -510,7 +567,13 @@ async def get_package_revision(
 
     package_revision, system = row
     require_package_role(principal, system=system, revision=package_revision, role=ROLE_VIEWER)
-    return map_package_revision_to_domain(package_revision)
+    resolved_now = now if now is not None else datetime.now(timezone.utc)
+    return await _domain_payload_with_preparation_status(
+        session,
+        package_revision,
+        project_root=project_root,
+        now=resolved_now,
+    )
 
 
 async def list_package_revisions(
@@ -520,6 +583,8 @@ async def list_package_revisions(
     system_id: uuid.UUID,
     cursor: str | None = None,
     limit: int | None = None,
+    project_root: Path | None = None,
+    now: datetime | None = None,
 ) -> PackageRevisionListResult:
     """List package revisions for a system using stable cursor pagination."""
     system_result = await session.execute(_load_system_statement(system_id))
@@ -548,8 +613,15 @@ async def list_package_revisions(
         last = page_rows[-1]
         next_cursor = encode_pagination_cursor(last.created_at, last.package_revision_id)
 
+    resolved_now = now if now is not None else datetime.now(timezone.utc)
+    items = await _domain_payloads_with_preparation_status(
+        session,
+        page_rows,
+        project_root=project_root,
+        now=resolved_now,
+    )
     return PackageRevisionListResult(
-        items=tuple(map_package_revision_to_domain(row) for row in page_rows),
+        items=items,
         next_cursor=next_cursor,
     )
 
@@ -764,7 +836,12 @@ async def finalize_package_revision(
         now=validated_now,
     )
 
-    payload = map_package_revision_to_domain(package_revision)
+    payload = await _domain_payload_with_preparation_status(
+        session,
+        package_revision,
+        project_root=project_root,
+        now=validated_now,
+    )
     await append_audit_event(
         session,
         hmac_key=hmac_key,
@@ -808,6 +885,7 @@ async def confirm_package_revision(
     idempotency_key: str,
     hmac_key: bytes,
     now: datetime,
+    project_root: Path | None = None,
     config: Any | None = None,
     blob_store: Any | None = None,
 ) -> PackageRevisionMutationResult:
@@ -876,6 +954,24 @@ async def confirm_package_revision(
             "confirm_path": "legacy_fact_proposals",
         }
     else:
+        if project_root is not None:
+            from ato_service.export_readiness import (
+                evaluate_export_readiness,
+                portal_export_blocker_codes,
+            )
+            from ato_service.export_service import _optional_runtime_config_document
+
+            readiness = evaluate_export_readiness(
+                profile_id=package_revision.profile_id,
+                sealed_document=draft.document,
+                project_root=project_root,
+                runtime_config_document=_optional_runtime_config_document(project_root),
+            )
+            if readiness.blockers:
+                raise ExportNotReadyForConfirmError(
+                    portal_export_blocker_codes(readiness.blockers)
+                )
+
         content_sha256, snapshot_id = await seal_package_revision_draft(
             session,
             package_revision=package_revision,
@@ -914,7 +1010,12 @@ async def confirm_package_revision(
                 now=validated_now,
             )
 
-    payload = map_package_revision_to_domain(package_revision)
+    payload = await _domain_payload_with_preparation_status(
+        session,
+        package_revision,
+        project_root=project_root,
+        now=validated_now,
+    )
     await append_audit_event(
         session,
         hmac_key=hmac_key,

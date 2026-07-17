@@ -1,6 +1,6 @@
 # Third-Party Hardening and Production Adapter Plan
 
-Status: Partially implemented — Authlib OIDC and ClamAV adapter contract landed; jsonpointer consolidation optional.
+Status: Contract work delivered (Authlib OIDC, ClamAV adapter); optional jsonpointer consolidation remains backlog.
 
 Normative contracts remain in [`ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md),
 [`docs/THREAT_MODEL.md`](THREAT_MODEL.md), and
@@ -25,6 +25,10 @@ must not depend on outbound internet access. Operator procedures may use offline
 media or internal mirrors for signature and package updates; the application must
 not call public SaaS APIs for auth, scanning, or model hosting in production profiles.
 
+## Open backlog
+
+- jsonpointer RFC 6901 consolidation (optional, no gate blocker)
+
 ## 2. On-prem and airgap constraints (all workstreams)
 
 | Boundary | Allowed | Forbidden |
@@ -45,17 +49,17 @@ approved change window), not an application runtime dependency on the public int
 ```text
 Component A Diff 5 (draft APIs)     — continues on main product track
   ||
-  |+-> Security slice A1 (Authlib OIDC) — before production OIDC go-live / HS-003 claims
+  |+-> Security slice A1 (Authlib OIDC) — delivered; live IdP drill remains HS-003 customer-gated
   |
-  +-> Diff 7 (ClamAV adapter)     — closes HS-005; can parallel A1 after intake path stable
+  +-> Diff 7 (ClamAV adapter)     — delivered (contract); live scanner drill remains HS-005 customer-gated
   |
-  +-> Spike B1 (jsonpointer)      — small follow-up; no gate blocker
+  +-> Spike B1 (jsonpointer)      — optional backlog; no gate blocker
 ```
 
-Authlib OIDC should land before any production deployment claims that depend on
-real IdP login. ClamAV aligns with [`docs/PACKAGE_EDITOR_PLAN.md`](PACKAGE_EDITOR_PLAN.md)
-Diff 7 and Component I deployment. The jsonpointer spike is optional consolidation
-with a go/no-go verdict before merge.
+Authlib OIDC and the ClamAV adapter are delivered in code. Production deployment
+claims that depend on real IdP login or live scanning remain customer-gated
+(**HS-003**, **HS-005**). The jsonpointer consolidation spike is optional backlog
+with a recorded no-go verdict; no merge required.
 
 ## 4. Workstream 1 — Authlib OIDC (replace now)
 

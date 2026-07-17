@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,46 @@ class ExportReadinessResult:
     blockers: tuple[str, ...]
     warnings: tuple[str, ...]
     structural_checks_passed: bool
+
+
+EXPORT_BLOCKER_PORTAL_CODES: dict[str, str] = {
+    "missing_assessor_inputs": "assessor.inputs_present",
+    "missing_privacy_artifacts": "privacy.artifacts_present",
+}
+
+
+def portal_export_blocker_codes(blockers: tuple[str, ...]) -> tuple[str, ...]:
+    """Map structural export blockers to portal preflight-style check ids."""
+    mapped: list[str] = []
+    for code in blockers:
+        mapped.append(EXPORT_BLOCKER_PORTAL_CODES.get(code, code))
+    return tuple(sorted(set(mapped)))
+
+
+def export_readiness_payload(
+    *,
+    package_revision_id: uuid.UUID,
+    profile_id: str,
+    document: dict[str, Any],
+    project_root: Path,
+    runtime_config_document: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a portal-friendly export-readiness view for one package document."""
+    readiness = evaluate_export_readiness(
+        profile_id=profile_id,
+        sealed_document=document,
+        project_root=project_root,
+        runtime_config_document=runtime_config_document,
+    )
+    return {
+        "schema_version": "1.0.0",
+        "package_revision_id": str(package_revision_id).lower(),
+        "profile_id": profile_id,
+        "export_eligible": not readiness.blockers,
+        "export_blockers": list(portal_export_blocker_codes(readiness.blockers)),
+        "warnings": list(readiness.warnings),
+        "structural_checks_passed": readiness.structural_checks_passed,
+    }
 
 
 def evaluate_export_readiness(

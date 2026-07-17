@@ -1,0 +1,88 @@
+## fix/package-workflow-demo-runtime...origin/fix/package-workflow-demo-runtime
+ M ATO_AI_ACCELERATOR_PLAN.md
+ M README.md
+ M deployment/config/runtime-config.wsl_portal.bedrock.json
+ M docs/P1_GATE_RECORD.md
+ M docs/P7_GATE_RECORD.md
+ M docs/PACKAGE_EDITOR_PLAN.md
+ M docs/RELEASE_EVIDENCE_INDEX.md
+ M docs/THIRD_PARTY_HARDENING_PLAN.md
+ D docs/WSL_CURSOR_SHELL_INTEGRATION_FIX.md
+ M docs/contracts/LIFECYCLE_AND_ERRORS.md
+ M docs/contracts/domain.schema.json
+ M docs/contracts/fixtures/domain.invalid.profile-boundary.json
+ M docs/contracts/fixtures/domain.invalid.ready-null-manifest.json
+ M docs/contracts/fixtures/domain.valid.fisma-package-revision.json
+ M docs/contracts/fixtures/domain.valid.uploading-null-manifest.json
+ M docs/contracts/openapi.json
+ M portal/e2e/security/rendering-authz.spec.ts
+ M portal/openapi/domain.schema.json
+ M portal/openapi/portal.openapi.json
+ M portal/src/api/client.test.ts
+ M portal/src/api/client.ts
+ M portal/src/api/responseSchemas.test.ts
+ M portal/src/api/responseSchemas.ts
+ M portal/src/components/AppErrorBoundary.tsx
+ M portal/src/components/ChangeAnalysisPanel.tsx
+ M portal/src/components/DependencyCapabilityPanel.tsx
+ M portal/src/components/EmptyState.tsx
+ M portal/src/components/IntakeProgressPanel.tsx
+ M portal/src/components/LoadingSkeletons.tsx
+ M portal/src/components/MatrixResultsPanel.tsx
+ M portal/src/components/PackageAssistantPanel.tsx
+ M portal/src/components/PackageEditor.tsx
+ M portal/src/components/PackageUploadPanel.tsx
+ M portal/src/components/PortalCapabilityBanner.tsx
+ M portal/src/components/PortalNavSidebar.tsx
+ M portal/src/components/PreflightPanel.tsx
+ M portal/src/components/ReviewExportWorkbench.tsx
+ M portal/src/components/RevisionCreateForm.tsx
+ M portal/src/components/RunArtifactsPanel.tsx
+ M portal/src/components/TerminalIntakePanel.tsx
+ M portal/src/components/ui/badge.tsx
+ M portal/src/components/ui/button.tsx
+ M portal/src/components/ui/card.tsx
+ M portal/src/components/ui/input.tsx
+ M portal/src/components/ui/tabs.tsx
+ M portal/src/index.css
+ M portal/src/pages/WorkflowPage.tsx
+ M portal/src/types.ts
+ M portal/src/utils/problemMessages.ts
+ M portal/src/utils/revisionDefaults.test.ts
+ M portal/src/utils/statusLabels.ts
+ M src/ato_service/api_router.py
+ M src/ato_service/authorization_decisions.py
+ M src/ato_service/domain_mapping.py
+ M src/ato_service/export_readiness.py
+ M src/ato_service/export_service.py
+ M src/ato_service/extended_api_router.py
+ M src/ato_service/fisma_generator.py
+ M src/ato_service/package_chat.py
+ M src/ato_service/package_revision_drafts.py
+ M src/ato_service/package_revisions.py
+ M src/ato_service/problems.py
+ M src/ato_service/profile_artifacts.py
+ M src/ato_service/review_revisions.py
+ M tests/ato_service/test_downstream_contracts.py
+ M tests/ato_service/test_export_assembly.py
+ M tests/ato_service/test_fisma_generator.py
+ M tests/ato_service/test_package_api_routes.py
+ M tests/ato_service/test_package_revision_drafts.py
+ M tests/ato_service/test_problem_taxonomy.py
+ M tests/ato_service/test_profile_artifacts.py
+ M tests/test_contracts.py
+?? docs/PORTAL_THEME.md
+?? docs/contracts/fixtures/domain.valid.authorization-decision-record.json
+?? docs/theme-mockups/
+?? git-status-report.txt
+?? portal/src/components/DraftConfirmReadinessPanel.tsx
+?? portal/src/components/PackageAssistantPanel.test.tsx
+?? portal/src/components/PreflightCheckList.tsx
+?? portal/src/utils/preflightLabels.test.ts
+?? portal/src/utils/preflightLabels.ts
+?? portal/src/utils/statusLabels.test.ts
+?? scripts/wsl_chat_demo_ready.py
+?? src/ato_service/package_preparation_status.py
+?? tests/ato_service/test_external_status_api_routes.py
+?? tests/ato_service/test_package_chat.py
+?? tests/ato_service/test_package_preparation_status.py

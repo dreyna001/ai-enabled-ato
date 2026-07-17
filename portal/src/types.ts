@@ -44,6 +44,7 @@ export type PackageRevision = {
   system_id: string;
   parent_revision_id?: string | null;
   status: string;
+  package_preparation_status: "in_progress" | "ready_for_external_review";
   revision_version: number;
   profile_id: string;
   data_origin: string;
@@ -180,17 +181,33 @@ export type MatrixPage = {
   next_cursor: string | null;
 };
 
+export type PreflightDeterministicCheck = {
+  check_id: string;
+  severity: string;
+  outcome: string;
+  message: string;
+};
+
 export type PreflightResult = {
   analysis_eligible: boolean;
   export_eligible: boolean;
   analysis_blockers: string[];
   export_blockers: string[];
   warnings: string[];
+  deterministic_checks?: PreflightDeterministicCheck[];
   readiness: {
     numerator: number;
     denominator: number;
     score: number;
   };
+};
+
+export type DraftExportReadiness = {
+  export_eligible: boolean;
+  export_blockers: string[];
+  warnings: string[];
+  profile_id: string;
+  structural_checks_passed: boolean;
 };
 
 export type DispositionDecision =

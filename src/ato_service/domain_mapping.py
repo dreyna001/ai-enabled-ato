@@ -54,7 +54,11 @@ def map_system_to_domain(system: Any) -> dict[str, Any]:
     }
 
 
-def map_package_revision_to_domain(package_revision: Any) -> dict[str, Any]:
+def map_package_revision_to_domain(
+    package_revision: Any,
+    *,
+    package_preparation_status: str = "in_progress",
+) -> dict[str, Any]:
     """Map a duck-typed PackageRevision row to domain JSON."""
     return {
         "schema_version": DOMAIN_SCHEMA_VERSION,
@@ -86,6 +90,7 @@ def map_package_revision_to_domain(package_revision: Any) -> dict[str, Any]:
         ),
         "revision_version": package_revision.revision_version,
         "status": package_revision.status,
+        "package_preparation_status": package_preparation_status,
         "created_by": package_revision.created_by,
         "created_at": format_utc_datetime(package_revision.created_at),
     }

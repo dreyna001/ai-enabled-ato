@@ -14,7 +14,7 @@ from ato_service.audit import append_audit_event
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.package_rbac import require_any_package_role, require_package_role
 from ato_service.route_role_matrix import ROLE_AO_CUSTODIAN, ROLE_ISSO, ROLE_VIEWER
-from ato_service.domain_mapping import format_uuid
+from ato_service.domain_mapping import DOMAIN_SCHEMA_VERSION, format_uuid
 from ato_service.idempotency import (
     IdempotencyReplay,
     load_idempotency_replay,
@@ -61,7 +61,7 @@ def _format_utc(value: datetime) -> str:
 
 def map_authorization_decision_to_domain(record: Any) -> dict[str, Any]:
     return {
-        "schema_version": "1.0.0",
+        "schema_version": DOMAIN_SCHEMA_VERSION,
         "object_type": "authorization_decision_record",
         "authorization_decision_id": format_uuid(record.authorization_decision_id),
         "system_id": format_uuid(record.system_id),
@@ -141,9 +141,11 @@ async def attach_authorization_decision(
     )
     replay = await load_idempotency_replay(
         session,
-        operation=OPERATION_ATTACH,
-        idempotency_key=idempotency_key,
-        request_digest=request_digest,
+        principal.actor_id,
+        OPERATION_ATTACH,
+        idempotency_key,
+        request_digest,
+        now,
     )
     if isinstance(replay, IdempotencyReplay):
         return AuthorizationDecisionMutationResult(
@@ -183,6 +185,7 @@ async def attach_authorization_decision(
     )
     await record_idempotency_outcome(
         session,
+        principal=principal.actor_id,
         operation=OPERATION_ATTACH,
         idempotency_key=idempotency_key,
         request_digest=request_digest,

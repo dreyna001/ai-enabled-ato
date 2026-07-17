@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import {
@@ -18,10 +18,8 @@ import {
 } from "@/api/client";
 import { ChangeAnalysisPanel } from "@/components/ChangeAnalysisPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import {
-  DependencyCapabilityPanel,
-  isAssistantEnabled,
-} from "@/components/DependencyCapabilityPanel";
+import { isAssistantEnabled, assistantReadinessWarning } from "@/components/DependencyCapabilityPanel";
+import { DraftConfirmReadinessPanel } from "@/components/DraftConfirmReadinessPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { IntakeProgressPanel } from "@/components/IntakeProgressPanel";
 import { MatrixResultsPanel } from "@/components/MatrixResultsPanel";
@@ -29,7 +27,6 @@ import { PackageAssistantPanel } from "@/components/PackageAssistantPanel";
 import { PreflightPanel } from "@/components/PreflightPanel";
 import { ReviewExportWorkbench } from "@/components/ReviewExportWorkbench";
 import { RevisionCreateForm } from "@/components/RevisionCreateForm";
-import { RunArtifactsPanel } from "@/components/RunArtifactsPanel";
 import { TerminalIntakePanel } from "@/components/TerminalIntakePanel";
 import {
   RevisionWorkflowSkeleton,
@@ -55,6 +52,7 @@ import type {
   CreateRevisionInput,
   PackageRevision,
   PreflightResult,
+  DraftExportReadiness,
   SessionInfo,
   System,
 } from "@/types";
@@ -67,6 +65,7 @@ import { formatApiError } from "@/utils/formatApiError";
 import { formatProblemError } from "@/utils/formatProblemError";
 import { formatRunListLabel } from "@/utils/runLabels";
 import {
+  packagePreparationStatusLabel,
   revisionStatusLabel,
   revisionStatusVariant,
   runFailureMessage,
@@ -98,10 +97,10 @@ function AlertBanner({
   return (
     <div
       className={cn(
-        "rounded-md border px-4 py-3 text-sm",
+        "rounded-sm border px-4 py-3 text-sm",
         tone === "error" && "border-destructive/30 bg-destructive/10 text-destructive",
         tone === "info" && "border-primary/20 bg-primary/5 text-foreground",
-        tone === "warning" && "border-amber-500/30 bg-amber-500/10 text-amber-50",
+        tone === "warning" && "border-amber-400/30 bg-amber-400/10 text-amber-400",
       )}
     >
       {children}
@@ -118,7 +117,7 @@ function SelectionList({
   items: Array<{ id: string; label: string; status?: string }>;
   selectedId: string;
   onSelect: (id: string) => void;
-  renderLabel?: (item: { id: string; label: string; status?: string }) => string;
+  renderLabel?: (item: { id: string; label: string; status?: string }) => ReactNode;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -127,7 +126,11 @@ function SelectionList({
           key={item.id}
           type="button"
           size="sm"
-          variant={item.id === selectedId ? "default" : "outline"}
+          variant="outline"
+          className={cn(
+            item.id === selectedId &&
+              "border-link bg-muted text-foreground hover:bg-muted",
+          )}
           onClick={() => onSelect(item.id)}
         >
           {renderLabel ? renderLabel(item) : item.label}
@@ -164,6 +167,9 @@ export function WorkflowPage({
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [activeRun, setActiveRun] = useState<AnalysisRun | null>(null);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+  const [draftExportReadiness, setDraftExportReadiness] = useState<DraftExportReadiness | null>(
+    null,
+  );
   const [targetedItemIds, setTargetedItemIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -176,6 +182,17 @@ export function WorkflowPage({
 
   const draftEnabled =
     Boolean(revision) && revision?.status === "awaiting_confirmation";
+
+  const draftExportBlocked =
+    draftExportReadiness !== null && !draftExportReadiness.export_eligible;
+
+  const readinessState = {
+    loaded: readinessLoaded,
+    ready: !readinessDegraded && !readinessError,
+    degraded: readinessDegraded,
+    error: readinessError,
+    checks: [],
+  };
 
   const packageDraft = usePackageDraft(session, selectedRevisionId, {
     enabled: draftEnabled,
@@ -240,7 +257,13 @@ export function WorkflowPage({
   );
 
   const refreshRevisionDetail = useCallback(
-    async (signal?: AbortSignal) => {
+    async (
+      signal?: AbortSignal,
+      options?: {
+        /** Keep current workflow content visible while polling intake/run state. */
+        silent?: boolean;
+      },
+    ) => {
       if (!selectedRevisionId) {
         setRevision(null);
         setRuns([]);
@@ -250,7 +273,9 @@ export function WorkflowPage({
         setRevisionState("empty");
         return;
       }
-      setRevisionState("loading");
+      if (!options?.silent) {
+        setRevisionState("loading");
+      }
       try {
         const detail = await getRevision(selectedRevisionId, { signal });
         setRevision(detail);
@@ -356,7 +381,7 @@ export function WorkflowPage({
     return () => controller.abort();
   }, [refreshRunDetail]);
 
-  usePolling(() => refreshRevisionDetail(), {
+  usePolling(() => refreshRevisionDetail(undefined, { silent: true }), {
     enabled:
       Boolean(revision) &&
       (revision?.status === "scanning" || revision?.status === "extracting"),
@@ -469,32 +494,8 @@ export function WorkflowPage({
 
       {selectedSystemId ? (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          <CardHeader>
             <CardTitle>Package Revisions</CardTitle>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                void createRevision(session, selectedSystemId, {
-                  parent_revision_id: null,
-                  profile_id: "fisma_agency_security",
-                  certification_class: null,
-                  impact_level: "moderate",
-                  data_origin: "synthetic",
-                  sensitivity: "internal_unclassified",
-                })
-                  .then((created) => {
-                    setSelectedRevisionId(created.package_revision_id);
-                    syncRoute(selectedSystemId, created.package_revision_id);
-                    return refreshRevisions();
-                  })
-                  .then(() => setMessage("Revision created."))
-                  .catch((err) => setError(formatApiError(err)));
-              }}
-            >
-              <Plus />
-              Create Revision
-            </Button>
           </CardHeader>
           <CardContent>
             <RevisionCreateForm
@@ -524,9 +525,13 @@ export function WorkflowPage({
                   setSelectedRevisionId(id);
                   syncRoute(selectedSystemId, id);
                 }}
-                renderLabel={(item) =>
-                  `${item.label} — ${revisionStatusLabel(item.status ?? "")}`
-                }
+                renderLabel={(item) => (
+                  <>
+                    <span className="font-mono">{item.label}</span>
+                    {" — "}
+                    {revisionStatusLabel(item.status ?? "")}
+                  </>
+                )}
               />
             )}
           </CardContent>
@@ -538,15 +543,24 @@ export function WorkflowPage({
           <CardHeader>
             <CardTitle>Revision Workflow</CardTitle>
             <CardDescription className="flex flex-wrap items-center gap-2">
-              <span>Status</span>
+              <span>Technical</span>
               <Badge variant={revisionStatusVariant(revision.status)}>
                 {revisionStatusLabel(revision.status)}
               </Badge>
-              <span>· version {revision.revision_version}</span>
+              <span>Preparation</span>
+              <Badge variant="muted">
+                {packagePreparationStatusLabel(
+                  revision.package_preparation_status,
+                )}
+              </Badge>
+              <span className="font-mono">· version {revision.revision_version}</span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {revisionState === "loading" ? <RevisionWorkflowSkeleton /> : null}
+            {revisionState === "loading" &&
+            revision?.package_revision_id !== selectedRevisionId ? (
+              <RevisionWorkflowSkeleton />
+            ) : null}
 
             {revision.status === "uploading" ? (
               <PackageUploadPanel
@@ -588,7 +602,7 @@ export function WorkflowPage({
 
             {revision.status === "awaiting_confirmation" ? (
               <div className="space-y-4">
-                {packageDraft.loadState === "loading" ? (
+                {packageDraft.loadState === "loading" && !packageDraft.document ? (
                   <RevisionWorkflowSkeleton />
                 ) : null}
                 {packageDraft.loadState === "error" ? (
@@ -605,41 +619,40 @@ export function WorkflowPage({
                 {packageDraft.loadState === "ready" &&
                 packageDraft.document &&
                 packageDraft.draft ? (
-                  <PackageEditor
-                    draft={packageDraft.draft}
-                    document={packageDraft.document}
-                    isDirty={packageDraft.isDirty}
-                    saving={packageDraft.saving}
-                    saveError={packageDraft.saveError}
-                    staleConflict={packageDraft.staleConflict}
-                    validationIssues={packageDraft.validationIssues}
-                    onDocumentChange={packageDraft.updateDocument}
-                    onSave={() => void packageDraft.saveDraft()}
-                    onReload={() => void packageDraft.reload()}
-                    onConfirm={() =>
-                      setConfirmState({
-                        kind: "confirm-revision",
-                        revisionId: revision.package_revision_id,
-                        etag: packageDraft.etag,
-                      })
-                    }
-                  />
+                  <div className="space-y-4">
+                    <DraftConfirmReadinessPanel
+                      revisionId={revision.package_revision_id}
+                      refreshKey={`${packageDraft.etag}:${packageDraft.isDirty ? "dirty" : "saved"}`}
+                      onReadinessChange={setDraftExportReadiness}
+                    />
+                    <PackageEditor
+                      draft={packageDraft.draft}
+                      document={packageDraft.document}
+                      isDirty={packageDraft.isDirty}
+                      saving={packageDraft.saving}
+                      saveError={packageDraft.saveError}
+                      staleConflict={packageDraft.staleConflict}
+                      validationIssues={packageDraft.validationIssues}
+                      exportBlocked={draftExportBlocked}
+                      exportBlockers={draftExportReadiness?.export_blockers ?? []}
+                      onDocumentChange={packageDraft.updateDocument}
+                      onSave={() => void packageDraft.saveDraft()}
+                      onReload={() => void packageDraft.reload()}
+                      onConfirm={() =>
+                        setConfirmState({
+                          kind: "confirm-revision",
+                          revisionId: revision.package_revision_id,
+                          etag: packageDraft.etag,
+                        })
+                      }
+                    />
+                  </div>
                 ) : null}
               </div>
             ) : null}
 
             {revision.status === "ready" ? (
               <div className="space-y-6">
-                <DependencyCapabilityPanel
-                  readiness={{
-                    loaded: readinessLoaded,
-                    ready: !readinessDegraded && !readinessError,
-                    degraded: readinessDegraded,
-                    error: readinessError,
-                    checks: [],
-                  }}
-                  revisionReady
-                />
                 <ChangeAnalysisPanel
                   revisionId={revision.package_revision_id}
                   parentRevisionId={revision.parent_revision_id}
@@ -652,20 +665,15 @@ export function WorkflowPage({
                 <PackageAssistantPanel
                   session={session}
                   revisionId={revision.package_revision_id}
-                  enabled={isAssistantEnabled(
-                    {
-                      loaded: readinessLoaded,
-                      ready: !readinessDegraded && !readinessError,
-                      degraded: readinessDegraded,
-                      error: readinessError,
-                      checks: [],
-                    },
-                    true,
-                  )}
+                  runId={
+                    activeRun?.status === "succeeded" ? activeRun.run_id : null
+                  }
+                  enabled={isAssistantEnabled(readinessState, true)}
+                  readinessWarning={assistantReadinessWarning(readinessState)}
                 />
                 <AlertBanner tone="warning">
-                  Draft analysis readiness - not official status in GRC, FedRAMP, or an
-                  agency authorization process.
+                  Analysis readiness only — not an official GRC, FedRAMP, or agency
+                  authorization decision.
                 </AlertBanner>
 
                 <div className="flex flex-row flex-wrap items-center justify-between gap-4">
@@ -745,14 +753,10 @@ export function WorkflowPage({
                   <Card className="bg-muted/20">
                     <CardHeader>
                       <CardTitle className="text-base">Run Status</CardTitle>
-                      <CardDescription className="flex flex-wrap items-center gap-2">
+                      <CardDescription>
                         <Badge variant={runStatusVariant(activeRun.status)}>
                           {runStatusLabel(activeRun.status)}
                         </Badge>
-                        <span>· LLM calls: {activeRun.llm_call_count}</span>
-                        <span className="font-mono text-xs text-muted-foreground">
-                          · {activeRun.run_id.slice(0, 8)}…
-                        </span>
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -787,12 +791,12 @@ export function WorkflowPage({
 
                       {activeRun.status === "succeeded" ? (
                         <>
-                          <RunArtifactsPanel run={activeRun} />
                           <MatrixResultsPanel run={activeRun} />
                           <ReviewExportWorkbench
                             session={session}
                             runId={activeRun.run_id}
                             matrixRows={[]}
+                            preflight={preflight}
                           />
                         </>
                       ) : null}
@@ -898,7 +902,7 @@ export function LoginPage({
 export function SignedOutNotice() {
   return (
     <div className="text-xs text-muted-foreground">
-      <Link className="underline underline-offset-4" to="/login">
+      <Link className="text-link underline underline-offset-4" to="/login">
         Return to sign in
       </Link>
     </div>

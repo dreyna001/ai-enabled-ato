@@ -25,6 +25,10 @@ const packageRevisionSchema = z.object({
   system_id: uuidSchema,
   parent_revision_id: uuidSchema.nullable().optional(),
   status: z.string().min(1),
+  package_preparation_status: z.enum([
+    "in_progress",
+    "ready_for_external_review",
+  ]),
   revision_version: z.number().int().nonnegative(),
   profile_id: z.string().min(1),
   data_origin: z.string().min(1),
@@ -154,17 +158,35 @@ const packageRevisionDraftSchema = z.object({
   revision_version: z.number().int().nonnegative(),
 });
 
+const preflightCheckSchema = z
+  .object({
+    check_id: z.string().min(1),
+    severity: z.string().min(1),
+    outcome: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .passthrough();
+
 const preflightSchema = z.object({
   analysis_eligible: z.boolean(),
   export_eligible: z.boolean(),
   analysis_blockers: z.array(z.string()),
   export_blockers: z.array(z.string()),
   warnings: z.array(z.string()),
+  deterministic_checks: z.array(preflightCheckSchema).optional(),
   readiness: z.object({
     numerator: z.number().int().nonnegative(),
     denominator: z.number().int().nonnegative(),
     score: z.number(),
   }),
+});
+
+const draftExportReadinessSchema = z.object({
+  export_eligible: z.boolean(),
+  export_blockers: z.array(z.string()),
+  warnings: z.array(z.string()),
+  profile_id: z.string(),
+  structural_checks_passed: z.boolean(),
 });
 
 const dispositionSchema = z.object({
@@ -364,6 +386,10 @@ export function parsePackageRevisionDraft(value: unknown) {
 
 export function parsePreflight(value: unknown) {
   return parseWithSchema(preflightSchema, value);
+}
+
+export function parseDraftExportReadiness(value: unknown) {
+  return parseWithSchema(draftExportReadinessSchema, value);
 }
 
 export function parseDisposition(value: unknown) {

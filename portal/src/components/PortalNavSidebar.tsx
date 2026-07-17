@@ -18,8 +18,8 @@ export function PortalNavHeader() {
         <NavLink
           className={({ isActive }) =>
             cn(
-              "rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+              "rounded-sm px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              isActive && "border border-link bg-sidebar-accent text-sidebar-accent-foreground",
             )
           }
           to="/workflow"
@@ -56,7 +56,6 @@ export function PortalNavSidebar({
           <Shield className="size-3" />
           {session.actor_id}
         </div>
-        <p className="mt-1">{session.groups.join(", ")}</p>
       </div>
       <div className="min-h-0 flex-1" />
       <div className="shrink-0 space-y-3 px-4 py-3">

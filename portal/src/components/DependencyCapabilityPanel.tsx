@@ -14,11 +14,11 @@ type DependencyCapabilityPanelProps = {
 };
 
 const FEATURES = [
-  { id: "preflight", label: "Preflight Checks", requiresReady: true },
-  { id: "analysis", label: "Analysis Runs", requiresReady: true },
-  { id: "search", label: "Package Search", requiresReady: true },
-  { id: "chat", label: "Package Assistant", requiresReady: true },
-  { id: "export", label: "Export Workflow", requiresReady: true },
+  { id: "preflight", label: "Preflight Checks", requiresReady: true, allowsDegraded: false },
+  { id: "analysis", label: "Analysis Runs", requiresReady: true, allowsDegraded: false },
+  { id: "search", label: "Package Search", requiresReady: true, allowsDegraded: true },
+  { id: "chat", label: "Package Assistant", requiresReady: true, allowsDegraded: true },
+  { id: "export", label: "Export Workflow", requiresReady: true, allowsDegraded: false },
 ] as const;
 
 export function DependencyCapabilityPanel({
@@ -26,6 +26,7 @@ export function DependencyCapabilityPanel({
   revisionReady = false,
 }: DependencyCapabilityPanelProps) {
   const apiHealthy = readiness.loaded && !readiness.error && !readiness.degraded;
+  const apiUsable = readiness.loaded && !readiness.error;
 
   return (
     <Card className="bg-muted/10">
@@ -56,7 +57,9 @@ export function DependencyCapabilityPanel({
         ) : null}
         <ul className="space-y-1 border-t pt-3">
           {FEATURES.map((feature) => {
-            const enabled = apiHealthy && (!feature.requiresReady || revisionReady);
+            const enabled =
+              (apiHealthy || (apiUsable && feature.allowsDegraded)) &&
+              (!feature.requiresReady || revisionReady);
             return (
               <li key={feature.id} className="flex items-center justify-between gap-2">
                 <span>{feature.label}</span>
@@ -72,6 +75,18 @@ export function DependencyCapabilityPanel({
   );
 }
 
-export function isAssistantEnabled(readiness: PortalReadinessState, revisionReady: boolean): boolean {
-  return readiness.loaded && !readiness.error && !readiness.degraded && revisionReady;
+export function isAssistantEnabled(
+  readiness: PortalReadinessState,
+  revisionReady: boolean,
+): boolean {
+  return readiness.loaded && !readiness.error && revisionReady;
+}
+
+export function assistantReadinessWarning(
+  readiness: PortalReadinessState,
+): string | null {
+  if (!readiness.loaded || readiness.error || !readiness.degraded) {
+    return null;
+  }
+  return "API readiness is degraded (for example authority review or reconciliation). Search remains available; citation-backed chat still requires a succeeded analysis run.";
 }

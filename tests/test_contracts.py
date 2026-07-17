@@ -104,6 +104,8 @@ REQUIRED_API_METHODS = {
     ("post", "/approvals/{id}/approve"),
     ("post", "/approvals/{id}/reject"),
     ("get", "/exports/{id}/download"),
+    ("post", "/systems/{system_id}/authorization-decisions"),
+    ("get", "/systems/{system_id}/authorization-decisions"),
     ("get", "/package-revisions/{id}/search"),
     ("post", "/package-revisions/{id}/chat"),
     ("get", "/health/live"),
@@ -123,6 +125,7 @@ IDEMPOTENCY_KEY_OPERATIONS = {
     ("post", "/approvals/{id}/approve"),
     ("post", "/approvals/{id}/reject"),
     ("get", "/exports/{id}/download"),
+    ("post", "/systems/{system_id}/authorization-decisions"),
 }
 
 P11_IDEMPOTENCY_KEY_OPERATIONS = {

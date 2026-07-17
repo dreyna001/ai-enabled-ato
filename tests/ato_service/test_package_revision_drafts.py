@@ -31,6 +31,7 @@ from ato_service.package_revision_drafts import (
 from ato_service.package_revisions import (
     PackageRevisionValidationError,
     UnconfirmedFactProposalsError,
+    ExportNotReadyForConfirmError,
     confirm_package_revision,
 )
 
@@ -141,6 +142,12 @@ def _scalar_one_result(value: object) -> MagicMock:
 def _one_or_none_result(value: object) -> MagicMock:
     result = MagicMock()
     result.one_or_none.return_value = value
+    return result
+
+
+def _rows_result(rows: list[object]) -> MagicMock:
+    result = MagicMock()
+    result.all.return_value = rows
     return result
 
 
@@ -551,6 +558,7 @@ def test_confirm_with_draft_seals_content_without_fact_proposal_check(
             _scalar_one_result(_system()),
             _scalar_result(draft),
             _scalar_one_result(0),
+            _rows_result([]),
         ]
     )
 
@@ -577,6 +585,48 @@ def test_confirm_with_draft_seals_content_without_fact_proposal_check(
     audit_metadata = mock_audit.await_args.kwargs["metadata"]
     assert audit_metadata["confirm_path"] == "package_editor_draft"
     assert audit_metadata["package_content_sha256"] == expected_digest
+
+
+@patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
+def test_confirm_with_draft_blocks_export_readiness_blockers(mock_load: AsyncMock) -> None:
+    mock_load.return_value = None
+    revision = _revision(
+        revision_version=4,
+        profile_id="fedramp_20x_program",
+    )
+    draft = _draft(
+        document=json.loads(
+            (
+                ROOT
+                / "docs/contracts/fixtures/package-draft-document.valid.fisma-minimal.json"
+            ).read_text(encoding="utf-8")
+        )
+    )
+    draft.document["package"]["profile_id"] = "fedramp_20x_program"
+    session = _RecordingSession(
+        [
+            _scalar_result(revision),
+            _scalar_one_result(_system()),
+            _scalar_result(draft),
+        ]
+    )
+
+    with pytest.raises(ExportNotReadyForConfirmError) as exc_info:
+        _run(
+            confirm_package_revision(
+                session,  # type: ignore[arg-type]
+                principal=OWNER_PRINCIPAL,
+                package_revision_id=REVISION_ID,
+                if_match='"v4"',
+                idempotency_key=IDEM_KEY,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+                project_root=ROOT,
+            )
+        )
+
+    assert "assessor.inputs_present" in exc_info.value.blockers
+    assert revision.revision_version == 4
 
 
 @patch("ato_service.package_revisions.record_idempotency_outcome", new_callable=AsyncMock)

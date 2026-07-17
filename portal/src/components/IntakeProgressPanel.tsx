@@ -17,7 +17,7 @@ export function IntakeProgressPanel({ status }: IntakeProgressPanelProps) {
   return (
     <div
       aria-live="polite"
-      className="space-y-3 rounded-md border border-primary/20 bg-primary/5 px-4 py-4"
+      className="space-y-3 rounded-sm border border-primary/20 bg-primary/5 px-4 py-4"
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="muted">{revisionStatusLabel(status)}</Badge>

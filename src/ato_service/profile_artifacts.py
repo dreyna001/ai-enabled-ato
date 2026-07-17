@@ -68,11 +68,12 @@ def generate_profile_artifacts(
         profile_id=profile_id,
         readiness=readiness,
     ).encode("utf-8")
-    contents["human/readiness-summary.md"] = _readiness_summary(
-        profile_id=profile_id,
-        document=sealed_document,
-        readiness=readiness,
-    ).encode("utf-8")
+    if profile_id != "fisma_agency_security":
+        contents["human/readiness-summary.md"] = _readiness_summary(
+            profile_id=profile_id,
+            document=sealed_document,
+            readiness=readiness,
+        ).encode("utf-8")
     contents["machine/package-document.json"] = json.dumps(
         sealed_document,
         sort_keys=True,
@@ -95,22 +96,25 @@ def generate_profile_artifacts(
             {"rows": matrix_rows},
             sort_keys=True,
         ).encode("utf-8")
-        contents["human/assessment-matrix.md"] = _assessment_matrix_markdown(
-            matrix_rows=matrix_rows,
-        ).encode("utf-8")
+        if profile_id != "fisma_agency_security":
+            contents["human/assessment-matrix.md"] = _assessment_matrix_markdown(
+                matrix_rows=matrix_rows,
+            ).encode("utf-8")
 
-    contents["validation/export-readiness.json"] = json.dumps(
-        _export_readiness_payload(
-            profile_id=profile_id,
-            readiness=readiness,
-            schema_results=schema_results,
-        ),
-        sort_keys=True,
-    ).encode("utf-8")
-    contents["validation/schema-purity.json"] = json.dumps(
-        _schema_purity_payload(schema_results=schema_results),
-        sort_keys=True,
-    ).encode("utf-8")
+    if profile_id != "fisma_agency_security":
+        contents["validation/export-readiness.json"] = json.dumps(
+            _export_readiness_payload(
+                profile_id=profile_id,
+                readiness=readiness,
+                schema_results=schema_results,
+            ),
+            sort_keys=True,
+        ).encode("utf-8")
+    if profile_id == "fedramp_20x_program":
+        contents["validation/schema-purity.json"] = json.dumps(
+            _schema_purity_payload(schema_results=schema_results),
+            sort_keys=True,
+        ).encode("utf-8")
 
     assessor_inputs = sealed_document.get("assessor_inputs")
     if isinstance(assessor_inputs, dict) and assessor_inputs:
@@ -145,6 +149,7 @@ def generate_profile_artifacts(
             dispositions=dispositions,
             matrix_rows=matrix_rows,
             runtime_config_document=runtime_config_document,
+            readiness=readiness,
         )
 
     files = [
@@ -257,6 +262,7 @@ def _add_fisma_artifacts(
     dispositions: list[dict[str, Any]] | None,
     matrix_rows: list[dict[str, Any]] | None,
     runtime_config_document: dict[str, Any] | None,
+    readiness: Any,
 ) -> None:
     template_pack = _load_optional_template_pack(runtime_config_document)
     result = generate_fisma_security_artifacts(
@@ -266,6 +272,8 @@ def _add_fisma_artifacts(
         dispositions=dispositions,
         matrix_rows=matrix_rows,
         template_pack=template_pack,
+        additional_readiness_blockers=readiness.blockers,
+        additional_readiness_warnings=readiness.warnings,
     )
     for path, payload in result.contents.items():
         contents[path] = payload.encode("utf-8")

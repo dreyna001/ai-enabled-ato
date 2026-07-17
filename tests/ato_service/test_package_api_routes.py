@@ -75,6 +75,7 @@ PACKAGE_REVISION_PAYLOAD: dict[str, Any] = {
     "content_manifest_sha256": None,
     "revision_version": 1,
     "status": "uploading",
+    "package_preparation_status": "in_progress",
     "created_by": "actor-1",
     "created_at": "2026-07-10T20:00:00Z",
 }

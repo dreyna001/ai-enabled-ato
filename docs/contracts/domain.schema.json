@@ -56,6 +56,9 @@
       "$ref": "#/$defs/Export"
     },
     {
+      "$ref": "#/$defs/AuthorizationDecisionRecord"
+    },
+    {
       "$ref": "#/$defs/AuditEvent"
     },
     {
@@ -529,6 +532,14 @@
         }
       }
     },
+    "PackagePreparationStatus": {
+      "type": "string",
+      "enum": [
+        "in_progress",
+        "ready_for_external_review"
+      ],
+      "$comment": "Read-only external-facing preparation view. ready_for_external_review means a hash-bound export draft is approved and available for download or already exported. It does not mean released to GRC or authorized."
+    },
     "PackageRevision": {
       "type": "object",
       "additionalProperties": false,
@@ -550,6 +561,7 @@
         "system_context_snapshot_id",
         "revision_version",
         "status",
+        "package_preparation_status",
         "created_by",
         "created_at"
       ],
@@ -658,7 +670,11 @@
             "invalid",
             "quarantined",
             "archived"
-          ]
+          ],
+          "$comment": "Intake and sealed-package lifecycle. The ready value means the revision is sealed and ready for analysis; it is not external authorization, GRC release, or package_preparation_status."
+        },
+        "package_preparation_status": {
+          "$ref": "#/$defs/PackagePreparationStatus"
         },
         "created_by": {
           "$ref": "#/$defs/UserId"
@@ -3781,6 +3797,95 @@
           }
         }
       ]
+    },
+    "AuthorizationDecisionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "authorization_decision_id",
+        "system_id",
+        "package_revision_id",
+        "decision_type",
+        "decision_date",
+        "issuing_authority",
+        "artifact_id",
+        "notes",
+        "attached_by",
+        "attached_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "authorization_decision_record"
+        },
+        "authorization_decision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "system_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "package_revision_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Externally issued authorization outcome vocabulary from the customer's GRC or AO process. Attach-only metadata; never a product authorization decision.",
+          "examples": [
+            "authorization_to_operate",
+            "authorization_to_test",
+            "denial",
+            "authorization_with_conditions"
+          ]
+        },
+        "decision_date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Customer-provided decision date (commonly YYYY-MM-DD)."
+        },
+        "issuing_authority": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "artifact_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional customer artifact reference for the external decision record."
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "attached_by": {
+          "$ref": "#/$defs/UserId"
+        },
+        "attached_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
     }
   }
 }

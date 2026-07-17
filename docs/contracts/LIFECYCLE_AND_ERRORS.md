@@ -485,6 +485,30 @@ Timer evaluation, background jobs, and approval routes that perform these
 transitions belong to **EP-06**. This contract defines only the deadline
 formula; implementations MUST NOT invent a different pending-approval window.
 
+### 2.5.1 Package preparation status (read-only external view)
+
+`PackageRevision.package_preparation_status` is a computed, read-only field.
+It is not persisted, is not a lifecycle state machine, and MUST NOT be written
+by clients.
+
+| Value | Meaning |
+| --- | --- |
+| `in_progress` | No hash-bound export draft is currently approved and available for download, and none has been exported for this revision. |
+| `ready_for_external_review` | At least one export draft for the revision is in `approved` or `exported` with an `Approval.decision=approved`, matching `payload_manifest_sha256` between draft and approval, and a valid payload binding. For `approved`, the approval MUST be unexpired and the current recomputed payload hash MUST match the approved hash. For `exported`, the terminal export record satisfies the binding that was verified at delivery. |
+
+This status does **not** mean the package was released to GRC, accepted by an
+AO, or authorized. It only signals that a hash-bound export bundle is approved
+for download or has already been exported.
+
+`PackageRevision.status=ready` remains the intake/sealed lifecycle value
+meaning the revision is sealed and ready for analysis. It MUST NOT be
+reinterpreted as external authorization or preparation readiness.
+
+Attaching an external `AuthorizationDecisionRecord` via
+`POST /systems/{system_id}/authorization-decisions` is metadata-only. It MUST
+NOT transition `package_preparation_status`, `ExportDraft.status`,
+`Approval.decision`, or `PackageRevision.status`.
+
 ### 2.6 Approval
 
 Creation of an Approval sets `decision=pending` and atomically transitions the
@@ -956,17 +980,18 @@ The following invariants are mandatory:
     session tokens, authorization headers, stack traces, or sensitive source
     text.
 
-## 6. Phase boundaries after P1.0 contract closure
+## 6. Implementation status (Phase 6 reconciliation)
 
-The following items are now defined in this contract and `domain.schema.json`
-but are not yet implemented in persistence, workers, or portal routes:
+Section 2 defines legal transitions; the following topics are implemented in
+code as of Phase 6. Customer/environment evidence may still be open per
+[`hard-stops.yaml`](../requirements/hard-stops.yaml).
 
-| Topic | Contract location | Implementation owner |
+| Topic | Contract | Status |
 | --- | --- | --- |
-| Job and `JobAttempt` persistence | Section 2.7; `Job`, `JobAttempt` schemas | P1 Postgres jobs foundation (partial) |
-| Claim, heartbeat, completion, lease recovery | Section 2.7.2 | P1 analyzer repository and reconciler |
-| `pending_approval -> expired` timer | Section 2.5 | EP-06 operator CLI `expire-approvals` |
-| Disposition mutation routes and UX | Section 2.4.1 | EP-06 review/export routes and portal workbench |
+| Job and JobAttempt persistence | §2.7 | Implemented (Postgres models, migrations) |
+| Claim, heartbeat, completion, lease recovery | §2.7.2 | Implemented (workers + reconciler) |
+| pending_approval → expired timer | §2.5 | Implemented (`ato-operator expire-approvals`) |
+| Disposition mutation routes and UX | §2.4.1 | Implemented (API + portal workbench) |
 
 Implementations MUST NOT infer values, deadlines, or transitions outside this
 contract.

@@ -60,7 +60,9 @@ export function ChangeAnalysisPanel({
       <CardHeader>
         <CardTitle className="text-base">Change Analysis</CardTitle>
         <CardDescription>
-          Delta against parent {parentRevisionId.slice(0, 8)}… for targeted re-analysis.
+          Delta against parent{" "}
+          <span className="font-mono">{parentRevisionId.slice(0, 8)}…</span> for targeted
+          re-analysis.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
@@ -79,7 +81,7 @@ export function ChangeAnalysisPanel({
             {analysis.delta.changed_control_ids.length > 0 ? (
               <div>
                 <p className="font-medium">Changed controls</p>
-                <ul className="list-disc pl-5 text-muted-foreground">
+                <ul className="list-disc pl-5 font-mono text-xs text-muted-foreground">
                   {analysis.delta.changed_control_ids.map((id) => (
                     <li key={id}>{id}</li>
                   ))}

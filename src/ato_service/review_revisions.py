@@ -220,10 +220,12 @@ async def create_review_revision(
         return _review_mutation_result(existing_draft, dispositions=dispositions, status=200)
 
     submitted_result = await session.execute(
-        select(ReviewRevision).where(
+        select(ReviewRevision)
+        .where(
             ReviewRevision.run_id == run_id,
             ReviewRevision.status == "submitted",
         )
+        .limit(1)
     )
     if submitted_result.scalar_one_or_none() is not None:
         raise ReviewRevisionValidationError(

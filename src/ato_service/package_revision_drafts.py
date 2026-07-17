@@ -774,6 +774,52 @@ async def load_draft_for_confirm(
     return draft
 
 
+async def get_draft_export_readiness(
+    session: AsyncSession,
+    *,
+    principal: AuthenticatedPrincipal,
+    package_revision_id: uuid.UUID,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Evaluate export readiness for the current package editor draft."""
+    from ato_service.export_readiness import export_readiness_payload
+    from ato_service.export_service import _optional_runtime_config_document
+
+    result = await session.execute(
+        _load_package_revision_with_system_statement(package_revision_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise _revision_not_found(package_revision_id=package_revision_id)
+
+    package_revision, system = row
+    require_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        role=ROLE_VIEWER,
+    )
+
+    if PackageRevisionStatus(package_revision.status) is not PackageRevisionStatus.AWAITING_CONFIRMATION:
+        raise PackageRevisionValidationError(
+            "draft export readiness is only available while awaiting confirmation",
+            error_code="illegal_state_transition",
+        )
+
+    draft_result = await session.execute(_load_draft_statement(package_revision_id))
+    draft = draft_result.scalar_one_or_none()
+    if draft is None:
+        raise PackageRevisionDraftNotFoundError(package_revision_id=package_revision_id)
+
+    return export_readiness_payload(
+        package_revision_id=package_revision_id,
+        profile_id=package_revision.profile_id,
+        document=draft.document,
+        project_root=project_root,
+        runtime_config_document=_optional_runtime_config_document(project_root),
+    )
+
+
 __all__ = [
     "OPERATION_SAVE_DRAFT",
     "PackageRevisionDraftNotFoundError",
@@ -783,6 +829,7 @@ __all__ = [
     "compute_sealed_document_digest",
     "draft_exists",
     "get_package_revision_draft",
+    "get_draft_export_readiness",
     "load_draft_for_confirm",
     "save_draft_request_digest",
     "save_package_revision_draft",

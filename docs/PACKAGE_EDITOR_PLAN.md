@@ -1,7 +1,8 @@
 # Package Intake, Extraction, and Review Plan
 
-Status: Approved component plan (Component A of
-[`docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md`](FINAL_PRODUCT_IMPLEMENTATION_PLAN.md)).
+Status: Delivered (code-complete, 2026-07-14). Component A of
+[`docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md`](FINAL_PRODUCT_IMPLEMENTATION_PLAN.md).
+Diff sections below are the historical delivery record.
 
 This is not a prototype plan. Every migration, API, worker, and portal surface
 is designed for the production product. Delivery is split into reversible,
@@ -24,9 +25,9 @@ Build the core package-preparation workflow end to end:
 4. One **Confirm package** action seals the revision as immutable `ready`.
 5. The team proceeds to analysis, gap review, and export on that sealed package.
 
-This replaces the current demo-only path (synthetic JSON leaf extraction plus
-per-fact Accept/Reject cards). It is the primary customer workflow for turning
-uploaded authorization evidence into a reviewable package.
+This replaced the demo-only path (synthetic JSON leaf extraction plus per-fact
+Accept/Reject cards). It is the primary customer workflow for turning uploaded
+authorization evidence into a reviewable package.
 
 ### Product position
 
@@ -46,22 +47,24 @@ We **do** take on adjacent work when it strengthens the same workflow:
 - attach privacy-office artifacts and show scope notice (not perform privacy review)
 - ConMon-lite via child-revision re-upload and delta analysis
 
-## 2. Current Problem
+## 2. Background (pre-delivery)
 
-Today:
+Before this plan landed:
 
-- Intake runs only on `dev_local` + `data_origin=synthetic` + `application/json`.
-- Extraction walks JSON leaves and creates one `FactProposal` per field.
-- The portal renders every proposal as a separate card requiring Accept or
+- Intake ran only on `dev_local` + `data_origin=synthetic` + `application/json`.
+- Extraction walked JSON leaves and created one `FactProposal` per field.
+- The portal rendered every proposal as a separate card requiring Accept or
   Reject.
 - PDF, DOCX, mixed document packages, and customer `data_origin=customer` uploads
-  are not processed.
-- There is no aggregated editable package form.
+  were not processed.
+- There was no aggregated editable package form.
 
-That is insufficient for real use. A system owner or ISSO drops a folder of SSP
+That was insufficient for real use. A system owner or ISSO drops a folder of SSP
 sections, policies, configs, and scan exports; the product must ingest those
 files, propose field values, and present one editable package — not hundreds of
 JSON-pointer approval cards.
+
+Delivered stack: see [`P3_GATE_RECORD.md`](P3_GATE_RECORD.md) and README Current state. Residual: production malware scanner drill (**HS-005**).
 
 ## 3. Target User Experience
 

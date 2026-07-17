@@ -47,6 +47,7 @@ from ato_service.package_revisions import (
     ParentRevisionNotFoundError,
     SystemNotFoundError,
     UnconfirmedFactProposalsError,
+    ExportNotReadyForConfirmError,
 )
 from ato_service.pagination import InvalidPageLimitError, InvalidPaginationCursorError
 from ato_service.problems import (
@@ -895,6 +896,25 @@ def test_source_and_revision_validation_errors_return_problem(
         expected_instance=path,
     )
     _assert_no_sensitive_leaks(payload)
+
+
+def test_export_not_ready_for_confirm_returns_problem() -> None:
+    app = _create_problem_test_app()
+
+    @app.post("/api/v1/package-revisions/{revision_id}/confirm")
+    async def confirm_revision(revision_id: str) -> None:
+        raise ExportNotReadyForConfirmError(("assessor.inputs_present",))
+
+    client = TestClient(app, raise_server_exceptions=False)
+    path = "/api/v1/package-revisions/revision/confirm"
+    response = client.post(path)
+
+    _assert_nonretryable_problem(
+        response,
+        expected_status=422,
+        expected_code="export_not_ready",
+        expected_instance=path,
+    )
 
 
 @pytest.mark.parametrize(

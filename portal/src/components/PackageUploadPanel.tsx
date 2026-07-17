@@ -120,7 +120,9 @@ export function PackageUploadPanel({
         <Label htmlFor="package-upload">Upload package files</Label>
         <p className="text-sm text-muted-foreground">
           Add JSON, PDF, DOCX, XLSX, scanner exports, OSCAL baselines, and other
-          supported evidence. Select an artifact kind per file when needed.
+          supported evidence. Select an artifact kind per file when needed. Before confirming
+          the package, include assessor attestation and privacy artifact uploads when your
+          profile requires them.
         </p>
         <InputLike
           ref={inputRef}
@@ -159,7 +161,7 @@ export function PackageUploadPanel({
       </div>
 
       {queue.length > 0 ? (
-        <ul className="space-y-2 rounded-md border bg-muted/20 p-3">
+        <ul className="space-y-2 rounded-sm border bg-muted/20 p-3">
           {queue.map((item) => (
             <li
               key={`${item.file.name}-${item.file.size}-${item.file.lastModified}`}
@@ -169,7 +171,7 @@ export function PackageUploadPanel({
                 {sanitizeDisplayFilename(item.file.name)}
               </span>
               <select
-                className="rounded-md border bg-background px-2 py-1 text-xs"
+                className="rounded-sm border bg-background px-2 py-1 text-xs"
                 value={item.artifactKind}
                 disabled={item.status === "uploading" || item.status === "done"}
                 onChange={(event) => {

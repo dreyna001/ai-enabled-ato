@@ -42,8 +42,8 @@ export function PortalCapabilityBanner({ readiness }: PortalCapabilityBannerProp
     <div
       className={
         isBlocking
-          ? "border-b border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-50"
-          : "border-b border-border/60 bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground"
+          ? "border-b border-border border-l-4 border-l-amber-500 bg-card px-4 py-2.5 text-sm text-foreground"
+          : "border-b border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground"
       }
       role="status"
     >

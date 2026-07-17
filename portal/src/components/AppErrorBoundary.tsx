@@ -25,7 +25,7 @@ export class AppErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
-          <div className="max-w-md rounded-md border border-border bg-card p-6 shadow-sm">
+          <div className="max-w-md rounded-sm border border-border bg-card p-6 shadow-sm">
             <h1 className="text-lg font-semibold">Portal UI Error</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               The portal could not render this view. Refresh the page or return to

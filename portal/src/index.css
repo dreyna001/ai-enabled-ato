@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -31,6 +32,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-link: var(--link);
 }
 
 :root {
@@ -53,6 +55,7 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  --link: oklch(0.5 0.18 259);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-border: oklch(0.922 0 0);
@@ -60,31 +63,40 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
 }
 
+/*
+ * "Federal SOC Dark" theme — see docs/PORTAL_THEME.md.
+ * SOC dark-console palette with USWDS-style square edges (2px radius)
+ * and USWDS fonts (Public Sans UI text, Roboto Mono for identifiers).
+ */
 .dark {
   color-scheme: dark;
-  --background: oklch(0.17 0 0);
-  --foreground: oklch(0.93 0 0);
-  --card: oklch(0.22 0 0);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.22 0 0);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: oklch(0.93 0 0);
-  --primary-foreground: oklch(0.17 0 0);
-  --secondary: oklch(0.26 0 0);
-  --secondary-foreground: oklch(0.93 0 0);
-  --muted: oklch(0.26 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.28 0 0);
-  --accent-foreground: oklch(0.93 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.55 0 0);
-  --sidebar: oklch(0.14 0 0);
-  --sidebar-foreground: oklch(0.93 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-accent: oklch(0.22 0 0);
-  --sidebar-accent-foreground: oklch(0.93 0 0);
+  --radius: 0.125rem;
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --card-foreground: #e6edf3;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+  /* #1f6feb passes WCAG AA (4.6:1) with white text; #2f81f7 fails at 3.7:1 */
+  --primary: #1f6feb;
+  --primary-foreground: #ffffff;
+  --secondary: #1c2129;
+  --secondary-foreground: #e6edf3;
+  --muted: #1c2129;
+  --muted-foreground: #8b949e;
+  --accent: #1c2129;
+  --accent-foreground: #e6edf3;
+  --destructive: #f85149;
+  --border: #30363d;
+  --input: #30363d;
+  --ring: #1f6feb;
+  /* Brighter blue for text/borders on dark; #1f6feb is fill-only */
+  --link: #58a6ff;
+  --sidebar: #10141a;
+  --sidebar-foreground: #e6edf3;
+  --sidebar-border: #30363d;
+  --sidebar-accent: #1c2129;
+  --sidebar-accent-foreground: #e6edf3;
 }
 
 @layer base {
@@ -94,8 +106,16 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-family: "Public Sans", "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     font-size: 14px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp,
+  .font-mono {
+    font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
   a {

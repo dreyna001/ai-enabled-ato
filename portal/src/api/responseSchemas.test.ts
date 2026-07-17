@@ -3,6 +3,7 @@ import {
   parseChangeAnalysis,
   parseChatResponse,
   parseDisposition,
+  parsePackageRevision,
   parseSearchResults,
 } from "@/api/responseSchemas";
 
@@ -28,6 +29,34 @@ describe("extended response schema parsers", () => {
       requires_targeted_reanalysis: true,
     });
     expect(parsed?.targeted_assessment_item_ids).toEqual(["AC-1"]);
+  });
+
+  it("requires a valid package preparation status", () => {
+    const revision = {
+      package_revision_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      system_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      status: "ready",
+      package_preparation_status: "ready_for_external_review",
+      revision_version: 1,
+      profile_id: "fisma_agency_security",
+      data_origin: "synthetic",
+      sensitivity: "internal_unclassified",
+    };
+
+    expect(parsePackageRevision(revision)?.package_preparation_status).toBe(
+      "ready_for_external_review",
+    );
+    expect(
+      parsePackageRevision({
+        package_revision_id: revision.package_revision_id,
+        system_id: revision.system_id,
+        status: revision.status,
+        revision_version: revision.revision_version,
+        profile_id: revision.profile_id,
+        data_origin: revision.data_origin,
+        sensitivity: revision.sensitivity,
+      }),
+    ).toBeNull();
   });
 
   it("parses search results from backend shape", () => {

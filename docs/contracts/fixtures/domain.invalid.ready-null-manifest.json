@@ -19,6 +19,7 @@
   "system_context_snapshot_id": null,
   "revision_version": 1,
   "status": "ready",
+  "package_preparation_status": "in_progress",
   "created_by": "fixture-author",
   "created_at": "2026-07-10T20:00:00Z"
 }

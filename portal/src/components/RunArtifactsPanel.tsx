@@ -83,12 +83,12 @@ export function RunArtifactsPanel({ run }: RunArtifactsPanelProps) {
         {artifacts.length > 0 ? (
           <ul className="space-y-2">
             {artifacts.map((artifact) => (
-              <li key={artifact.artifact_id} className="rounded-md border p-3">
+              <li key={artifact.artifact_id} className="rounded-sm border p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="muted">{artifact.media_type}</Badge>
                   <span className="font-mono text-xs">{artifact.path}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
                   {artifact.sha256.slice(0, 16)}… · {artifact.size_bytes} bytes
                 </p>
               </li>

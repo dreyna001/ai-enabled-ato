@@ -3,7 +3,7 @@
   "info": {
     "title": "ATO Evidence Analysis Portal API",
     "version": "1.0.0",
-    "description": "Published P-1 API contract. An endpoint appearing here does not mean it is implemented."
+    "description": "Published P-1 API contract. An endpoint appearing here does not mean it is implemented. Package-scoped role requirements are normative in docs/contracts/LIFECYCLE_AND_ERRORS.md Section 2.1.3 and src/ato_service/route_role_matrix.py."
   },
   "servers": [
     {
@@ -355,7 +355,8 @@
                       "scanner_export",
                       "architecture",
                       "attestation",
-                      "reference_catalog"
+                      "reference_catalog",
+                      "privacy_artifact"
                     ]
                   },
                   "source_date": {
@@ -447,6 +448,95 @@
             "$ref": "#/components/responses/ProblemResponse"
           },
           "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/draft": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "getPackageRevisionDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionDraftResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "savePackageRevisionDraft",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutPackageRevisionDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionDraftResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "428": {
             "$ref": "#/components/responses/ProblemResponse"
           },
           "default": {
@@ -1447,6 +1537,99 @@
         }
       }
     },
+    "/systems/{system_id}/authorization-decisions": {
+      "post": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "attachAuthorizationDecision",
+        "description": "Attach externally issued authorization decision metadata. Attach-only: never transitions package preparation, export, or intake lifecycle states.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SystemId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "name": "package_revision_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachAuthorizationDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/AuthorizationDecisionResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "listAuthorizationDecisions",
+        "description": "List externally attached authorization decision metadata for a system.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SystemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AuthorizationDecisionListResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
     "/package-revisions/{id}/search": {
       "get": {
         "tags": [
@@ -1767,6 +1950,21 @@
           }
         }
       },
+      "PackageRevisionDraftResponse": {
+        "description": "Package revision draft",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/ETag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PackageRevisionDraftView"
+            }
+          }
+        }
+      },
       "RunResponse": {
         "description": "Analysis run",
         "content": {
@@ -1813,6 +2011,38 @@
           "application/json": {
             "schema": {
               "$ref": "./domain.schema.json#/$defs/Approval"
+            }
+          }
+        }
+      },
+      "AuthorizationDecisionResponse": {
+        "description": "Attached external authorization decision metadata",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/AuthorizationDecisionRecord"
+            }
+          }
+        }
+      },
+      "AuthorizationDecisionListResponse": {
+        "description": "Attached external authorization decision records",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "items"
+              ],
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "./domain.schema.json#/$defs/AuthorizationDecisionRecord"
+                  }
+                }
+              }
             }
           }
         }
@@ -2014,6 +2244,65 @@
           }
         ]
       },
+      "PutPackageRevisionDraftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document"
+        ],
+        "properties": {
+          "document": {
+            "$ref": "./package-draft-document.schema.json"
+          }
+        }
+      },
+      "PackageRevisionDraftView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "object_type",
+          "package_revision_id",
+          "document_schema_version",
+          "document",
+          "field_provenance",
+          "updated_by",
+          "updated_at",
+          "revision_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": "2.0.0"
+          },
+          "object_type": {
+            "const": "package_revision_draft"
+          },
+          "package_revision_id": {
+            "$ref": "./domain.schema.json#/$defs/Uuid"
+          },
+          "document_schema_version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+            "maxLength": 32
+          },
+          "document": {
+            "$ref": "./package-draft-document.schema.json"
+          },
+          "field_provenance": {
+            "$ref": "./domain.schema.json#/$defs/FieldProvenanceMap"
+          },
+          "updated_by": {
+            "$ref": "./domain.schema.json#/$defs/UserId"
+          },
+          "updated_at": {
+            "$ref": "./domain.schema.json#/$defs/UtcDateTime"
+          },
+          "revision_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
       "AcceptProposalRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -2026,6 +2315,56 @@
           }
         },
         "description": "Set edited_value to null to accept exactly; otherwise the proposal becomes edited."
+      },
+      "AttachAuthorizationDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision_type",
+          "decision_date",
+          "issuing_authority"
+        ],
+        "properties": {
+          "decision_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Externally issued authorization outcome vocabulary from the customer's GRC or AO process.",
+            "examples": [
+              "authorization_to_operate",
+              "authorization_to_test",
+              "denial",
+              "authorization_with_conditions"
+            ]
+          },
+          "decision_date": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "issuing_authority": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "$ref": "./domain.schema.json#/$defs/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          }
+        }
       },
       "RejectRequest": {
         "type": "object",

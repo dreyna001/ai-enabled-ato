@@ -19,7 +19,7 @@ export function SystemsListSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <LoadingRegion className="flex flex-wrap gap-2" label="Loading systems">
       {Array.from({ length: rows }, (_, index) => (
-        <Skeleton className="h-8 w-36 rounded-md" key={`system-skeleton-${index}`} />
+        <Skeleton className="h-8 w-36 rounded-sm" key={`system-skeleton-${index}`} />
       ))}
     </LoadingRegion>
   );
@@ -29,15 +29,15 @@ export function RevisionWorkflowSkeleton() {
   return (
     <LoadingRegion className="space-y-4" label="Loading Revision Workflow">
       <Skeleton className="h-5 w-48" />
-      <Skeleton className="h-24 w-full rounded-lg" />
-      <Skeleton className="h-10 w-40 rounded-md" />
+      <Skeleton className="h-24 w-full rounded-sm" />
+      <Skeleton className="h-10 w-40 rounded-sm" />
     </LoadingRegion>
   );
 }
 
 export function MatrixTableSkeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <LoadingRegion className="overflow-x-auto rounded-md border" label="Loading matrix">
+    <LoadingRegion className="overflow-x-auto rounded-sm border" label="Loading matrix">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50">

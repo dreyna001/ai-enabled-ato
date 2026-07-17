@@ -10,6 +10,7 @@ import {
   parseMatrixList,
   parsePackageRevision,
   parsePackageRevisionDraft,
+  parseDraftExportReadiness,
   parsePreflight,
   parseReadinessResponse,
   parseReviewComment,
@@ -37,6 +38,7 @@ import type {
   PackageDraftDocument,
   PackageRevision,
   PackageRevisionDraft,
+  DraftExportReadiness,
   PreflightResult,
   ReviewComment,
   ReviewRevision,
@@ -539,6 +541,20 @@ export async function getPreflight(
   return readValidatedJson(response, parsePreflight);
 }
 
+export async function getDraftExportReadiness(
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<DraftExportReadiness> {
+  const response = await apiFetch(
+    `${API_BASE}/package-revisions/${revisionId}/draft/export-readiness`,
+    {
+      credentials: "include",
+      ...options,
+    },
+  );
+  return readValidatedJson(response, parseDraftExportReadiness);
+}
+
 export async function getChangeAnalysis(
   revisionId: string,
   options: ApiFetchOptions = {},
@@ -570,7 +586,7 @@ export async function chatWithPackage(
   session: SessionInfo,
   revisionId: string,
   question: string,
-  options: ApiFetchOptions & { reviewRevisionId?: string | null } = {},
+  options: ApiFetchOptions & { runId: string; reviewRevisionId?: string | null },
 ): Promise<ChatResponse> {
   const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}/chat`, {
     method: "POST",
@@ -582,6 +598,7 @@ export async function chatWithPackage(
     },
     body: JSON.stringify({
       question,
+      run_id: options.runId,
       review_revision_id: options.reviewRevisionId ?? null,
     }),
     ...options,

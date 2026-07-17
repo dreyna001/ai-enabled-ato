@@ -159,7 +159,7 @@ def _optional_runtime_config_document(project_root: Path) -> dict[str, Any] | No
         return None
 
 
-async def _compute_current_payload_manifest_sha256(
+async def compute_current_payload_manifest_sha256(
     session: AsyncSession,
     *,
     review_revision_id: uuid.UUID,
@@ -247,7 +247,7 @@ async def _verify_approval_payload_binding(
     actor_id: str,
     now: datetime,
 ) -> None:
-    current_hash = await _compute_current_payload_manifest_sha256(
+    current_hash = await compute_current_payload_manifest_sha256(
         session,
         review_revision_id=review_revision_id,
         run_id=run_id,

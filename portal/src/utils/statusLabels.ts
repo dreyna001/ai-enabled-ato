@@ -2,7 +2,21 @@ import type { BadgeProps } from "@/components/ui/badge";
 import { toTitleCaseWords } from "@/utils/labelFormatting";
 
 export function revisionStatusLabel(status: string): string {
+  if (status === "ready") {
+    return "Sealed — ready for analysis";
+  }
   return toTitleCaseWords(status);
+}
+
+export function packagePreparationStatusLabel(status: string): string {
+  switch (status) {
+    case "in_progress":
+      return "In progress";
+    case "ready_for_external_review":
+      return "Ready for external review";
+    default:
+      return toTitleCaseWords(status);
+  }
 }
 
 export function revisionStatusVariant(

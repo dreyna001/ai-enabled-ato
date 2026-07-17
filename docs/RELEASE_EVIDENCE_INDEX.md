@@ -1,7 +1,7 @@
 # Release Evidence Index
 
 **Status:** Phase 6 integration and release gate (2026-07-14)  
-**Repository tip:** `cursor/phase-6-integration-and-release-gate-f4f1` (integrated from `feature/complete-ato-product` @ `5dea50c` plus quality-gate, documentation-reconciliation, and release-packaging workstreams)  
+**Repository tip:** snapshot at Phase 6 reconciliation; branch name is historical (`cursor/phase-6-integration-and-release-gate-f4f1`)  
 **Alembic head:** `20260717_0012` (`migrations/versions/20260717_0012_package_search_index.py`)
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
@@ -30,7 +30,7 @@ This index links automated contract evidence, qualification assets, drill schema
 | Service unit/integration (optional) | [`tests/ato_service/test_workflow_e2e_integration.py`](../tests/ato_service/test_workflow_e2e_integration.py), [`test_workflow_recovery_integration.py`](../tests/ato_service/test_workflow_recovery_integration.py) | `integration-postgres` | PASS (CI) when `ATO_TEST_DATABASE_URL` set |
 | PostgreSQL connectivity probe | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | optional local/CI | environment-not-run when URL absent |
 
-**Generated-at-build (Phase 6 integration gate, Python 3.12):**
+**Test snapshot (Phase 6 integration gate, 2026-07-14 — counts drift with new tests; re-run pytest for current numbers):**
 
 | Gate | Result |
 | --- | --- |
@@ -43,6 +43,8 @@ This index links automated contract evidence, qualification assets, drill schema
 | Playwright mocked rendering/authz | **6 passed** |
 | Integration collection without `ATO_TEST_DATABASE_URL` | **20 collected**, all skipped at runtime |
 | Shell syntax (deployment contract) | **10 passed** |
+
+Current counts: run `python -m pytest -m "not integration" -q` at repository tip.
 
 Historical doc-reconciliation record (unchanged gate record [`P6_GATE_RECORD.md`](P6_GATE_RECORD.md)): **1585 passed**, 1 skipped, 20 deselected at documentation-reconciliation tip.
 

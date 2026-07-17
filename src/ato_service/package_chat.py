@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import cache
 from typing import Any, Sequence
@@ -389,6 +389,65 @@ def _deterministic_grounded_answer(
     }
 
 
+def _chat_model_request(*, config: RuntimeConfig, revision: PackageRevision) -> ModelCallRequest:
+    endpoint_profile = _endpoint_profile(config)
+    return ModelCallRequest(
+        capability=ModelCapability.PACKAGE_CHAT,
+        data_origin=DataOrigin(revision.data_origin),
+        sensitivity=Sensitivity(revision.sensitivity),
+        endpoint_profile=endpoint_profile,
+        endpoint_policy_approved=config.document.get("TEXT_MODEL_ENDPOINT_POLICY_APPROVED") is True,
+        cui_boundary_approved=config.document.get("CUI_MODEL_BOUNDARY_APPROVED") is True,
+        vision_model_enabled=bool(config.document.get("VISION_MODEL_ENABLED")),
+        current_llm_call_count=0,
+        max_llm_calls=2,
+    )
+
+
+async def _invoke_chat_completion(
+    *,
+    request: ModelCallRequest,
+    config: RuntimeConfig,
+    messages: Sequence[Any],
+    system: str,
+) -> tuple[str, int]:
+    from ato_service.text_llm import build_text_model_client
+
+    client = build_text_model_client(config)
+
+    async def _callback() -> str:
+        return client.complete(list(messages), system=system)
+
+    result: ModelCallResult[str] = await invoke_model_call(request, _callback)
+    return result.value, result.llm_call_count
+
+
+def _format_model_answer(
+    *,
+    raw: str,
+    hits: Sequence[SearchChunkHit],
+    sources: dict[str, CitableSource],
+) -> dict[str, Any]:
+    parsed = _parse_chat_response(raw)
+    validate_citations(citations=parsed.citations, sources=sources)
+    rendered = []
+    for citation in parsed.citations:
+        rendered.append(
+            {
+                **citation,
+                "excerpt": _render_excerpt(citation=citation, hits=hits, sources=sources),
+            }
+        )
+    return {
+        "answer": parsed.answer[:12000],
+        "citations": [
+            {key: value for key, value in item.items() if key != "excerpt"} for item in rendered
+        ],
+        "refused": False,
+        "refusal_code": None,
+    }
+
+
 async def _model_grounded_answer(
     *,
     config: RuntimeConfig,
@@ -397,88 +456,38 @@ async def _model_grounded_answer(
     hits: Sequence[SearchChunkHit],
     sources: dict[str, CitableSource],
 ) -> dict[str, Any]:
-    endpoint_profile = _endpoint_profile(config)
-    request = ModelCallRequest(
-        capability=ModelCapability.PACKAGE_CHAT,
-        data_origin=DataOrigin(revision.data_origin),
-        sensitivity=Sensitivity(revision.sensitivity),
-        endpoint_profile=endpoint_profile,
-        endpoint_policy_approved=bool(
-            config.document.get("TEXT_MODEL_ENDPOINT_POLICY_APPROVED")
-        ),
-        cui_boundary_approved=bool(config.document.get("CUI_BOUNDARY_APPROVED")),
-        vision_model_enabled=bool(config.document.get("VISION_MODEL_ENABLED")),
-        current_llm_call_count=0,
-        max_llm_calls=2,
+    from ato_service.text_llm import ChatMessage
+
+    base_request = _chat_model_request(config=config, revision=revision)
+    prompt = _build_chat_prompt(question=question, hits=hits)
+    raw, llm_call_count = await _invoke_chat_completion(
+        request=base_request,
+        config=config,
+        messages=[ChatMessage(role="user", content=question)],
+        system=prompt,
     )
 
-    async def _callback() -> dict[str, Any]:
-        from ato_service.text_llm import ChatMessage, build_text_model_client
-
-        client = build_text_model_client(config)
-        prompt = _build_chat_prompt(question=question, hits=hits)
-        raw = client.complete(
-            [ChatMessage(role="user", content=question)],
-            system=prompt,
-        )
-        parsed = _parse_chat_response(raw)
-        validate_citations(citations=parsed.citations, sources=sources)
-        rendered = []
-        for citation in parsed.citations:
-            rendered.append(
-                {
-                    **citation,
-                    "excerpt": _render_excerpt(citation=citation, hits=hits, sources=sources),
-                }
-            )
-        return {
-            "answer": parsed.answer[:12000],
-            "citations": [{key: value for key, value in item.items() if key != "excerpt"} for item in rendered],
-            "refused": False,
-            "refusal_code": None,
-        }
-
-    async def _repair(raw_text: str) -> dict[str, Any]:
-        from ato_service.text_llm import ChatMessage, build_text_model_client
-
-        client = build_text_model_client(config)
+    try:
+        return _format_model_answer(raw=raw, hits=hits, sources=sources)
+    except ChatValidationError:
+        if llm_call_count >= base_request.max_llm_calls:
+            raise
         repair_prompt = (
             "Repair the previous response into strict JSON with keys "
             "schema_version, answer, citations. citations must only reference "
             "supplied chunk ids and offsets."
         )
-        raw = client.complete(
-            [
+        raw, _ = await _invoke_chat_completion(
+            request=replace(base_request, current_llm_call_count=llm_call_count),
+            config=config,
+            messages=[
                 ChatMessage(role="user", content=question),
-                ChatMessage(role="assistant", content=raw_text),
+                ChatMessage(role="assistant", content=raw),
                 ChatMessage(role="user", content=repair_prompt),
             ],
-            system=_build_chat_prompt(question=question, hits=hits),
+            system=prompt,
         )
-        parsed = _parse_chat_response(raw)
-        validate_citations(citations=parsed.citations, sources=sources)
-        return {
-            "answer": parsed.answer[:12000],
-            "citations": parsed.citations,
-            "refused": False,
-            "refusal_code": None,
-        }
-
-    try:
-        result: ModelCallResult[dict[str, Any]] = await invoke_model_call(request, _callback)
-        return result.value
-    except Exception:
-        try:
-            from ato_service.text_llm import ChatMessage, build_text_model_client
-
-            client = build_text_model_client(config)
-            first = client.complete(
-                [ChatMessage(role="user", content=question)],
-                system=_build_chat_prompt(question=question, hits=hits),
-            )
-            return await _repair(first)
-        except Exception as exc:
-            raise exc
+        return _format_model_answer(raw=raw, hits=hits, sources=sources)
 
 
 async def _model_chat_allowed(*, config: RuntimeConfig, revision: PackageRevision) -> bool:

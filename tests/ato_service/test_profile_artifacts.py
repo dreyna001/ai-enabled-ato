@@ -113,6 +113,8 @@ def test_fedramp_rev5_preserves_imported_sections_and_provenance() -> None:
     assert "machine/sar.json" in paths
     assert "machine/oscal.json" in paths
     assert "human/rev5-transition-readiness.md" in paths
+    assert "validation/export-readiness.json" in paths
+    assert "validation/schema-purity.json" not in paths
 
     sar_payload = json.loads(artifacts.contents["machine/sar.json"])
     assert sar_payload["owner"] == "assessor"
@@ -194,6 +196,55 @@ def test_export_readiness_reports_hs009_without_independent_assessment() -> None
         project_root=ROOT,
     )
     assert "hs_009_missing_independent_assessment" in result.blockers
+
+
+def test_fisma_profile_prunes_duplicate_common_artifacts() -> None:
+    document = {
+        "package": {"profile_id": "fisma_agency_security", "title": "Demo"},
+        "system": {
+            "display_name": "Demo",
+            "authorization_boundary": "vpc",
+            "mission_summary": "demo",
+            "impact_level": "moderate",
+        },
+        "security_controls": {
+            "AC-2": {
+                "implementation_status": "implemented",
+                "implementation_statement": "policy",
+            }
+        },
+        "assessor_inputs": {"sar": {"owner": "assessor"}},
+        "privacy": {"scope_notice": "External privacy review required."},
+        "fisma_agency_security": {"sections": {}},
+    }
+    artifacts = generate_profile_artifacts(
+        profile_id="fisma_agency_security",
+        sealed_document=document,
+        review_revision_id=uuid.UUID(REVIEW_ID),
+        run_id=uuid.UUID(RUN_ID),
+        dispositions=_dispositions(),
+        matrix_rows=_matrix_rows(),
+        project_root=ROOT,
+    )
+    paths = {entry["path"] for entry in artifacts.files}
+
+    assert "validation/schema-purity.json" not in paths
+    assert "human/readiness-summary.md" not in paths
+    assert "validation/export-readiness.json" not in paths
+    assert "human/security-readiness.md" in paths
+    assert "machine/security-readiness.json" in paths
+    assert "validation/fisma-export-readiness.json" in paths
+    assert "machine/assessment-matrix.json" in paths
+    assert "human/assessment-matrix.md" in paths
+    assert "machine/package-document.json" in paths
+
+    matrix_md = artifacts.contents["human/assessment-matrix.md"].decode("utf-8")
+    assert "# Assessment Matrix" in matrix_md
+    assert "# Assessment matrix (draft)" not in matrix_md
+
+    fisma_readiness = json.loads(artifacts.contents["validation/fisma-export-readiness.json"])
+    assert "hs002_template_pack_unavailable" in fisma_readiness["readiness_blockers"]
+    assert "hs002_template_pack_unavailable" in fisma_readiness["readiness_warnings"]
 
 
 def test_export_readiness_rev5_requires_imported_sections() -> None:

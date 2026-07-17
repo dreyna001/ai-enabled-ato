@@ -45,6 +45,8 @@ type PackageEditorProps = {
   saveError: string;
   staleConflict: boolean;
   validationIssues: DraftFieldIssue[];
+  exportBlocked?: boolean;
+  exportBlockers?: string[];
   onDocumentChange: (document: PackageDraftDocument) => void;
   onSave: () => void;
   onReload: () => void;
@@ -126,6 +128,8 @@ export function PackageEditor({
   saveError,
   staleConflict,
   validationIssues,
+  exportBlocked = false,
+  exportBlockers = [],
   onDocumentChange,
   onSave,
   onReload,
@@ -199,13 +203,13 @@ export function PackageEditor({
   return (
     <div className="space-y-4">
       {isDirty ? (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+        <div className="rounded-sm border border-border border-l-4 border-l-amber-500 bg-card px-4 py-3 text-sm text-foreground">
           Unsaved changes. Save draft before confirming the package.
         </div>
       ) : null}
 
       {staleConflict ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border border-l-4 border-l-destructive bg-card px-4 py-3 text-sm text-foreground">
           <span className="flex items-center gap-2">
             <AlertTriangle className="size-4 text-destructive" />
             This draft changed on the server. Reload to continue editing.
@@ -217,13 +221,13 @@ export function PackageEditor({
       ) : null}
 
       {saveError && !staleConflict ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-line">
+        <div className="rounded-sm border border-border border-l-4 border-l-destructive bg-card px-4 py-3 text-sm text-destructive whitespace-pre-line">
           {saveError}
         </div>
       ) : null}
 
       {hasValidationIssues ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+        <div className="rounded-sm border border-border border-l-4 border-l-destructive bg-card px-4 py-3 text-sm">
           <p className="font-medium text-destructive">
             Fix these fields before saving or confirming:
           </p>
@@ -277,7 +281,7 @@ export function PackageEditor({
             label="Prepared For"
             pointer="/package/prepared_for"
             provenance={provenance}
-            helpText="Customer or program audience for this package (for example, agency AO review)."
+            helpText="Customer or program audience for this package (for example, agency security review)."
           >
             <Input
               value={document.package.prepared_for}
@@ -325,7 +329,7 @@ export function PackageEditor({
             fieldError={issueFor("/system/authorization_boundary")}
           >
             <textarea
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
               value={document.system.authorization_boundary}
               onChange={(event) =>
                 updateDocument({
@@ -346,7 +350,7 @@ export function PackageEditor({
             fieldError={issueFor("/system/mission_summary")}
           >
             <textarea
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
               value={document.system.mission_summary}
               onChange={(event) =>
                 updateDocument({
@@ -365,7 +369,7 @@ export function PackageEditor({
               fieldError={issueFor("/system/impact_level")}
             >
               <select
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
                 value={document.system.impact_level ?? ""}
                 onChange={(event) =>
                   updateDocument({
@@ -472,7 +476,7 @@ export function PackageEditor({
                     fieldError={issueFor(`${pointerBase}/implementation_status`)}
                   >
                     <select
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
                       value={control.implementation_status}
                       onChange={(event) =>
                         updateControl(controlId, {
@@ -495,7 +499,7 @@ export function PackageEditor({
                     fieldError={issueFor(`${pointerBase}/implementation_statement`)}
                   >
                     <textarea
-                      className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className="min-h-20 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
                       value={control.implementation_statement}
                       onChange={(event) =>
                         updateControl(controlId, {
@@ -522,7 +526,7 @@ export function PackageEditor({
                   <CardTitle className="font-mono text-sm">{key}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="overflow-auto rounded-md border bg-background p-3 text-xs">
+                  <pre className="overflow-auto rounded-sm border border-border bg-background p-3 text-xs">
                     {JSON.stringify(value, null, 2)}
                   </pre>
                 </CardContent>
@@ -544,7 +548,7 @@ export function PackageEditor({
             provenance={provenance}
           >
             <textarea
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm"
               value={document.privacy.scope_notice}
               onChange={(event) =>
                 updateDocument({
@@ -562,8 +566,9 @@ export function PackageEditor({
 
         <TabsContent value="assessor" className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Assessor-owned inputs are read-only in the portal. Contact an assessor to update SAR
-            or independent assessment fields.
+            Assessor-owned inputs are populated by upload and intake only. Upload an assessor
+            attestation or independent assessment artifact before confirming; fields here are
+            read-only.
           </p>
           {Object.keys(document.assessor_inputs).length === 0 ? (
             <p className="text-sm text-muted-foreground">No assessor inputs populated yet.</p>
@@ -574,7 +579,7 @@ export function PackageEditor({
                   <CardTitle className="font-mono text-sm">{key}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="overflow-auto rounded-md border bg-background p-3 text-xs">
+                  <pre className="overflow-auto rounded-sm border border-border bg-background p-3 text-xs">
                     {JSON.stringify(value, null, 2)}
                   </pre>
                 </CardContent>
@@ -597,28 +602,30 @@ export function PackageEditor({
         <Button
           type="button"
           variant="default"
-          disabled={isDirty || saving || staleConflict || hasValidationIssues}
+          disabled={
+            isDirty || saving || staleConflict || hasValidationIssues || exportBlocked
+          }
           onClick={onConfirm}
           title={
-            hasValidationIssues
-              ? "Resolve the highlighted validation issues before confirming."
-              : isDirty
-                ? "Save draft before confirming."
-                : undefined
+            exportBlocked
+              ? "Resolve export readiness blockers before confirming."
+              : hasValidationIssues
+                ? "Resolve the highlighted validation issues before confirming."
+                : isDirty
+                  ? "Save draft before confirming."
+                  : undefined
           }
         >
           Confirm Package
         </Button>
+        {exportBlocked ? (
+          <p className="w-full text-sm text-destructive">
+            Confirm is blocked until required uploads and profile content are present
+            {exportBlockers.length > 0 ? ` (${exportBlockers.length} item${exportBlockers.length === 1 ? "" : "s"})` : ""}.
+            See Confirm readiness above.
+          </p>
+        ) : null}
       </div>
-
-      <Card className="bg-muted/10">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Draft Metadata</CardTitle>
-          <CardDescription>
-            Updated by {draft.updated_by} at {draft.updated_at}
-          </CardDescription>
-        </CardHeader>
-      </Card>
     </div>
   );
 }
@@ -730,7 +737,7 @@ function GroupedRecordEditor({
               />
             ) : (
               <textarea
-                className="min-h-20 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+                className="min-h-20 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs"
                 value={JSON.stringify(fieldValue, null, 2)}
                 onChange={(event) => {
                   try {

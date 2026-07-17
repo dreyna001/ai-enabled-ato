@@ -42,6 +42,7 @@ from ato_service.package_revision_drafts import (
     PackageRevisionDraftViewResult,
     SavePackageRevisionDraftResult,
     get_package_revision_draft,
+    get_draft_export_readiness,
     save_package_revision_draft,
 )
 from ato_service.package_revisions import (
@@ -366,6 +367,7 @@ def create_api_router() -> APIRouter:
         system_id: uuid.UUID,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
         cursor: str | None = None,
         limit: int | None = None,
     ) -> PaginatedPackageRevisionsResponse:
@@ -375,6 +377,8 @@ def create_api_router() -> APIRouter:
             system_id=system_id,
             cursor=cursor,
             limit=limit,
+            project_root=runtime_state.snapshot.project_root,
+            now=_utc_now(),
         )
         return PaginatedPackageRevisionsResponse(
             items=list(page.items),
@@ -386,11 +390,14 @@ def create_api_router() -> APIRouter:
         id: uuid.UUID,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
     ) -> JSONResponse:
         payload = await get_package_revision(
             session,
             principal=principal,
             package_revision_id=id,
+            project_root=runtime_state.snapshot.project_root,
+            now=_utc_now(),
         )
         etag = format_package_revision_etag(payload["revision_version"])
         return JSONResponse(content=payload, headers={"ETag": etag})
@@ -475,6 +482,24 @@ def create_api_router() -> APIRouter:
         )
         return _draft_json_response(result)
 
+    @router.get(
+        "/package-revisions/{id}/draft/export-readiness",
+        tags=["Packages"],
+    )
+    async def get_package_revision_draft_export_readiness(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+    ) -> JSONResponse:
+        payload = await get_draft_export_readiness(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            project_root=runtime_state.snapshot.project_root,
+        )
+        return JSONResponse(content=payload)
+
     @router.put("/package-revisions/{id}/draft", tags=["Packages"])
     async def put_package_revision_draft_route(
         id: uuid.UUID,
@@ -521,6 +546,7 @@ def create_api_router() -> APIRouter:
             idempotency_key=idempotency_key,
             hmac_key=audit_hmac_key,
             now=_utc_now(),
+            project_root=runtime_state.snapshot.project_root,
             config=runtime_state.config,
             blob_store=blob_store,
         )

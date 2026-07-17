@@ -8,7 +8,10 @@ from pathlib import Path
 
 import json
 
-from ato_service.export_readiness import evaluate_export_readiness
+from ato_service.export_readiness import (
+    evaluate_export_readiness,
+    portal_export_blocker_codes,
+)
 from ato_service.package_chat import evaluate_refusal
 from ato_service.package_search_index import collect_searchable_chunks
 from ato_service.preflight import PreflightContext, evaluate_preflight
@@ -105,6 +108,17 @@ def test_export_readiness_reports_missing_assessor_inputs_for_fedramp() -> None:
         project_root=ROOT,
     )
     assert "missing_assessor_inputs" in result.blockers
+
+
+def test_portal_export_blocker_codes_map_structural_ids() -> None:
+    mapped = portal_export_blocker_codes(
+        ("missing_assessor_inputs", "missing_privacy_artifacts", "missing_ksi_methods")
+    )
+    assert mapped == (
+        "assessor.inputs_present",
+        "missing_ksi_methods",
+        "privacy.artifacts_present",
+    )
 
 
 def test_export_readiness_fisma_security_only_does_not_require_privacy_execution() -> None:

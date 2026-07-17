@@ -34,5 +34,17 @@
   "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
   "TEXT_MODEL_TEMPERATURE": 0.0,
   "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": true,
-  "CUI_MODEL_BOUNDARY_APPROVED": true
+  "CUI_MODEL_BOUNDARY_APPROVED": true,
+  "PROCESS_CAPABILITIES": {
+    "api": true,
+    "intake_worker": true,
+    "analyzer_worker": true,
+    "portal_static": false,
+    "malware_scanning": false,
+    "text_model_calls": true,
+    "vision_model_calls": false,
+    "oidc_authentication": true,
+    "package_search": true,
+    "package_chat": true
+  }
 }
