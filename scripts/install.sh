@@ -29,7 +29,7 @@ START_SERVICE=false
 RUN_SMOKE=false
 RUN_MIGRATE=false
 DRY_RUN=false
-EXPECTED_MIGRATION_HEAD="20260717_0012"
+EXPECTED_MIGRATION_HEAD="20260717_0013"
 
 PRODUCTION_SYSTEMD_UNITS=(
     "ato-api.service"
@@ -414,13 +414,12 @@ validate_migration_head_contract() {
 import sys
 from pathlib import Path
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
-
 project_root = Path(sys.argv[1])
 expected = sys.argv[2]
-script = ScriptDirectory.from_config(Config(str(project_root / "alembic.ini")))
-head = script.get_current_head() or ""
+sys.path.insert(0, str(project_root / "src"))
+from ato_operator.migration_contract import resolve_migration_head_from_scripts
+
+head = resolve_migration_head_from_scripts(project_root=project_root) or ""
 print(head)
 raise SystemExit(0 if head == expected else 2)
 PY

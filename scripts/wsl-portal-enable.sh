@@ -85,6 +85,10 @@ select_runtime_config() {
 }
 
 install_openai_local_env_file() {
+  if [[ -f "$LOCAL_ENV_DEST" ]] && ! [[ -f "$LOCAL_ENV_SOURCE" ]]; then
+    info "Keeping existing $LOCAL_ENV_DEST (no config.local.env in repo)"
+    return 0
+  fi
   [[ -f "$LOCAL_ENV_SOURCE" ]] \
     || err "Missing $LOCAL_ENV_SOURCE. Copy config.local.env.example to config.local.env and set ATO_TEXT_MODEL_API_KEY=your-key"
   grep -Eq '^[[:space:]]*ATO_TEXT_MODEL_API_KEY=.+$' "$LOCAL_ENV_SOURCE" \

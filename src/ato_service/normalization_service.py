@@ -152,12 +152,14 @@ def build_artifact_facts(
 
 def normalization_needed(
     *,
-    profile_id: str,
+    profile_id: str | None,
     document: dict[str, Any],
     field_provenance: dict[str, Any],
     artifacts: Sequence[ArtifactFacts],
 ) -> bool:
     """Return whether bounded normalization should reserve a step."""
+    if profile_id is None:
+        return False
     empty_targets = list_empty_targets(
         profile_id=profile_id,
         document=document,
@@ -333,6 +335,15 @@ def resolve_text_model_endpoint_profile(config: RuntimeConfig) -> EndpointProfil
     return EndpointProfile(document["TEXT_MODEL_ENDPOINT_PROFILE"])
 
 
+def revision_metadata_ready_for_model(snapshot: IntakeRevisionSnapshot) -> bool:
+    """Return whether human labels and profile metadata allow model routing."""
+    if snapshot.profile_id is None:
+        return False
+    if snapshot.data_origin is None or snapshot.sensitivity is None:
+        return False
+    return True
+
+
 def build_model_call_request(
     *,
     snapshot: IntakeRevisionSnapshot,
@@ -413,6 +424,17 @@ async def _run_intake_normalization_inner(
     )
     document = copy.deepcopy(deterministic_draft.document)
     provenance = copy.deepcopy(deterministic_draft.field_provenance)
+    if not revision_metadata_ready_for_model(snapshot):
+        return PendingNormalizationOutcome(
+            skipped=True,
+            reconciliation_required=False,
+            step_id=None,
+            input_digest=None,
+            result=None,
+            deterministic_draft=deterministic_draft,
+            protected_artifacts=None,
+            runtime_metadata=None,
+        )
     if not normalization_needed(
         profile_id=snapshot.profile_id,
         document=document,

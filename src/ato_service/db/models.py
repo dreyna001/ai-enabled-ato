@@ -84,11 +84,11 @@ class PackageRevision(Base):
         Uuid(as_uuid=True),
         ForeignKey("package_revisions.package_revision_id", ondelete="RESTRICT"),
     )
-    profile_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    profile_id: Mapped[str | None] = mapped_column(String(64))
     certification_class: Mapped[str | None] = mapped_column(String(1))
     impact_level: Mapped[str | None] = mapped_column(String(16))
-    data_origin: Mapped[str] = mapped_column(String(64), nullable=False)
-    sensitivity: Mapped[str] = mapped_column(String(64), nullable=False)
+    data_origin: Mapped[str | None] = mapped_column(String(64))
+    sensitivity: Mapped[str | None] = mapped_column(String(64))
     effective_data_labels: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     authority_manifest_id: Mapped[str] = mapped_column(String(128), nullable=False)
     content_manifest_sha256: Mapped[str | None] = mapped_column(String(64))
@@ -150,6 +150,7 @@ class PackageRevision(Base):
             "profile_id",
             ev.PROFILE_ID_VALUES,
             constraint_name="ck_package_revisions_profile_id",
+            nullable=True,
         ),
         ck.enum_check(
             "certification_class",
@@ -167,11 +168,13 @@ class PackageRevision(Base):
             "data_origin",
             ev.DATA_ORIGIN_VALUES,
             constraint_name="ck_package_revisions_data_origin",
+            nullable=True,
         ),
         ck.enum_check(
             "sensitivity",
             ev.SENSITIVITY_VALUES,
             constraint_name="ck_package_revisions_sensitivity",
+            nullable=True,
         ),
         ck.enum_check(
             "status",
@@ -191,6 +194,15 @@ class PackageRevision(Base):
         CheckConstraint(
             "status <> 'ready' OR content_manifest_sha256 IS NOT NULL",
             name="ck_package_revisions_ready_requires_content_manifest_sha256",
+        ),
+        CheckConstraint(
+            "status <> 'ready' OR ("
+            "profile_id IS NOT NULL "
+            "AND data_origin IS NOT NULL "
+            "AND sensitivity IS NOT NULL "
+            "AND jsonb_array_length(effective_data_labels) >= 2"
+            ")",
+            name="ck_package_revisions_ready_requires_complete_metadata",
         ),
         CheckConstraint(
             "revision_version >= 1",

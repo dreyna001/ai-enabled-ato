@@ -1,1 +1,8 @@
 *.sh text eol=lf
+data/qualification/**/*.json text eol=lf
+data/qualification/**/*.md text eol=lf
+data/qualification/**/*.csv text eol=lf
+data/qualification/**/*.txt text eol=lf
+data/qualification/**/*.xml text eol=lf
+docs/contracts/**/*.json text eol=lf
+reference/authorities/**/*.json text eol=lf

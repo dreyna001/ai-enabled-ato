@@ -5,6 +5,7 @@ import {
   parseDisposition,
   parsePackageRevision,
   parseSearchResults,
+  parseSystem,
 } from "@/api/responseSchemas";
 
 describe("extended response schema parsers", () => {
@@ -46,6 +47,18 @@ describe("extended response schema parsers", () => {
     expect(parsePackageRevision(revision)?.package_preparation_status).toBe(
       "ready_for_external_review",
     );
+    expect(
+      parsePackageRevision({
+        package_revision_id: revision.package_revision_id,
+        system_id: revision.system_id,
+        status: revision.status,
+        revision_version: revision.revision_version,
+        profile_id: null,
+        data_origin: null,
+        sensitivity: null,
+        package_preparation_status: "in_progress",
+      })?.profile_id,
+    ).toBeNull();
     expect(
       parsePackageRevision({
         package_revision_id: revision.package_revision_id,
@@ -96,5 +109,25 @@ describe("extended response schema parsers", () => {
       evidence_request_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     });
     expect(parsed?.evidence_request_id).toBe("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+  });
+
+  it("parses archived_at on system payloads", () => {
+    const active = parseSystem({
+      system_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      display_name: "Active System",
+      owner_group: "owners",
+      viewer_groups: ["viewers"],
+      archived_at: null,
+    });
+    const archived = parseSystem({
+      system_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      display_name: "Archived System",
+      owner_group: "owners",
+      viewer_groups: ["viewers"],
+      archived_at: "2026-07-17T12:00:00Z",
+    });
+
+    expect(active?.archived_at).toBeNull();
+    expect(archived?.archived_at).toBe("2026-07-17T12:00:00Z");
   });
 });

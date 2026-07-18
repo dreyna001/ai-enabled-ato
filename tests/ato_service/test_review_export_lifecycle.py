@@ -39,7 +39,7 @@ RUN_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
 
 class _System:
     owner_group = "owners"
-    viewer_groups = ["viewers"]
+    viewer_groups = ["viewers", "approvers"]
 
 
 class _Revision:
@@ -169,7 +169,7 @@ def test_reject_export_happy_path() -> None:
     with patch("ato_service.export_service.load_idempotency_replay", AsyncMock(return_value=None)), patch(
         "ato_service.export_service.record_idempotency_outcome",
         AsyncMock(),
-    ), patch("ato_service.export_service.append_audit_event", AsyncMock()):
+    ), patch("ato_service.export_service.append_audit_event", AsyncMock()) as audit_event:
         result = _run(
             reject_export(
                 session,
@@ -184,6 +184,9 @@ def test_reject_export_happy_path() -> None:
 
     assert result.payload["decision"] == "rejected"
     assert result.payload["reason"] == "payload incomplete"
+    assert result.payload["submitted_by"] == "reviewer@example.test"
+    assert result.payload["decided_by"] == "approver@example.test"
+    assert "reason" not in audit_event.await_args.kwargs["metadata"]
     assert export_draft.status == "rejected"
 
 
@@ -205,6 +208,43 @@ def test_reject_export_denies_self_action() -> None:
                     now=NOW,
                 )
             )
+
+
+def test_reject_export_allows_self_when_enabled_with_bounded_audit_metadata() -> None:
+    approval = _approval(submitted_by="approver@example.test")
+    export_draft = _export_draft()
+    session = _session_for_approval(approval, export_draft)
+    principal = _principal(actor_id="approver@example.test", groups=("approvers",))
+
+    with patch(
+        "ato_service.export_service.load_idempotency_replay",
+        AsyncMock(return_value=None),
+    ), patch(
+        "ato_service.export_service.record_idempotency_outcome",
+        AsyncMock(),
+    ), patch(
+        "ato_service.export_service.append_audit_event",
+        AsyncMock(),
+    ) as audit_event:
+        result = _run(
+            reject_export(
+                session,
+                principal=principal,
+                approval_id=APPROVAL_ID,
+                reason="bounded stored reason",
+                idempotency_key="reject-key-single-user",
+                hmac_key=b"audit-test-key",
+                now=NOW,
+                single_user_mode_enabled=True,
+            )
+        )
+
+    assert result.payload["submitted_by"] == "approver@example.test"
+    assert result.payload["decided_by"] == "approver@example.test"
+    metadata = audit_event.await_args.kwargs["metadata"]
+    assert metadata["single_user_mode"] is True
+    assert metadata["self_decision"] is True
+    assert "reason" not in metadata
 
 
 def test_approve_after_reject_is_denied() -> None:

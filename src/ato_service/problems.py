@@ -51,6 +51,7 @@ KNOWN_ERROR_CODES = frozenset(
         "request_rate_limit_exceeded",
         "request_schema_invalid",
         "resource_not_found",
+        "revision_metadata_incomplete",
         "source_size_limit_exceeded",
         "source_type_mismatch",
         "state_artifact_inconsistent",
@@ -93,6 +94,7 @@ ERROR_TITLES: dict[str, str] = {
     "request_rate_limit_exceeded": "Request rate limit exceeded",
     "request_schema_invalid": "Request schema invalid",
     "resource_not_found": "Resource not found",
+    "revision_metadata_incomplete": "Revision metadata incomplete",
     "source_size_limit_exceeded": "Source size limit exceeded",
     "source_type_mismatch": "Source type mismatch",
     "state_artifact_inconsistent": "State artifact inconsistent",
@@ -167,6 +169,9 @@ DEFAULT_DETAILS: dict[str, str] = {
     ),
     "request_schema_invalid": "One or more request fields failed validation.",
     "resource_not_found": "The requested resource was not found.",
+    "revision_metadata_incomplete": (
+        "Package revision metadata must be completed by a human before confirm or model work."
+    ),
     "source_size_limit_exceeded": (
         "The source artifact exceeds the configured byte limit."
     ),
@@ -222,6 +227,7 @@ ERROR_HTTP_METADATA: dict[str, tuple[int, bool]] = {
     "request_rate_limit_exceeded": (429, True),
     "request_schema_invalid": (422, False),
     "resource_not_found": (404, False),
+    "revision_metadata_incomplete": (422, False),
     "source_size_limit_exceeded": (413, False),
     "source_type_mismatch": (422, False),
     "state_artifact_inconsistent": (500, False),
@@ -690,12 +696,16 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
         IdempotencyConflictError,
         IdempotencyValidationError,
     )
+    from ato_service.intake_readiness import IntakeReportStateError
     from ato_service.package_revision_drafts import PackageRevisionDraftNotFoundError
     from ato_service.package_revisions import (
         PackageRevisionNotFoundError,
         PackageRevisionStorageError,
         PackageRevisionValidationError,
         ParentRevisionNotFoundError,
+        ParentRevisionNotReadyError,
+        PatchMetadataStateError,
+        RevisionMetadataIncompleteError,
         SystemNotFoundError,
         UnconfirmedFactProposalsError,
         ExportNotReadyForConfirmError,
@@ -819,6 +829,10 @@ def _register_p11_problem_handlers(app: FastAPI) -> None:
     )
     _register_domain_problem_handler(app, UnconfirmedFactProposalsError)
     _register_domain_problem_handler(app, ExportNotReadyForConfirmError)
+    _register_domain_problem_handler(app, RevisionMetadataIncompleteError)
+    _register_domain_problem_handler(app, ParentRevisionNotReadyError)
+    _register_domain_problem_handler(app, PatchMetadataStateError)
+    _register_domain_problem_handler(app, IntakeReportStateError)
 
     for malformed_error_type in (
         InvalidPaginationCursorError,

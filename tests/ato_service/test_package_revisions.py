@@ -29,7 +29,10 @@ from ato_service.package_revisions import (
     PackageRevisionStorageError,
     PackageRevisionValidationError,
     ParentRevisionNotFoundError,
+    ParentRevisionNotReadyError,
+    PatchMetadataStateError,
     ProfileBoundaryError,
+    RevisionMetadataIncompleteError,
     SystemNotFoundError,
     UnconfirmedFactProposalsError,
     _load_package_revision_for_update_statement,
@@ -44,7 +47,12 @@ from ato_service.package_revisions import (
     finalize_request_digest,
     get_package_revision,
     list_package_revisions,
+    patch_package_revision_metadata,
+    patch_metadata_request_digest,
+    require_complete_revision_metadata,
+    revision_metadata_is_complete,
     validate_create_input,
+    validate_patch_metadata_input,
     validate_profile_boundaries,
 )
 from ato_service.runtime_config import RuntimeLimits
@@ -107,11 +115,11 @@ class _PackageRevisionRow:
     package_revision_id: uuid.UUID
     system_id: uuid.UUID
     parent_revision_id: uuid.UUID | None
-    profile_id: str
+    profile_id: str | None
     certification_class: str | None
     impact_level: str | None
-    data_origin: str
-    sensitivity: str
+    data_origin: str | None
+    sensitivity: str | None
     effective_data_labels: list[str]
     authority_manifest_id: str
     content_manifest_sha256: str | None
@@ -170,15 +178,12 @@ def _one_or_none_result(value: object) -> MagicMock:
     return result
 
 
+def _minimal_create_input(*, parent_revision_id: uuid.UUID | None = None) -> CreatePackageRevisionInput:
+    return CreatePackageRevisionInput(parent_revision_id=parent_revision_id)
+
+
 def _fisma_create_input() -> CreatePackageRevisionInput:
-    return CreatePackageRevisionInput(
-        parent_revision_id=None,
-        profile_id="fisma_agency_security",
-        certification_class=None,
-        impact_level="moderate",
-        data_origin="synthetic",
-        sensitivity="internal_unclassified",
-    )
+    return _minimal_create_input()
 
 
 def _system(*, owner_group: str = "owners", viewer_groups: list[str] | None = None) -> _SystemRow:
@@ -195,17 +200,28 @@ def _revision(
     revision_version: int = 1,
     content_manifest_sha256: str | None = None,
     system_id: uuid.UUID = SYSTEM_ID,
+    profile_id: str | None = "fisma_agency_security",
+    certification_class: str | None = None,
+    impact_level: str | None = "moderate",
+    data_origin: str | None = "synthetic",
+    sensitivity: str | None = "internal_unclassified",
+    effective_data_labels: list[str] | None = None,
 ) -> _PackageRevisionRow:
+    labels = effective_data_labels
+    if labels is None and data_origin is not None and sensitivity is not None:
+        labels = sorted({data_origin, sensitivity})
+    if labels is None:
+        labels = []
     return _PackageRevisionRow(
         package_revision_id=REVISION_ID,
         system_id=system_id,
         parent_revision_id=None,
-        profile_id="fisma_agency_security",
-        certification_class=None,
-        impact_level="moderate",
-        data_origin="synthetic",
-        sensitivity="internal_unclassified",
-        effective_data_labels=["internal_unclassified", "synthetic"],
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+        data_origin=data_origin,
+        sensitivity=sensitivity,
+        effective_data_labels=labels,
         authority_manifest_id="authority.v2",
         content_manifest_sha256=content_manifest_sha256,
         revision_version=revision_version,
@@ -272,15 +288,17 @@ def test_validate_profile_boundaries_rejects_invalid_combinations(
         )
 
 
-def test_validate_create_input_rejects_classified_sensitivity() -> None:
+def test_validate_create_input_accepts_minimal_root_payload() -> None:
+    request = validate_create_input(parent_revision_id=None)
+    assert request.parent_revision_id is None
+
+
+def test_validate_patch_metadata_rejects_classified_sensitivity() -> None:
     with pytest.raises(PackageRevisionValidationError) as exc_info:
-        validate_create_input(
-            parent_revision_id=None,
-            profile_id="fisma_agency_security",
-            certification_class=None,
-            impact_level="moderate",
-            data_origin="synthetic",
-            sensitivity="classified",
+        validate_patch_metadata_input(
+            provided={
+                "sensitivity": "classified",
+            }
         )
     assert exc_info.value.error_code == "classified_data_unsupported"
 
@@ -410,7 +428,10 @@ def test_create_persists_uploading_revision_and_records_outcome(
     assert created.status == "uploading"
     assert created.content_manifest_sha256 is None
     assert created.revision_version == 1
-    assert created.effective_data_labels == ["internal_unclassified", "synthetic"]
+    assert created.profile_id is None
+    assert created.data_origin is None
+    assert created.sensitivity is None
+    assert created.effective_data_labels == []
     assert created.authority_manifest_id == "authority.v2"
     mock_audit.assert_called_once()
     mock_record.assert_called_once()
@@ -440,14 +461,7 @@ def test_create_rejects_viewer_mutation_before_add(mock_load: AsyncMock) -> None
 @patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
 def test_create_rejects_missing_parent_without_mutation(mock_load: AsyncMock) -> None:
     mock_load.return_value = None
-    request = CreatePackageRevisionInput(
-        parent_revision_id=PARENT_ID,
-        profile_id="fisma_agency_security",
-        certification_class=None,
-        impact_level="moderate",
-        data_origin="synthetic",
-        sensitivity="internal_unclassified",
-    )
+    request = CreatePackageRevisionInput(parent_revision_id=PARENT_ID)
     session = _RecordingSession(
         [
             _scalar_result(_system()),
@@ -947,6 +961,41 @@ def test_confirm_rejects_stale_if_match_without_mutation(mock_load: AsyncMock) -
 
     assert revision.status == "awaiting_confirmation"
     assert revision.revision_version == 3
+
+
+@patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
+def test_confirm_rejects_incomplete_metadata_before_draft_lookup(mock_load: AsyncMock) -> None:
+    mock_load.return_value = None
+    revision = _revision(
+        status="awaiting_confirmation",
+        revision_version=2,
+        profile_id=None,
+        data_origin=None,
+        sensitivity=None,
+        effective_data_labels=[],
+    )
+    session = _RecordingSession(
+        [
+            _scalar_result(revision),
+            _scalar_one_result(_system()),
+        ]
+    )
+
+    with pytest.raises(RevisionMetadataIncompleteError):
+        _run(
+            confirm_package_revision(
+                session,
+                principal=OWNER_PRINCIPAL,
+                package_revision_id=REVISION_ID,
+                if_match='"v2"',
+                idempotency_key=IDEM_KEY,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert revision.revision_version == 2
+    assert len(session.execute_calls) == 2
 
 
 @patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)

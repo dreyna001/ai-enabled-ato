@@ -39,11 +39,11 @@ REVISION_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
 ARTIFACT_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
 
 
-def _revision(*, profile_id: str = "fisma_agency_security") -> SimpleNamespace:
+def _revision(*, profile_id: str | None = "fisma_agency_security") -> SimpleNamespace:
     return SimpleNamespace(
         package_revision_id=REVISION_ID,
         profile_id=profile_id,
-        impact_level="moderate",
+        impact_level="moderate" if profile_id == "fisma_agency_security" else None,
     )
 
 
@@ -93,6 +93,21 @@ def test_builds_fisma_shell_from_revision_metadata() -> None:
     assert draft.document["fedramp_rev5_transition"] is None
     assert draft.document["fisma_agency_security"] == {"security_plan_sections": {}}
     assert draft.document["assessor_inputs"] == {}
+    validate_package_draft_document(draft.document)
+
+
+def test_builds_null_profile_shell_for_upload_first_revision() -> None:
+    draft = build_initial_draft(
+        revision=_revision(profile_id=None),
+        system=_system(),
+        artifacts=[],
+        artifact_outcomes=[],
+    )
+
+    assert draft.document["package"]["profile_id"] is None
+    assert draft.document["fedramp_20x"] is None
+    assert draft.document["fedramp_rev5_transition"] is None
+    assert draft.document["fisma_agency_security"] is None
     validate_package_draft_document(draft.document)
 
 

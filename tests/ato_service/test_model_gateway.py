@@ -21,6 +21,7 @@ from ato_service.model_gateway import (
     ModelPolicyOrderingError,
     ModelRoutingDeniedError,
     ModelStepType,
+    PreAttestationModelCallRequest,
     ProhibitedModelActionError,
     invoke_model_call,
 )
@@ -108,6 +109,46 @@ def test_allowed_vision_extraction_invokes_callback_once() -> None:
     )
     assert value == "ok"
     assert call_count == 1
+
+
+def test_pre_attestation_mock_request_invokes_without_labels() -> None:
+    callback = AsyncMock(return_value="ok")
+    request = PreAttestationModelCallRequest(
+        capability=ModelCapability.NORMALIZE_PROPOSAL,
+        endpoint_profile=EndpointProfile.MOCK,
+        current_llm_call_count=0,
+        max_llm_calls=2,
+    )
+
+    result = _run(invoke_model_call(request, callback))
+
+    assert result.value == "ok"
+    assert result.llm_call_count == 1
+    callback.assert_awaited_once()
+    assert not hasattr(request, "data_origin")
+    assert not hasattr(request, "sensitivity")
+
+
+@pytest.mark.parametrize(
+    "endpoint_profile",
+    [EndpointProfile.EXTERNAL_OPENAI, EndpointProfile.INTERNAL_OPENAI_COMPATIBLE],
+)
+def test_pre_attestation_real_endpoint_denied_with_zero_calls(
+    endpoint_profile: EndpointProfile,
+) -> None:
+    callback = AsyncMock(return_value="must-not-run")
+    request = PreAttestationModelCallRequest(
+        capability=ModelCapability.NORMALIZE_PROPOSAL,
+        endpoint_profile=endpoint_profile,
+        current_llm_call_count=0,
+        max_llm_calls=2,
+    )
+
+    with pytest.raises(ModelRoutingDeniedError) as exc_info:
+        _run(invoke_model_call(request, callback))
+
+    assert exc_info.value.llm_call_count == 0
+    callback.assert_not_awaited()
 
 
 def test_allowed_route_with_disabled_vision_fails_closed_with_zero_calls() -> None:

@@ -593,6 +593,8 @@ def test_confirm_with_draft_blocks_export_readiness_blockers(mock_load: AsyncMoc
     revision = _revision(
         revision_version=4,
         profile_id="fedramp_20x_program",
+        certification_class="C",
+        impact_level=None,
     )
     draft = _draft(
         document=json.loads(

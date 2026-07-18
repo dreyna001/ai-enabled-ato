@@ -12,7 +12,7 @@ RUN_MIGRATE=true
 RUN_SMOKE=false
 RESTART_API=true
 DRY_RUN=false
-EXPECTED_MIGRATION_HEAD="20260717_0012"
+EXPECTED_MIGRATION_HEAD="20260717_0013"
 
 usage() {
     cat <<'EOF'
@@ -91,7 +91,38 @@ if [[ "$RUN_SMOKE" == "true" ]]; then
     install_args+=(--smoke)
 fi
 
+# WSL local deploys skip nginx and production systemd units (see wsl-local-deploy.sh).
+if grep -Eiq 'microsoft|wsl' /proc/version 2>/dev/null; then
+    install_args+=(--skip-nginx --skip-systemd)
+    info "WSL detected; passing --skip-nginx --skip-systemd to install.sh"
+elif [[ ! -d /etc/nginx/conf.d ]]; then
+    install_args+=(--skip-nginx)
+    info "No /etc/nginx/conf.d; passing --skip-nginx to install.sh"
+fi
+
 info "Refreshing installed package bytes"
 bash "$SCRIPT_DIR/install.sh" "${install_args[@]}"
+
+if grep -Eiq 'microsoft|wsl' /proc/version 2>/dev/null; then
+    local_api_unit="$REPO_DIR/deployment/systemd/ato-api.wsl-local.service"
+    [[ -f "$local_api_unit" ]] || err "Missing WSL API unit: $local_api_unit"
+    cp "$local_api_unit" /etc/systemd/system/ato-api.service
+    for unit in ato-synthetic-intake-worker.service ato-synthetic-intake-worker.timer; do
+        if [[ -f "$REPO_DIR/deployment/systemd/$unit" ]]; then
+            cp "$REPO_DIR/deployment/systemd/$unit" "/etc/systemd/system/$unit"
+        fi
+    done
+    if [[ -f "$REPO_DIR/deployment/systemd/ato-analyzer-worker.wsl-local.service" ]]; then
+        cp "$REPO_DIR/deployment/systemd/ato-analyzer-worker.wsl-local.service" \
+            /etc/systemd/system/ato-analyzer-worker.service
+    fi
+    systemctl daemon-reload || err "Failed to reload systemd after WSL unit restore"
+    info "Restored WSL systemd units (API on 8001, /opt runtime config)"
+    storage_bind="$INSTALL_DIR/data/ato-storage"
+    if [[ -d /var/ato-packages ]] && ! mountpoint -q "$storage_bind" 2>/dev/null; then
+        mount --bind /var/ato-packages "$storage_bind" \
+            || warn "Failed to bind-mount /var/ato-packages -> $storage_bind"
+    fi
+fi
 
 info "Upgrade complete; worker units remain disabled until explicitly enabled"

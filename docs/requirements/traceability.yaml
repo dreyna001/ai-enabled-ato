@@ -94,7 +94,8 @@
       ],
       "test_ids": [
         "tests/ato_service/test_authorization_boundary.py",
-        "tests/ato_service/test_package_revisions.py::test_validate_create_input_rejects_classified_sensitivity"
+        "tests/ato_service/test_package_revisions.py::test_validate_patch_metadata_rejects_classified_sensitivity",
+        "tests/ato_service/test_package_revision_upload_first.py::test_validate_patch_metadata_requires_at_least_one_field"
       ],
       "verification_type": "Deterministic unsupported authorization-path and classified-sensitivity rejection at API and draft intake boundaries",
       "status": "partial"
@@ -641,6 +642,7 @@
         "docs/contracts/fixtures/runtime-config.invalid.missing-process-capabilities.json",
         "pyproject.toml",
         "src/ato_service/runtime_config.py",
+        "src/ato_service/context_budget.py",
         "src/ato_service/process_capabilities.py",
         "src/ato_service/package_rbac.py",
         "src/ato_service/oidc_auth.py",
@@ -686,6 +688,8 @@
       "test_ids": [
         "tests/ato_service/test_runtime_config.py::test_load_onprem_config_from_external_path_without_base_dir",
         "tests/ato_service/test_runtime_config.py::test_rejects_remote_http_model_endpoint_despite_loopback_opt_in",
+        "tests/ato_service/test_runtime_config.py::test_resolve_text_model_context_budget_uses_runtime_defaults",
+        "tests/test_contracts.py::test_evidence_context_budgeting_spec_matches_runtime_contract",
         "tests/test_contracts.py::test_runtime_config_onprem_requires_database_dsn_credential_reference",
         "tests/test_contracts.py::test_contract_fixtures_follow_contracts",
         "tests/ato_operator/test_cli.py::test_validate_config_accepts_dev_local",
@@ -717,6 +721,39 @@
         "tests/test_release_packaging.py::test_prestage_verify_only_fails_on_missing_wheel"
       ],
       "verification_type": "Runtime JSON capabilities, ato-operator preflight, portal/API/worker/nginx assets, bounded operational scripts, qualification manifest, validation drill records, Phase 6 documentation reconciliation, Phase 6 release packaging and offline verification, and deployment-contract tests are contract-tested; live-host drills and customer hard-stop evidence remain partial",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "R-024",
+      "spec_section": "17.1, 31",
+      "requirement_text": "Shared deterministic context budgeting resolves TEXT_MODEL input budgets from CONTEXT_UTILIZATION_TARGET and reserves output plus 2,048 instruction/schema tokens; sufficiency_matrix and package_chat pack ranked evidence greedily, record omissions, fail minimum bundles with context_limit_exceeded, and never cite omitted chunks.",
+      "epic": "Cross-cutting: EP-00-contracts",
+      "implementation_files": [
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/runtime-config.schema.json",
+        "src/ato_service/context_budget.py",
+        "src/ato_service/runtime_config.py",
+        "src/ato_service/sufficiency_matrix/tokens.py",
+        "src/ato_service/sufficiency_matrix/fact_bundle.py",
+        "src/ato_service/sufficiency_matrix/runner.py",
+        "src/ato_service/model_assisted_analyzer.py",
+        "src/ato_service/package_chat.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_context_budget.py::test_default_utilization_target_is_point_seven",
+        "tests/ato_service/test_context_budget.py::test_compute_input_token_budget_matches_locked_formula",
+        "tests/ato_service/test_context_budget.py::test_pack_ranked_entries_preserves_stable_order_and_reports_omissions",
+        "tests/ato_service/test_runtime_config.py::test_resolve_text_model_context_budget_uses_runtime_defaults",
+        "tests/ato_service/test_sufficiency_matrix_fact_bundle.py::test_fact_bundle_includes_all_sources_when_budget_allows",
+        "tests/ato_service/test_sufficiency_matrix_fact_bundle.py::test_fact_bundle_omits_sources_in_rank_order_when_budget_tight",
+        "tests/ato_service/test_sufficiency_matrix_fact_bundle.py::test_minimum_bundle_context_limit_exceeded",
+        "tests/ato_service/test_package_chat.py::test_model_grounded_answer_allows_cui_with_canonical_approval",
+        "tests/ato_service/test_package_chat.py::test_chat_prompt_omits_lower_ranked_hits_when_budget_tight",
+        "tests/ato_service/test_package_chat.py::test_chat_prompt_rejects_fixed_payload_over_budget_without_model_call",
+        "tests/ato_service/test_intake_map.py::test_context_packing_records_omitted_chunk_ids",
+        "tests/test_contracts.py::test_evidence_context_budgeting_spec_matches_runtime_contract"
+      ],
+      "verification_type": "Shared context_budget module with locked max(0, min(floor(context × target), context − output − 2048 instruction reserve)) formula, default CONTEXT_UTILIZATION_TARGET 0.70, omission recording, context_limit_exceeded fail-minimum, and adoption in sufficiency_matrix, package_chat, and intake MAP packing; production customer model calls remain blocked by HS-004",
       "status": "partial"
     },
     {
@@ -1365,6 +1402,202 @@
       ],
       "verification_type": "Deterministic allowlisted tar.gz build with embedded checksum/SBOM evidence, pinned airgap wheel and portal lock digests, offline verify-release checks for allowlist/schema/migration head/executable modes/secret exclusion, and detached-signature hook that reports unavailable without claiming signed archives",
       "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-016",
+      "spec_section": "13.1",
+      "requirement_text": "Systems support authorized soft-archive only: archived_at is set in place, hard delete is unsupported, GET /systems excludes archived rows by default with include_archived, and POST /systems/{system_id}/archive is replay-safe and idempotent.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "docs/contracts/openapi.json",
+        "src/ato_service/api_router.py",
+        "src/ato_service/route_role_matrix.py",
+        "src/ato_service/systems.py"
+      ],
+      "test_ids": [
+        "tests/test_contracts.py::test_openapi_idempotency_concurrency_and_security_contracts",
+        "tests/test_contracts.py::test_p11_system_package_revision_api_contract",
+        "tests/ato_service/test_systems.py::test_list_systems_sql_excludes_archived_by_default",
+        "tests/ato_service/test_systems.py::test_archive_system_sets_archived_at_and_audits",
+        "tests/ato_service/test_systems.py::test_archive_system_already_archived_is_no_op",
+        "tests/ato_service/test_systems.py::test_archive_system_replay_returns_stored_outcome",
+        "tests/ato_service/test_route_role_matrix.py::test_route_role_matrix_covers_all_published_package_routes"
+      ],
+      "verification_type": "Published System soft-archive contract with object-level authorization, default list filtering, idempotent archive mutation, and synchronized OpenAPI/lifecycle/route-role matrix",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-017",
+      "spec_section": "13.1, 31",
+      "requirement_text": "Upload-first package revisions allow minimal create (optional title and parent link only), defer profile and human-only data_origin/sensitivity until authenticated PATCH /package-revisions/{id}, require parent revisions to be ready before child create, and fail closed on confirm and model routing with revision_metadata_incomplete until metadata is complete.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "migrations/versions/20260717_0013_defer_package_revision_metadata.py",
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/openapi.json",
+        "docs/contracts/package-draft-document.schema.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md",
+        "src/ato_service/package_revisions.py",
+        "src/ato_service/api_router.py",
+        "src/ato_service/route_role_matrix.py",
+        "src/ato_service/problems.py",
+        "src/ato_service/draft_builder.py",
+        "src/ato_service/package_revision_drafts.py",
+        "src/ato_service/normalization_service.py",
+        "src/ato_service/intake_work.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_package_revision_upload_first.py::test_validate_patch_metadata_requires_at_least_one_field",
+        "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_updates_revision_and_increments_version",
+        "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_requires_if_match",
+        "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_rejects_stale_etag",
+        "tests/ato_service/test_package_revision_upload_first.py::test_create_child_requires_ready_parent",
+        "tests/ato_service/test_package_revision_upload_first.py::test_revision_metadata_ready_for_model_requires_human_labels",
+        "tests/ato_service/test_package_revisions.py::test_validate_create_input_accepts_minimal_root_payload",
+        "tests/ato_service/test_package_revisions.py::test_create_persists_uploading_revision_and_records_outcome",
+        "tests/ato_service/test_package_revisions.py::test_confirm_rejects_incomplete_metadata_before_draft_lookup",
+        "tests/ato_service/test_draft_builder.py::test_builds_null_profile_shell_for_upload_first_revision",
+        "tests/ato_service/test_package_api_routes.py::test_create_package_revision_requires_nullable_fields_in_request_body",
+        "tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration"
+      ],
+      "verification_type": "Upload-first create/PATCH/confirm metadata contract with nullable pre-ready DB columns, optimistic-concurrency metadata PATCH, parent-ready child create gate, draft shell sync, normalization skip while labels incomplete, and Alembic head 20260717_0013",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-018",
+      "spec_section": "17.1, 31",
+      "requirement_text": "Pre-attestation intake MAP packs ranked source chunks to the shared context budget, persists replay-safe step artifacts with citations and context_complete, rejects prohibited and human-only targets, and denies real-endpoint model calls until data_origin and sensitivity are human-set.",
+      "epic": "EP-04-secure-intake",
+      "implementation_files": [
+        "src/ato_service/intake_map.py",
+        "src/ato_service/context_budget.py",
+        "src/ato_service/intake.py",
+        "src/ato_service/intake_work.py",
+        "src/ato_service/model_gateway.py",
+        "src/ato_service/normalization_artifacts.py",
+        "src/ato_service/normalization_service.py",
+        "src/ato_service/normalize_proposal/target_catalog.py",
+        "docs/contracts/domain.schema.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_intake_map.py::test_context_packing_records_omitted_chunk_ids",
+        "tests/ato_service/test_intake_map.py::test_prohibited_fact_prefixes_fail_closed",
+        "tests/ato_service/test_intake_map.py::test_citation_binding_rejects_unpacked_chunk",
+        "tests/ato_service/test_intake_map.py::test_step_key_and_replay_digest_are_deterministic",
+        "tests/ato_service/test_intake_map.py::test_pre_attestation_dev_mock_calls_without_human_labels",
+        "tests/ato_service/test_intake_map.py::test_pre_attestation_real_endpoint_is_policy_blocked_before_call",
+        "tests/ato_service/test_intake_map.py::test_existing_human_labels_use_normal_routing"
+      ],
+      "verification_type": "Bounded intake MAP orchestration with context packer integration, persisted step artifacts, prohibited-prefix and human-only rejection, citation binding, deterministic replay digests, and pre-attestation routing in dev_local; production customer model calls remain blocked by HS-004",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P1-019",
+      "spec_section": "31",
+      "requirement_text": "Deterministic intake REDUCE merges MAP outputs into PackageRevisionDraft using the target allowlist, records provenance/conflicts/gaps/omissions/context completeness on draft extensions, and produces an atomic replay-safe merge digest before persistence.",
+      "epic": "EP-04-secure-intake",
+      "implementation_files": [
+        "src/ato_service/intake_merge.py",
+        "src/ato_service/intake.py",
+        "src/ato_service/package_revision_drafts.py",
+        "src/ato_service/draft_builder.py",
+        "src/ato_service/normalize_proposal/target_catalog.py",
+        "docs/contracts/package-draft-document.schema.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_intake_merge.py::test_merge_writes_single_proposal_with_provenance",
+        "tests/ato_service/test_intake_merge.py::test_merge_emits_conflict_for_same_pointer_different_values",
+        "tests/ato_service/test_intake_merge.py::test_merge_rejects_prohibited_prefix",
+        "tests/ato_service/test_intake_merge.py::test_merge_rejects_human_only_metadata_suggestions",
+        "tests/ato_service/test_intake_merge.py::test_merge_rejects_missing_citation_anchor",
+        "tests/ato_service/test_intake_merge.py::test_merge_replay_is_idempotent",
+        "tests/ato_service/test_intake_merge.py::test_merge_context_complete_requires_all_steps",
+        "tests/ato_service/test_intake_merge.py::test_fact_key_allowlist_maps_dot_notation_to_pointer",
+        "tests/ato_service/test_intake_merge.py::test_adapter_binds_trusted_provenance_and_rejects_unmapped_facts"
+      ],
+      "verification_type": "Deterministic REDUCE merge with target allowlist enforcement, provenance and conflict/gap/omission/context extension writes, idempotent replay digest, and draft persistence hook from intake worker orchestration; live customer extraction remains partial under HS-005",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P1-020",
+      "spec_section": "31",
+      "requirement_text": "GET /package-revisions/{id}/intake-report returns a deterministic inventory of intake stage, files, suggested metadata, human attestation gaps, conflicts, omitted chunks, context completeness, and fail-closed confirmation blockers without mutating revision state.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "src/ato_service/intake_readiness.py",
+        "src/ato_service/api_router.py",
+        "docs/contracts/domain.schema.json",
+        "docs/contracts/openapi.json",
+        "docs/contracts/LIFECYCLE_AND_ERRORS.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_intake_readiness.py::test_default_adapter_reads_complete_reduce_extensions",
+        "tests/ato_service/test_intake_readiness.py::test_default_adapter_missing_extensions_fails_closed",
+        "tests/ato_service/test_intake_readiness.py::test_build_intake_report_fails_closed_on_draft_before_awaiting_confirmation",
+        "tests/ato_service/test_intake_readiness.py::test_incomplete_context_is_gap_not_confirmation_blocker",
+        "tests/ato_service/test_intake_readiness.py::test_intake_report_payload_validates_against_domain_schema",
+        "tests/ato_service/test_package_api_routes.py::test_get_intake_report_returns_payload_without_mutation_headers",
+        "tests/ato_service/test_package_api_routes.py::test_get_intake_report_not_found_maps_to_problem",
+        "tests/test_contracts.py::test_openapi_intake_report_route_uses_domain_contract"
+      ],
+      "verification_type": "Deterministic intake readiness report assembly with merge-adapter fail-closed semantics, domain-schema-valid payload, read-only API route, and OpenAPI/domain contract synchronization",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-021",
+      "spec_section": "31",
+      "requirement_text": "Portal post-upload workflow reveals editable metadata and package draft after intake, surfaces intake-report conflicts and readiness, keeps data_origin and sensitivity human-only, enforces ETag/stale conflict recovery on metadata PATCH, and fail-closes Confirm until metadata, draft, and readiness blockers are cleared.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [
+        "portal/src/pages/WorkflowPage.tsx",
+        "portal/src/components/RevisionMetadataPanel.tsx",
+        "portal/src/components/IntakeConflictList.tsx",
+        "portal/src/components/DraftConfirmReadinessPanel.tsx",
+        "portal/src/components/RevisionCreateForm.tsx",
+        "portal/src/api/client.ts",
+        "portal/src/api/responseSchemas.ts",
+        "portal/src/utils/draftValidation.ts"
+      ],
+      "test_ids": [
+        "portal/src/pages/WorkflowPage.test.tsx",
+        "portal/src/components/RevisionMetadataPanel.test.tsx",
+        "portal/src/api/client.test.ts",
+        "portal/src/api/responseSchemas.test.ts",
+        "portal/src/utils/draftValidation.test.ts"
+      ],
+      "verification_type": "Upload-first portal reveal, human-only origin/sensitivity controls, intake-report-driven conflict resolution, metadata PATCH concurrency recovery, and confirm readiness gating with Vitest coverage; live browser OIDC drills remain partial under HS-003",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-022",
+      "spec_section": "31",
+      "requirement_text": "SINGLE_USER_MODE_ENABLED is opt-in only, expands owner/reviewer groups into approver for same-principal export approval after normal object and role checks, and does not bypass authentication, tenant isolation, CSRF, ETag, idempotency, payload-hash binding, approval expiry, or audit.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [
+        "docs/contracts/runtime-config.schema.json",
+        "src/ato_service/runtime_config.py",
+        "src/ato_service/package_rbac.py",
+        "src/ato_service/export_service.py",
+        "deployment/config/runtime-config.dev_local.json",
+        "deployment/config/runtime-config.onprem.example.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_runtime_config.py::test_single_user_mode_enabled_defaults_false",
+        "tests/ato_service/test_runtime_config.py::test_single_user_mode_enabled_accepts_true",
+        "tests/ato_service/test_runtime_config.py::test_runtime_config_load_resets_single_user_role_expansion",
+        "tests/ato_service/test_ep06_security_matrix.py::test_self_approval_is_denied",
+        "tests/ato_service/test_ep06_security_matrix.py::test_single_user_mode_allows_self_approval_with_approver_role",
+        "tests/ato_service/test_ep06_security_matrix.py::test_single_user_mode_still_denies_viewer_without_approver_role",
+        "tests/ato_service/test_ep06_security_matrix.py::test_single_user_mode_maps_owner_groups_to_approver",
+        "tests/ato_service/test_ep06_security_matrix.py::test_single_user_role_expansion_does_not_leak_across_config_loads",
+        "tests/ato_service/test_ep06_security_matrix.py::test_single_user_actor_with_role_but_wrong_target_scope_is_denied",
+        "tests/test_deployment_contract.py::test_onprem_runtime_example_disables_single_user_mode",
+        "tests/test_deployment_contract.py::test_dev_portal_examples_enable_single_user_mode"
+      ],
+      "verification_type": "Config-gated single-operator dev/demo approval path with role expansion scoped to config load, unchanged non-self security controls, and deployment examples that default production off; production IdP deployment remains partial under HS-003",
+      "status": "partial"
     }
   ]
 }

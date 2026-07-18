@@ -25,26 +25,57 @@ DEFAULT_PACKAGE_ROLE_GROUPS: dict[str, tuple[str, ...]] = {
 _PACKAGE_ROLE_GROUPS = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
 
 
+def _extend_groups(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group_tuple in groups:
+        for group in group_tuple:
+            if group not in seen:
+                seen.add(group)
+                merged.append(group)
+    return tuple(merged)
+
+
+def _apply_single_user_role_mapping(resolved: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """Grant approver roles to configured owner/reviewer IdP groups in single-user mode."""
+    owner_groups = resolved.get("system_owner", ())
+    reviewer_groups = resolved.get("reviewer", ())
+    approver_groups = _extend_groups(
+        resolved.get("approver", ()),
+        owner_groups,
+        reviewer_groups,
+    )
+    updated = dict(resolved)
+    updated["approver"] = approver_groups
+    updated["ao_custodian"] = _extend_groups(
+        resolved.get("ao_custodian", ()),
+        approver_groups,
+    )
+    return updated
+
+
 def configure_package_role_groups(document: dict[str, Any]) -> None:
     """Apply OIDC_GROUP_ROLE_MAPPING from runtime JSON when present."""
     global _PACKAGE_ROLE_GROUPS
     mapping = document.get("OIDC_GROUP_ROLE_MAPPING")
     if not isinstance(mapping, dict):
-        _PACKAGE_ROLE_GROUPS = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
-        return
-    resolved = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
-    for role, groups in mapping.items():
-        if not isinstance(role, str) or role not in resolved:
-            continue
-        if not isinstance(groups, list) or not groups:
-            continue
-        normalized = tuple(
-            value.strip()
-            for value in groups
-            if isinstance(value, str) and value.strip()
-        )
-        if normalized:
-            resolved[role] = normalized
+        resolved = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
+    else:
+        resolved = dict(DEFAULT_PACKAGE_ROLE_GROUPS)
+        for role, groups in mapping.items():
+            if not isinstance(role, str) or role not in resolved:
+                continue
+            if not isinstance(groups, list) or not groups:
+                continue
+            normalized = tuple(
+                value.strip()
+                for value in groups
+                if isinstance(value, str) and value.strip()
+            )
+            if normalized:
+                resolved[role] = normalized
+    if document.get("SINGLE_USER_MODE_ENABLED") is True:
+        resolved = _apply_single_user_role_mapping(resolved)
     _PACKAGE_ROLE_GROUPS = resolved
 
 

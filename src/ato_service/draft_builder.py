@@ -171,6 +171,7 @@ def build_initial_draft(
         document=document,
         provenance=provenance,
         system=system,
+        profile_id=profile_id,
     )
     if system_context_proposal is not None:
         document.setdefault("extensions", {})
@@ -417,7 +418,11 @@ def _map_package_metadata(
             extraction_method="deterministic",
         )
     declared_profile = package.get("profile_id")
-    if declared_profile is not None and declared_profile != profile_id:
+    if (
+        profile_id is not None
+        and declared_profile is not None
+        and declared_profile != profile_id
+    ):
         raise DraftBuildError(
             "upload manifest profile_id does not match revision profile",
             error_code="draft_schema_invalid",
@@ -485,7 +490,7 @@ def _map_system_section(
         or package.get("impact_level")
         or revision.impact_level
     )
-    if impact_level is not None and profile_id != "fedramp_20x_program":
+    if impact_level is not None and profile_id not in (None, "fedramp_20x_program"):
         source_pointer = (
             "/system/impact_level"
             if "impact_level" in system_section
@@ -681,7 +686,7 @@ def _preserve_unmapped_manifest_fields(
     )
 
 
-def _empty_profile_shell(*, profile_id: str, system: System) -> dict[str, Any]:
+def _empty_profile_shell(*, profile_id: str | None, system: System) -> dict[str, Any]:
     shell: dict[str, Any] = {
         "package": {
             "profile_id": profile_id,
@@ -693,7 +698,7 @@ def _empty_profile_shell(*, profile_id: str, system: System) -> dict[str, Any]:
             "display_name": system.display_name,
             "authorization_boundary": "",
             "mission_summary": "",
-            "impact_level": None if profile_id == "fedramp_20x_program" else None,
+            "impact_level": None,
             "authorization_path": _default_authorization_path(profile_id),
         },
         "contacts": {
@@ -748,24 +753,70 @@ def _empty_profile_shell(*, profile_id: str, system: System) -> dict[str, Any]:
     return shell
 
 
+def build_system_context_proposal_from_draft(
+    *,
+    document: dict[str, Any],
+    provenance: dict[str, Any],
+    system: System | None = None,
+    system_display_name: str | None = None,
+) -> dict[str, Any] | None:
+    """Build a system-context proposal from draft content and provenance."""
+    if system is None and system_display_name is None:
+        return None
+    display_name = (
+        system.display_name
+        if system is not None
+        else system_display_name or ""
+    )
+    return _build_system_context_proposal(
+        document=document,
+        provenance=provenance,
+        system=system,
+        system_display_name=display_name,
+        profile_id=_draft_profile_id(document),
+    )
+
+
+def _draft_profile_id(document: dict[str, Any]) -> str | None:
+    package = document.get("package")
+    if isinstance(package, dict):
+        profile_id = package.get("profile_id")
+        if isinstance(profile_id, str):
+            return profile_id
+    return None
+
+
 def _build_system_context_proposal(
     *,
     document: dict[str, Any],
     provenance: dict[str, Any],
-    system: System,
+    system: System | None = None,
+    system_display_name: str | None = None,
+    profile_id: str | None = None,
 ) -> dict[str, Any] | None:
     system_section = document.get("system")
     if not isinstance(system_section, dict):
         return None
 
+    resolved_display_name = system_section.get("display_name")
+    if not resolved_display_name:
+        if system is not None:
+            resolved_display_name = system.display_name
+        else:
+            resolved_display_name = system_display_name or ""
+
+    resolved_profile_id = profile_id
+    if resolved_profile_id is None:
+        resolved_profile_id = _draft_profile_id(document)
+
     proposal_document = {
-        "display_name": system_section.get("display_name") or system.display_name,
+        "display_name": resolved_display_name,
         "authorization_boundary": system_section.get("authorization_boundary", ""),
         "mission_summary": system_section.get("mission_summary", ""),
         "impact_level": system_section.get("impact_level"),
         "authorization_path": system_section.get(
             "authorization_path",
-            _default_authorization_path(document["package"]["profile_id"]),
+            _default_authorization_path(resolved_profile_id),
         ),
     }
     proposal_provenance = {
@@ -898,10 +949,88 @@ def _normalize_contact_entries(value: Any, *, role: str) -> list[dict[str, Any]]
     return []
 
 
-def _default_authorization_path(profile_id: str) -> str:
+def _default_authorization_path(profile_id: str | None) -> str:
     if profile_id in {"fedramp_20x_program", "fedramp_rev5_transition"}:
         return "fedramp"
     return "agency"
+
+
+def apply_profile_shell_to_draft(
+    *,
+    document: dict[str, Any],
+    profile_id: str | None,
+    system: System,
+    revision_impact_level: str | None = None,
+) -> dict[str, Any]:
+    """Merge profile-specific draft shell fields while preserving user-entered content."""
+    shell = _empty_profile_shell(profile_id=profile_id, system=system)
+    merged = json.loads(json.dumps(document))
+    package = merged.get("package")
+    if not isinstance(package, dict):
+        package = {}
+        merged["package"] = package
+    shell_package = shell["package"]
+    for key, default_value in shell_package.items():
+        if key == "profile_id":
+            package["profile_id"] = profile_id
+            continue
+        if key not in package or package.get(key) in (None, ""):
+            package[key] = default_value
+
+    system_section = merged.get("system")
+    if not isinstance(system_section, dict):
+        system_section = {}
+        merged["system"] = system_section
+    shell_system = shell["system"]
+    for key, default_value in shell_system.items():
+        if key not in system_section or system_section.get(key) in (None, ""):
+            system_section[key] = default_value
+    if profile_id == "fedramp_20x_program":
+        system_section["impact_level"] = None
+    elif (
+        system_section.get("impact_level") is None
+        and revision_impact_level in {"low", "moderate", "high"}
+    ):
+        system_section["impact_level"] = revision_impact_level
+    system_section["authorization_path"] = _default_authorization_path(profile_id)
+
+    for section_name in (
+        "fedramp_20x",
+        "fedramp_rev5_transition",
+        "fisma_agency_security",
+    ):
+        if profile_id is None:
+            merged[section_name] = None
+            continue
+        if section_name == "fedramp_20x" and profile_id == "fedramp_20x_program":
+            existing = merged.get(section_name)
+            merged[section_name] = (
+                existing if isinstance(existing, dict) else shell["fedramp_20x"]
+            )
+        elif (
+            section_name == "fedramp_rev5_transition"
+            and profile_id == "fedramp_rev5_transition"
+        ):
+            existing = merged.get(section_name)
+            merged[section_name] = (
+                existing
+                if isinstance(existing, dict)
+                else shell["fedramp_rev5_transition"]
+            )
+        elif (
+            section_name == "fisma_agency_security"
+            and profile_id == "fisma_agency_security"
+        ):
+            existing = merged.get(section_name)
+            merged[section_name] = (
+                existing
+                if isinstance(existing, dict)
+                else shell["fisma_agency_security"]
+            )
+        else:
+            merged[section_name] = None
+
+    return merged
 
 
 def _require_valid_json_pointer(pointer: str) -> None:
@@ -977,5 +1106,6 @@ __all__ = [
     "DOCUMENT_SCHEMA_VERSION",
     "DraftBuildError",
     "build_initial_draft",
+    "build_system_context_proposal_from_draft",
     "validate_package_draft_document",
 ]

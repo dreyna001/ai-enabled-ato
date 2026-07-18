@@ -208,7 +208,7 @@ async def _execute_sufficiency_matrix(
             error_code="artifact_digest_mismatch",
         )
     assessment_item_ids = _resolved_assessment_item_ids(analysis_run)
-    context_tokens, max_output_tokens, _timeout_seconds = _runtime_limits(config)
+    budget = config.resolve_text_model_context_budget()
     return await run_sufficiency_matrix(
         run_id=analysis_run.run_id,
         profile=profile,
@@ -218,8 +218,8 @@ async def _execute_sufficiency_matrix(
             package_revision=package_revision,
             config=config,
         ),
-        context_tokens=context_tokens,
-        max_output_tokens=max_output_tokens,
+        input_budget_tokens=budget.input_budget_tokens,
+        max_output_tokens=budget.max_output_tokens,
         model_requested=_model_requested(config),
         text_client=text_client,
     )
@@ -389,7 +389,8 @@ async def process_next_model_assisted_analysis(
 
     contract = prompt_contract_metadata()
     document = config.document
-    context_tokens, max_output_tokens, timeout_seconds = _runtime_limits(config)
+    budget = config.resolve_text_model_context_budget()
+    _context_tokens, _max_output_tokens, timeout_seconds = _runtime_limits(config)
     endpoint_profile = resolve_text_model_endpoint_profile(config)
     last_call = result.model_calls[-1] if result.model_calls else None
     session.add(
@@ -411,8 +412,8 @@ async def process_next_model_assisted_analysis(
             model_requested=_model_requested(config),
             model_reported=last_call.model_reported if last_call else _model_requested(config),
             temperature=float(document.get("TEXT_MODEL_TEMPERATURE", 0.0)),
-            input_limit=context_tokens,
-            output_limit=max_output_tokens,
+            input_limit=budget.context_tokens,
+            output_limit=budget.max_output_tokens,
             timeout_seconds=int(timeout_seconds),
             attempt=claimed.attempt.attempt_number,
             provider_request_id=(

@@ -62,6 +62,16 @@ class ModelCallRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class PreAttestationModelCallRequest:
+    """Label-free request permitted only for local, non-exfiltrating mock calls."""
+
+    capability: ModelCapability
+    endpoint_profile: EndpointProfile
+    current_llm_call_count: int
+    max_llm_calls: int
+
+
+@dataclass(frozen=True, slots=True)
 class ModelCallResult[T]:
     """Successful model callback output with the incremented call count."""
 
@@ -260,15 +270,37 @@ def _validate_bool_field(value: object, *, field_name: str) -> None:
         raise TypeError(f"{field_name} must be a bool")
 
 
-def _validate_request(request: ModelCallRequest) -> None:
-    if not isinstance(request, ModelCallRequest):
-        raise TypeError("request must be a ModelCallRequest")
+def _validate_request(
+    request: ModelCallRequest | PreAttestationModelCallRequest,
+) -> None:
+    if not isinstance(request, (ModelCallRequest, PreAttestationModelCallRequest)):
+        raise TypeError(
+            "request must be a ModelCallRequest or PreAttestationModelCallRequest"
+        )
 
     _validate_enum_field(
         request.capability,
         field_name="capability",
         enum_type=ModelCapability,
     )
+    if isinstance(request, PreAttestationModelCallRequest):
+        _validate_enum_field(
+            request.endpoint_profile,
+            field_name="endpoint_profile",
+            enum_type=EndpointProfile,
+        )
+        _validate_nonnegative_count(
+            request.current_llm_call_count,
+            field_name="current_llm_call_count",
+        )
+        max_llm_calls = _validate_real_int(
+            request.max_llm_calls,
+            field_name="max_llm_calls",
+        )
+        if max_llm_calls <= 0:
+            raise ValueError("max_llm_calls must be positive")
+        return
+
     _validate_enum_field(
         request.data_origin,
         field_name="data_origin",
@@ -349,26 +381,37 @@ def _raise_prohibited_action(
 
 
 async def invoke_model_call[T](
-    request: ModelCallRequest,
+    request: ModelCallRequest | PreAttestationModelCallRequest,
     callback: Callable[[], Awaitable[T]],
 ) -> ModelCallResult[T]:
     """Evaluate policy, then invoke ``callback`` exactly once when allowed."""
     _validate_request(request)
 
-    routing = evaluate_model_routing(
-        data_origin=request.data_origin,
-        sensitivity=request.sensitivity,
-        endpoint_profile=request.endpoint_profile,
-        endpoint_policy_approved=request.endpoint_policy_approved,
-        cui_boundary_approved=request.cui_boundary_approved,
-    )
-    if not routing.allowed:
-        assert routing.error_code is not None
-        _raise_routing_denial(
-            error_code=routing.error_code,
-            capability=request.capability,
-            llm_call_count=request.current_llm_call_count,
+    if isinstance(request, PreAttestationModelCallRequest):
+        if (
+            request.capability is not ModelCapability.NORMALIZE_PROPOSAL
+            or request.endpoint_profile is not EndpointProfile.MOCK
+        ):
+            _raise_routing_denial(
+                error_code="model_routing_denied",
+                capability=request.capability,
+                llm_call_count=request.current_llm_call_count,
+            )
+    else:
+        routing = evaluate_model_routing(
+            data_origin=request.data_origin,
+            sensitivity=request.sensitivity,
+            endpoint_profile=request.endpoint_profile,
+            endpoint_policy_approved=request.endpoint_policy_approved,
+            cui_boundary_approved=request.cui_boundary_approved,
         )
+        if not routing.allowed:
+            assert routing.error_code is not None
+            _raise_routing_denial(
+                error_code=routing.error_code,
+                capability=request.capability,
+                llm_call_count=request.current_llm_call_count,
+            )
 
     if request.capability is ModelCapability.EMBEDDING:
         _raise_prohibited_action(
@@ -376,7 +419,8 @@ async def invoke_model_call[T](
             llm_call_count=request.current_llm_call_count,
         )
     if (
-        request.capability is ModelCapability.VISION_EXTRACTION
+        isinstance(request, ModelCallRequest)
+        and request.capability is ModelCapability.VISION_EXTRACTION
         and not request.vision_model_enabled
     ):
         _raise_prohibited_action(

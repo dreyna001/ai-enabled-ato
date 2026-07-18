@@ -78,6 +78,13 @@
       "default": 0,
       "$comment": "Sampling temperature for text-model completion requests. Default 0 for deterministic normalization."
     },
+    "CONTEXT_UTILIZATION_TARGET": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "default": 0.7,
+      "$comment": "Maximum input-context utilization cap for model-assisted steps. Reserve configured output tokens plus 2,048 instruction/schema tokens before packing evidence. Default 0.70; 1.0 preserves legacy reserve-only budgeting."
+    },
     "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": {
       "type": "boolean",
       "default": false,
@@ -468,6 +475,11 @@
     },
     "OIDC_GROUP_ROLE_MAPPING": {
       "$ref": "#/$defs/oidcGroupRoleMapping"
+    },
+    "SINGLE_USER_MODE_ENABLED": {
+      "type": "boolean",
+      "default": false,
+      "$comment": "Explicit opt-in for dev/demo single-operator workflows. When true, one authenticated principal with owner/reviewer roles may approve or reject their own export submissions; tenant, object, CSRF, ETag, idempotency, payload-hash, expiry, and audit controls remain enforced. Production and onprem examples must set false unless a dedicated documented single-user profile is approved."
     },
     "INTERNAL_EGRESS_ALLOWLIST": {
       "type": "array",

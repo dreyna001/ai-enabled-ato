@@ -26,7 +26,11 @@ from ato_service.idempotency import (
     record_idempotency_outcome,
     request_digest_from_payload,
 )
-from ato_service.package_rbac import require_any_package_role, require_package_role
+from ato_service.package_rbac import (
+    require_any_package_role,
+    require_package_read,
+    require_package_role,
+)
 from ato_service.route_role_matrix import ROLE_AO_CUSTODIAN, ROLE_APPROVER, ROLE_REVIEWER, ROLE_VIEWER
 from ato_service.profile_artifacts import generate_profile_artifacts
 from ato_service.runtime_config import load_runtime_config
@@ -839,6 +843,33 @@ def _read_export_zip(*, storage_root: Path, storage_key: str) -> bytes:
     return target.read_bytes()
 
 
+def _approval_decision_audit_metadata(
+    *,
+    approval: Any,
+    principal: AuthenticatedPrincipal,
+    single_user_mode_enabled: bool,
+    base: dict[str, Any],
+) -> dict[str, Any]:
+    metadata = dict(base)
+    if single_user_mode_enabled and approval.submitted_by == principal.actor_id:
+        metadata["single_user_mode"] = True
+        metadata["self_decision"] = True
+    return metadata
+
+
+def _assert_self_approval_allowed(
+    *,
+    approval: Any,
+    principal: AuthenticatedPrincipal,
+    single_user_mode_enabled: bool,
+) -> None:
+    if approval.submitted_by != principal.actor_id:
+        return
+    if single_user_mode_enabled:
+        return
+    raise SelfApprovalDeniedError()
+
+
 async def approve_export(
     session: AsyncSession,
     *,
@@ -851,6 +882,7 @@ async def approve_export(
     project_root: Path | None = None,
     authority_manifest_id: str | None = None,
     approval_expiry_days: int = _DEFAULT_APPROVAL_EXPIRY_DAYS,
+    single_user_mode_enabled: bool = False,
 ) -> ExportMutationResult:
     from ato_service.db.models import Approval, ExportDraft
 
@@ -881,8 +913,6 @@ async def approve_export(
     approval = approval_result.scalar_one_or_none()
     if approval is None:
         raise ExportNotFoundError()
-    if approval.submitted_by == principal.actor_id:
-        raise SelfApprovalDeniedError()
 
     draft_result = await session.execute(
         select(ExportDraft).where(ExportDraft.export_draft_id == approval.export_draft_id)
@@ -893,6 +923,7 @@ async def approve_export(
     review_revision, run, revision, system, sealed = await _load_review_context(
         session, review_revision_id=export_draft.review_revision_id
     )
+    require_package_read(principal, system=system)
     try:
         require_any_package_role(
             principal,
@@ -902,6 +933,12 @@ async def approve_export(
         )
     except AuthorizationDeniedError:
         raise
+
+    _assert_self_approval_allowed(
+        approval=approval,
+        principal=principal,
+        single_user_mode_enabled=single_user_mode_enabled,
+    )
 
     try:
         await _assert_approval_pending_and_fresh(
@@ -953,10 +990,15 @@ async def approve_export(
         object_id=str(approval_id).lower(),
         outcome="succeeded",
         reason_code=None,
-        metadata={
-            "export_draft_id": str(approval.export_draft_id).lower(),
-            "payload_manifest_sha256": approval.payload_manifest_sha256,
-        },
+        metadata=_approval_decision_audit_metadata(
+            approval=approval,
+            principal=principal,
+            single_user_mode_enabled=single_user_mode_enabled,
+            base={
+                "export_draft_id": str(approval.export_draft_id).lower(),
+                "payload_manifest_sha256": approval.payload_manifest_sha256,
+            },
+        ),
         now=now,
     )
     await record_idempotency_outcome(
@@ -985,6 +1027,7 @@ async def reject_export(
     project_root: Path | None = None,
     authority_manifest_id: str | None = None,
     approval_expiry_days: int = _DEFAULT_APPROVAL_EXPIRY_DAYS,
+    single_user_mode_enabled: bool = False,
 ) -> ExportMutationResult:
     from ato_service.db.models import Approval, ExportDraft
 
@@ -1018,8 +1061,6 @@ async def reject_export(
     approval = approval_result.scalar_one_or_none()
     if approval is None:
         raise ExportNotFoundError()
-    if approval.submitted_by == principal.actor_id:
-        raise SelfApprovalDeniedError()
 
     draft_result = await session.execute(
         select(ExportDraft).where(ExportDraft.export_draft_id == approval.export_draft_id)
@@ -1030,6 +1071,7 @@ async def reject_export(
     review_revision, run, revision, system, sealed = await _load_review_context(
         session, review_revision_id=export_draft.review_revision_id
     )
+    require_package_read(principal, system=system)
     try:
         require_any_package_role(
             principal,
@@ -1039,6 +1081,12 @@ async def reject_export(
         )
     except AuthorizationDeniedError:
         raise
+
+    _assert_self_approval_allowed(
+        approval=approval,
+        principal=principal,
+        single_user_mode_enabled=single_user_mode_enabled,
+    )
 
     try:
         await _assert_approval_pending_and_fresh(
@@ -1089,11 +1137,15 @@ async def reject_export(
         object_id=str(approval_id).lower(),
         outcome="succeeded",
         reason_code=None,
-        metadata={
-            "export_draft_id": str(approval.export_draft_id).lower(),
-            "payload_manifest_sha256": approval.payload_manifest_sha256,
-            "reason": reason.strip(),
-        },
+        metadata=_approval_decision_audit_metadata(
+            approval=approval,
+            principal=principal,
+            single_user_mode_enabled=single_user_mode_enabled,
+            base={
+                "export_draft_id": str(approval.export_draft_id).lower(),
+                "payload_manifest_sha256": approval.payload_manifest_sha256,
+            },
+        ),
         now=now,
     )
     await record_idempotency_outcome(

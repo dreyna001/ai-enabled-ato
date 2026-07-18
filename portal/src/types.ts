@@ -10,6 +10,7 @@ export type System = {
   display_name: string;
   owner_group: string;
   viewer_groups: string[];
+  archived_at?: string | null;
 };
 
 export type ProfileId =
@@ -32,11 +33,6 @@ export type Sensitivity =
 
 export type CreateRevisionInput = {
   parent_revision_id?: string | null;
-  profile_id: ProfileId;
-  certification_class?: "B" | "C" | null;
-  impact_level?: "low" | "moderate" | "high" | null;
-  data_origin: DataOrigin;
-  sensitivity: Sensitivity;
 };
 
 export type PackageRevision = {
@@ -46,11 +42,90 @@ export type PackageRevision = {
   status: string;
   package_preparation_status: "in_progress" | "ready_for_external_review";
   revision_version: number;
-  profile_id: string;
-  data_origin: string;
-  sensitivity: string;
+  profile_id: ProfileId | null;
+  data_origin: DataOrigin | null;
+  sensitivity: Sensitivity | null;
   impact_level?: string | null;
   certification_class?: string | null;
+};
+
+export type PatchPackageRevisionMetadataInput = {
+  profile_id?: ProfileId;
+  certification_class?: "B" | "C" | null;
+  impact_level?: "low" | "moderate" | "high" | null;
+  data_origin?: DataOrigin;
+  sensitivity?: Sensitivity;
+};
+
+export type IntakeReportSuggestedMetadata = {
+  profile_id: ProfileId | null;
+  certification_class: "B" | "C" | null;
+  impact_level: "low" | "moderate" | "high" | null;
+};
+
+export type IntakeReportHumanAttestation = {
+  data_origin: "present" | "missing";
+  sensitivity: "present" | "missing";
+};
+
+export type IntakeReportSuggestionSource = {
+  field: "profile_id" | "certification_class" | "impact_level";
+  proposed_value?: unknown;
+  source_artifact_id: string;
+  source_sha256: string;
+  source_locator: Record<string, unknown>;
+  model_step_id?: string | null;
+};
+
+export type IntakeReportGap = {
+  code: string;
+  message: string;
+};
+
+export type IntakeReportConflict = {
+  field: string;
+  values: Array<Record<string, unknown>>;
+};
+
+export type IntakeReportConfirmation = {
+  allowed: boolean;
+  blockers: string[];
+};
+
+export type IntakeReport = {
+  schema_version: string;
+  object_type: "intake_report";
+  package_revision_id: string;
+  revision_version: number;
+  status: string;
+  intake_stage: string;
+  files: Array<{
+    artifact_id: string;
+    display_filename: string;
+    sha256: string;
+    size_bytes: number;
+    artifact_kind: string;
+    malware_scan_status: string;
+    extraction_status: string;
+    uploaded_at: string;
+  }>;
+  human_attestation: IntakeReportHumanAttestation;
+  suggested_metadata: IntakeReportSuggestedMetadata;
+  suggestion_sources: IntakeReportSuggestionSource[];
+  gaps: IntakeReportGap[];
+  conflicts: IntakeReportConflict[];
+  omitted_chunks: Array<{ artifact_id: string; segment_id: string }>;
+  context_complete: boolean;
+  map_steps: Array<Record<string, unknown>>;
+  confirmation: IntakeReportConfirmation;
+  generated_at: string;
+};
+
+export type RevisionMetadataSaveState = {
+  isDirty: boolean;
+  saving: boolean;
+  staleConflict: boolean;
+  isComplete: boolean;
 };
 
 export type ExtractionMethod =

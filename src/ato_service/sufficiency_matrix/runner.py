@@ -246,7 +246,7 @@ async def run_sufficiency_matrix(
     assessment_item_ids: tuple[str, ...],
     sealed: SealedPackageContent,
     model_request: ModelCallRequest,
-    context_tokens: int,
+    input_budget_tokens: int,
     max_output_tokens: int,
     model_requested: str,
     text_client: TextModelClient | None = None,
@@ -308,8 +308,7 @@ async def run_sufficiency_matrix(
                 profile=profile,
                 assessment_item_ids=model_ids,
                 sealed=sealed,
-                context_tokens=context_tokens,
-                max_output_tokens=max_output_tokens,
+                input_budget_tokens=input_budget_tokens,
             )
         except ContextLimitExceededError as exc:
             return _failure_result(

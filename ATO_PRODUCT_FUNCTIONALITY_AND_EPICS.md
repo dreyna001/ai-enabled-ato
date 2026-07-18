@@ -1,6 +1,6 @@
 # ATO Evidence Analysis Portal Functionality and Epics
 
-**Status:** User-facing workflow and delivery map (Phase 6 reconciled 2026-07-14)  
+**Status:** User-facing workflow and delivery map (Phase 6A upload-first reconciliation 2026-07-17)  
 **Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)  
 **Release evidence:** [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md)
 
@@ -19,6 +19,7 @@ This document describes what users do and receive. It does not override technica
 1. Confirms the user may create a system.
 2. Validates the required system identity and access metadata.
 3. Creates a stable system record.
+4. Supports soft archive (`archived_at`); default lists hide archived systems. No hard delete.
 
 ### User receives
 
@@ -31,74 +32,77 @@ This document describes what users do and receive. It does not override technica
 - Tailor agency controls
 - Create a DoD, IC, privacy, classified, or FedRAMP Agency Certification workflow
 
-## 2. Select a path and create a package revision
+## 2. Create a package revision and upload evidence (upload-first)
 
 ### User provides
 
-- One supported profile for this PackageRevision:
-  - `fedramp_20x_program`
-  - `fedramp_rev5_transition`
-  - `fisma_agency_security`
-- FedRAMP certification class B or C for `fedramp_20x_program`, where applicable; Class C is the first qualified class, and Class B requires its separate applicability catalog and qualification
-- FIPS 199 impact level low, moderate, or high for `fisma_agency_security`
-- Data origin: synthetic, redacted non-production, or customer production
-- Sensitivity: public, internal unclassified, customer sensitive, CUI, classified, or unknown
-- One or more supported source files
+- Optional parent revision (must already be `ready` when linked)
+- Optional parent link only; no profile, certification class, impact level, data origin, sensitivity, or title fields at create
+- One or more supported source files after the revision exists
 
 ### Product does
 
 1. Authorizes the system and package action.
-2. Validates the selected profile and any required class or impact level.
-3. Creates a PackageRevision under the selected System and stores the `profile_id` on that revision.
-4. Loads the pinned authority and path requirements for display.
-5. Streams files into generated temporary paths.
-6. Enforces total, per-file, file-count, type, and archive limits.
-7. Runs malware scanning before extraction.
-8. Detects type and safely extracts supported content.
-9. Hashes and stores each source unchanged.
-10. Records source dates and locators.
-11. Applies model-routing policy before any normalization, OCR, vision, or analysis call.
+2. Creates a minimal PackageRevision under the selected System with status `uploading`.
+3. Accepts uploads and finalization without requiring path metadata first.
+4. Streams files into generated temporary paths.
+5. Enforces total, per-file, file-count, type, and archive limits.
+6. Runs malware scanning before extraction (production requires an approved scanner; dev/demo may use a substitute — not production evidence).
+7. Detects type and safely extracts supported content.
+8. Hashes and stores each source unchanged.
+9. Records source dates and locators.
+10. Chunks and indexes extracted text for bounded retrieval.
+11. Applies model-routing policy before any intake MAP, OCR, vision, or analysis call; pre-attestation real model calls remain policy-blocked unless approved routing supports them.
 
 ### User receives
 
-- A path-specific upload checklist
-- Clear notices for customer or assessor inputs the product cannot create
+- A revision workspace ready for upload
 - Per-file scan and extraction status
 - Explicit errors for rejected or unreadable content
 - A package revision that is not yet analysis-ready
 
 ### Product does not
 
+- Require profile, class, impact, data origin, or sensitivity before the first upload
 - Fetch URLs embedded in documents
 - Execute scans, macros, formulas, scripts, or package content
 - Silently truncate over-limit content
 - Send blocked data to a model
+- Treat dev mock scanner or routing behavior as production evidence
 
-## 3. Review normalization proposals
+## 3. Complete intake, attestation, and confirm the package draft
 
 ### User provides
 
-- Responses to proposed field mappings
-- Corrections for facts extracted from variable customer formats
+- Authorization path metadata after upload and intake begin: profile, certification class or impact level (as applicable)
+- Required human attestation for **data origin** and **sensitivity** (never AI-written)
+- Edits to pre-filled draft fields and conflict resolutions in the Package Editor
+- Explicit **Confirm Package** when satisfied
 
 ### Product does
 
-1. Uses deterministic parsers for known formats.
-2. Uses a bounded LLM mapping step only for unfamiliar shapes and only after routing approval.
-3. Presents every proposed fact with file hash and page, section, cell, pointer, offset, or image region.
-4. Requires accept, edit, or reject.
-5. On confirmation, seals the current `awaiting_confirmation` PackageRevision as immutable `ready`; it does not create another revision.
-6. Creates a child PackageRevision with the ready revision as its parent for any later source, canonical fact, profile, label, or link change.
+1. Runs deterministic parsers for known formats.
+2. Runs bounded intake **MAP** passes (one structured model call per covered artifact or chunk group, packed to the configured context utilization cap — default 70% minus output and instruction reserves).
+3. Runs deterministic intake **REDUCE** merge into `PackageRevisionDraft`, `field_provenance`, gap list, and conflict records.
+4. Surfaces an intake readiness report: files received, suggested path metadata, gaps, MAP step status (including `policy_blocked`), and conflicts.
+5. Reveals editable metadata and Package Editor tabs after upload finalize; AI may **suggest** profile, class, and impact level but never auto-locks them.
+6. Requires the operator to select **data origin** and **sensitivity** manually; backend readiness remains the source of truth for confirm eligibility.
+7. Resolves draft-field conflicts through existing ETag draft save; metadata-only conflicts resolve through metadata PATCH with ETag.
+8. On confirmation, seals the current `awaiting_confirmation` PackageRevision as immutable `ready`; it does not create another revision.
+9. Creates a child PackageRevision with the ready revision as its parent for any later source, canonical fact, profile, label, or link change.
 
 ### User receives
 
-- A canonical package snapshot
-- Field-level provenance
-- A record of who confirmed each model-proposed fact
+- Pre-filled, fully editable package draft with provenance badges
+- Intake readiness and conflict panels
+- A canonical package snapshot after confirm
+- Field-level provenance showing upload vs model-assisted pre-fill
 
 ### Product does not
 
-- Treat model output as a trusted fact without review
+- Write `data_origin` or `sensitivity` from model output
+- Auto-lock AI suggestions for profile, class, or impact
+- Treat model output as authoritative without human edit and confirm
 - Modify the source upload
 - Change a ready package revision instead of creating a child revision
 
@@ -329,11 +333,12 @@ For each row, an authorized reviewer may:
 
 ### Product does
 
-1. Prevents the submitter from approving.
-2. Invalidates approval after seven days or any payload change.
-3. Produces a sanitized ZIP only for the approved hash.
-4. Authorizes and audits each download.
-5. Includes manifest, human drafts, machine payloads, provenance, and validation results.
+1. Prevents the submitter from approving when `SINGLE_USER_MODE_ENABLED` is `false` (default and production examples).
+2. Allows the same principal to submit and approve export only when single-user mode is explicitly enabled for dev/demo; authentication, target access, CSRF, ETag, idempotency, payload-hash binding, expiry, and audit boundaries remain unchanged.
+3. Invalidates approval after seven days or any payload change.
+4. Produces a sanitized ZIP only for the approved hash.
+5. Authorizes and audits each download.
+6. Includes manifest, human drafts, machine payloads, provenance, and validation results.
 
 ### Product does not
 
@@ -406,12 +411,13 @@ Done when:
 Done when:
 
 - Systems and PackageRevisions exist.
-- LLM-normalized facts require confirmation.
+- Upload-first revision create defers path metadata until post-upload attestation.
+- Bounded intake MAP/REDUCE populates an editable draft; human-only labels require operator attestation.
 - Postgres jobs recover without duplicate side effects.
 - One FISMA synthetic package completes the full backend flow.
 - Worker units and worker credential/config projections are added only with the implemented worker runtime and its replay/readiness tests.
 
-**Delivered:** full API, draft editor, intake workers, workflow integration tests (CI optional). **Residual:** production customer extraction (**HS-005**).
+**Delivered:** upload-first API and portal create, system soft-archive, context packer (`CONTEXT_UTILIZATION_TARGET`), intake MAP/REDUCE worker path, intake report and conflict UI, metadata deferral migration (`20260717_0013`), draft editor confirm/seal, intake workers, workflow integration tests (CI optional). **Residual:** production customer extraction (**HS-005**); upload-first **P7** integration gate pending (see [`docs/UPLOAD_FIRST_INTAKE_PLAN.md`](docs/UPLOAD_FIRST_INTAKE_PLAN.md)).
 
 ### EP-03 - FedRAMP 20x Program — 🟡 partial
 
@@ -427,7 +433,7 @@ Done when:
 
 ### EP-06 - Review portal — 🟡 partial
 
-**Delivered:** OIDC sessions, RBAC matrix, review/export API, React portal, Playwright asset contracts. **Residual:** live browser E2E on managed stack (environment-not-run); customer IdP (**HS-003**). Gate: [`docs/P5_GATE_RECORD.md`](docs/P5_GATE_RECORD.md)
+**Delivered:** OIDC sessions, RBAC matrix, review/export API, React portal, upload-first workflow UX, Playwright asset contracts, optional single-user export mode (`SINGLE_USER_MODE_ENABLED`, default `false`). **Residual:** live browser E2E on managed stack (environment-not-run); customer IdP (**HS-003**). Gate: [`docs/P5_GATE_RECORD.md`](docs/P5_GATE_RECORD.md)
 
 ### EP-07 - Advanced analysis — 🟡 partial / ⛔ qualification
 

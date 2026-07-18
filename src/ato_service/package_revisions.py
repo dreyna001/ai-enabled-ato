@@ -52,6 +52,7 @@ from ato_service.intake_work import bootstrap_malware_scan_work
 from ato_service.package_revision_drafts import (
     load_draft_for_confirm,
     seal_package_revision_draft,
+    synchronize_draft_after_metadata_patch,
 )
 from ato_service.lifecycle_transitions import (
     IllegalStateTransitionError,
@@ -70,12 +71,21 @@ from ato_service.runtime_config import RuntimeLimits
 OPERATION_CREATE = "package_revisions.create"
 OPERATION_FINALIZE = "package_revisions.finalize"
 OPERATION_CONFIRM = "package_revisions.confirm"
+OPERATION_PATCH_METADATA = "package_revisions.patch_metadata"
 
 HTTP_CREATED = 201
 HTTP_OK = 200
 HTTP_ACCEPTED = 202
 
 _RESOURCE_NOT_FOUND_MESSAGE = "requested resource was not found"
+
+PATCHABLE_METADATA_STATUSES = frozenset(
+    {
+        PackageRevisionStatus.SCANNING.value,
+        PackageRevisionStatus.EXTRACTING.value,
+        PackageRevisionStatus.AWAITING_CONFIRMATION.value,
+    }
+)
 
 
 class PackageRevisionNotFoundError(Exception):
@@ -106,6 +116,38 @@ class ParentRevisionNotFoundError(Exception):
     def __init__(self, *, parent_revision_id: uuid.UUID) -> None:
         self.parent_revision_id = parent_revision_id
         super().__init__(_RESOURCE_NOT_FOUND_MESSAGE)
+
+
+class ParentRevisionNotReadyError(Exception):
+    """Raised when a child revision references a parent that is not ready."""
+
+    error_code = "illegal_state_transition"
+
+    def __init__(self, *, parent_revision_id: uuid.UUID, parent_status: str) -> None:
+        self.parent_revision_id = parent_revision_id
+        self.parent_status = parent_status
+        super().__init__("parent revision must be ready before creating a child revision")
+
+
+class RevisionMetadataIncompleteError(Exception):
+    """Raised when confirm or model gates require complete human-set metadata."""
+
+    error_code = "revision_metadata_incomplete"
+
+    def __init__(self) -> None:
+        super().__init__("package revision metadata is incomplete")
+
+
+class PatchMetadataStateError(Exception):
+    """Raised when metadata PATCH is attempted in an illegal revision state."""
+
+    error_code = "illegal_state_transition"
+
+    def __init__(self, *, current_state: str) -> None:
+        self.current_state = current_state
+        super().__init__(
+            "package revision metadata may not be patched in the current state"
+        )
 
 
 class PackageRevisionValidationError(ValueError):
@@ -168,14 +210,21 @@ class PackageRevisionStorageError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class CreatePackageRevisionInput:
-    """Validated create payload for a new package revision."""
+    """Validated create payload for a new upload-first package revision."""
 
     parent_revision_id: uuid.UUID | None
-    profile_id: str
-    certification_class: str | None
-    impact_level: str | None
-    data_origin: str
-    sensitivity: str
+
+
+@dataclass(frozen=True, slots=True)
+class PatchPackageRevisionMetadataInput:
+    """Validated metadata PATCH payload with explicit provided fields."""
+
+    profile_id: str | None = None
+    certification_class: str | None = None
+    impact_level: str | None = None
+    data_origin: str | None = None
+    sensitivity: str | None = None
+    provided_fields: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,6 +360,16 @@ def _effective_data_labels(data_origin: str, sensitivity: str) -> list[str]:
     return labels
 
 
+def _compute_effective_data_labels(
+    *,
+    data_origin: str | None,
+    sensitivity: str | None,
+) -> list[str]:
+    if data_origin is None or sensitivity is None:
+        return []
+    return _effective_data_labels(data_origin, sensitivity)
+
+
 def validate_profile_boundaries(
     *,
     profile_id: str,
@@ -352,44 +411,173 @@ def validate_profile_boundaries(
 def validate_create_input(
     *,
     parent_revision_id: uuid.UUID | None,
-    profile_id: str,
-    certification_class: str | None,
-    impact_level: str | None,
-    data_origin: str,
-    sensitivity: str,
 ) -> CreatePackageRevisionInput:
-    """Validate create inputs before any database mutation."""
-    data_origin = _require_enum_value(
-        data_origin,
-        field_name="data_origin",
-        allowed=ev.DATA_ORIGIN_VALUES,
-    )
-    sensitivity = _require_enum_value(
-        sensitivity,
-        field_name="sensitivity",
-        allowed=ev.SENSITIVITY_VALUES,
-    )
-    try:
-        require_unclassified_sensitivity(sensitivity)
-    except ClassifiedAuthorizationInputError as exc:
+    """Validate upload-first create inputs before any database mutation."""
+    return CreatePackageRevisionInput(parent_revision_id=parent_revision_id)
+
+
+_PATCH_METADATA_FIELDS = frozenset(
+    {
+        "profile_id",
+        "certification_class",
+        "impact_level",
+        "data_origin",
+        "sensitivity",
+    }
+)
+
+
+def validate_patch_metadata_input(
+    *,
+    provided: dict[str, Any],
+) -> PatchPackageRevisionMetadataInput:
+    """Validate metadata PATCH inputs before any database mutation."""
+    unknown = set(provided) - _PATCH_METADATA_FIELDS
+    if unknown:
         raise PackageRevisionValidationError(
-            "classified sensitivity is outside product scope",
-            error_code=exc.error_code,
+            f"unsupported metadata field: {sorted(unknown)[0]}"
         )
-    validate_profile_boundaries(
-        profile_id=profile_id,
-        certification_class=certification_class,
-        impact_level=impact_level,
-    )
-    _effective_data_labels(data_origin, sensitivity)
-    return CreatePackageRevisionInput(
-        parent_revision_id=parent_revision_id,
+    if not provided:
+        raise PackageRevisionValidationError(
+            "at least one metadata field is required",
+            error_code="request_schema_invalid",
+        )
+
+    profile_id = provided.get("profile_id")
+    certification_class = provided.get("certification_class")
+    impact_level = provided.get("impact_level")
+    data_origin = provided.get("data_origin")
+    sensitivity = provided.get("sensitivity")
+
+    if "profile_id" in provided:
+        if profile_id is None:
+            raise PackageRevisionValidationError("profile_id is required when provided")
+        profile_id = _require_enum_value(
+            profile_id,
+            field_name="profile_id",
+            allowed=ev.PROFILE_ID_VALUES,
+        )
+    if "certification_class" in provided and certification_class is not None:
+        certification_class = _require_enum_value(
+            certification_class,
+            field_name="certification_class",
+            allowed=ev.CERTIFICATION_CLASS_VALUES,
+        )
+    if "impact_level" in provided and impact_level is not None:
+        impact_level = _require_enum_value(
+            impact_level,
+            field_name="impact_level",
+            allowed=ev.IMPACT_LEVEL_VALUES,
+        )
+    if "data_origin" in provided:
+        if data_origin is None:
+            raise PackageRevisionValidationError("data_origin is required when provided")
+        data_origin = _require_enum_value(
+            data_origin,
+            field_name="data_origin",
+            allowed=ev.DATA_ORIGIN_VALUES,
+        )
+    if "sensitivity" in provided:
+        if sensitivity is None:
+            raise PackageRevisionValidationError("sensitivity is required when provided")
+        sensitivity = _require_enum_value(
+            sensitivity,
+            field_name="sensitivity",
+            allowed=ev.SENSITIVITY_VALUES,
+        )
+        try:
+            require_unclassified_sensitivity(sensitivity)
+        except ClassifiedAuthorizationInputError as exc:
+            raise PackageRevisionValidationError(
+                "classified sensitivity is outside product scope",
+                error_code=exc.error_code,
+            ) from exc
+
+    return PatchPackageRevisionMetadataInput(
         profile_id=profile_id,
         certification_class=certification_class,
         impact_level=impact_level,
         data_origin=data_origin,
         sensitivity=sensitivity,
+        provided_fields=frozenset(provided),
     )
+
+
+def _merged_profile_boundaries(
+    *,
+    current_profile_id: str | None,
+    current_certification_class: str | None,
+    current_impact_level: str | None,
+    patch: PatchPackageRevisionMetadataInput,
+) -> tuple[str | None, str | None, str | None]:
+    profile_id = (
+        patch.profile_id if "profile_id" in patch.provided_fields else current_profile_id
+    )
+    certification_class = (
+        patch.certification_class
+        if "certification_class" in patch.provided_fields
+        else current_certification_class
+    )
+    impact_level = (
+        patch.impact_level
+        if "impact_level" in patch.provided_fields
+        else current_impact_level
+    )
+    return profile_id, certification_class, impact_level
+
+
+def validate_patch_metadata_boundaries(
+    *,
+    current_profile_id: str | None,
+    current_certification_class: str | None,
+    current_impact_level: str | None,
+    patch: PatchPackageRevisionMetadataInput,
+) -> None:
+    """Validate merged profile/class/impact boundaries for one metadata PATCH."""
+    profile_id, certification_class, impact_level = _merged_profile_boundaries(
+        current_profile_id=current_profile_id,
+        current_certification_class=current_certification_class,
+        current_impact_level=current_impact_level,
+        patch=patch,
+    )
+    if profile_id is None:
+        if "certification_class" in patch.provided_fields and certification_class is not None:
+            raise ProfileBoundaryError(
+                "certification_class requires profile_id to be set first"
+            )
+        if "impact_level" in patch.provided_fields and impact_level is not None:
+            raise ProfileBoundaryError("impact_level requires profile_id to be set first")
+        return
+    validate_profile_boundaries(
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+    )
+
+
+def revision_metadata_is_complete(package_revision: Any) -> bool:
+    """Return whether revision metadata satisfies confirm and ready requirements."""
+    if package_revision.profile_id is None:
+        return False
+    if package_revision.data_origin is None or package_revision.sensitivity is None:
+        return False
+    if len(package_revision.effective_data_labels or []) < 2:
+        return False
+    try:
+        validate_profile_boundaries(
+            profile_id=package_revision.profile_id,
+            certification_class=package_revision.certification_class,
+            impact_level=package_revision.impact_level,
+        )
+    except ProfileBoundaryError:
+        return False
+    return True
+
+
+def require_complete_revision_metadata(package_revision: Any) -> None:
+    """Fail closed when confirm or downstream gates require complete metadata."""
+    if not revision_metadata_is_complete(package_revision):
+        raise RevisionMetadataIncompleteError()
 
 
 def create_request_digest(
@@ -406,13 +594,24 @@ def create_request_digest(
                 if request.parent_revision_id is None
                 else format_uuid(request.parent_revision_id)
             ),
-            "profile_id": request.profile_id,
-            "certification_class": request.certification_class,
-            "impact_level": request.impact_level,
-            "data_origin": request.data_origin,
-            "sensitivity": request.sensitivity,
         }
     )
+
+
+def patch_metadata_request_digest(
+    *,
+    package_revision_id: uuid.UUID,
+    if_match: str,
+    patch: PatchPackageRevisionMetadataInput,
+) -> str:
+    """Return the normalized request digest for revision metadata PATCH."""
+    payload: dict[str, Any] = {
+        "package_revision_id": format_uuid(package_revision_id),
+        "if_match": if_match,
+    }
+    for field_name in sorted(patch.provided_fields):
+        payload[field_name] = getattr(patch, field_name)
+    return request_digest_from_payload(payload)
 
 
 def finalize_request_digest(*, package_revision_id: uuid.UUID) -> str:
@@ -476,6 +675,8 @@ async def _domain_payload_with_preparation_status(
     project_root: Path | None,
     now: datetime,
 ) -> dict[str, Any]:
+    if package_revision.status != PackageRevisionStatus.READY.value:
+        return map_package_revision_to_domain(package_revision)
     statuses = await resolve_preparation_status_batch(
         session,
         (package_revision.package_revision_id,),
@@ -497,7 +698,11 @@ async def _domain_payloads_with_preparation_status(
 ) -> tuple[dict[str, Any], ...]:
     if not package_revisions:
         return ()
-    revision_ids = tuple(revision.package_revision_id for revision in package_revisions)
+    revision_ids = tuple(
+        revision.package_revision_id
+        for revision in package_revisions
+        if revision.status == PackageRevisionStatus.READY.value
+    )
     statuses = await resolve_preparation_status_batch(
         session,
         revision_ids,
@@ -507,10 +712,18 @@ async def _domain_payloads_with_preparation_status(
     return tuple(
         map_package_revision_to_domain(
             revision,
-            package_preparation_status=statuses[revision.package_revision_id],
+            package_preparation_status=statuses.get(
+                revision.package_revision_id,
+                "in_progress",
+            ),
         )
         for revision in package_revisions
     )
+
+
+def _domain_payload_for_mutation(package_revision: Any) -> dict[str, Any]:
+    """Map a revision mutation before any export state can change."""
+    return map_package_revision_to_domain(package_revision)
 
 
 def _manifest_source_entries(artifacts: list[Any]) -> tuple[ManifestSourceEntry, ...]:
@@ -637,17 +850,12 @@ async def create_package_revision(
     hmac_key: bytes,
     now: datetime,
 ) -> PackageRevisionMutationResult:
-    """Create a package revision without committing the caller transaction."""
+    """Create an upload-first package revision without committing the caller transaction."""
     from ato_service.db.models import PackageRevision
 
     validated_now = _require_aware_utc(now, field_name="now")
     validated_request = validate_create_input(
         parent_revision_id=request.parent_revision_id,
-        profile_id=request.profile_id,
-        certification_class=request.certification_class,
-        impact_level=request.impact_level,
-        data_origin=request.data_origin,
-        sensitivity=request.sensitivity,
     )
     if not authority_manifest_id:
         raise PackageRevisionValidationError("authority_manifest_id is required")
@@ -680,6 +888,11 @@ async def create_package_revision(
         return _mutation_result_from_replay(replay)
 
     parent_revision_id = validated_request.parent_revision_id
+    profile_id: str | None = None
+    certification_class: str | None = None
+    impact_level: str | None = None
+    data_origin: str | None = None
+    sensitivity: str | None = None
     if parent_revision_id is not None:
         parent_result = await session.execute(
             _load_parent_revision_statement(parent_revision_id)
@@ -687,21 +900,26 @@ async def create_package_revision(
         parent_revision = parent_result.scalar_one_or_none()
         if parent_revision is None or parent_revision.system_id != system_id:
             raise ParentRevisionNotFoundError(parent_revision_id=parent_revision_id)
+        if parent_revision.status != PackageRevisionStatus.READY.value:
+            raise ParentRevisionNotReadyError(
+                parent_revision_id=parent_revision_id,
+                parent_status=parent_revision.status,
+            )
+        profile_id = parent_revision.profile_id
+        certification_class = parent_revision.certification_class
+        impact_level = parent_revision.impact_level
 
     package_revision_id = uuid.uuid4()
     package_revision = PackageRevision(
         package_revision_id=package_revision_id,
         system_id=system_id,
         parent_revision_id=parent_revision_id,
-        profile_id=validated_request.profile_id,
-        certification_class=validated_request.certification_class,
-        impact_level=validated_request.impact_level,
-        data_origin=validated_request.data_origin,
-        sensitivity=validated_request.sensitivity,
-        effective_data_labels=_effective_data_labels(
-            validated_request.data_origin,
-            validated_request.sensitivity,
-        ),
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+        data_origin=data_origin,
+        sensitivity=sensitivity,
+        effective_data_labels=[],
         authority_manifest_id=authority_manifest_id,
         content_manifest_sha256=None,
         revision_version=1,
@@ -737,6 +955,124 @@ async def create_package_revision(
         now=validated_now,
     )
     return _mutation_result_from_domain(payload, status=HTTP_CREATED, replayed=False)
+
+
+async def patch_package_revision_metadata(
+    session: AsyncSession,
+    *,
+    principal: AuthenticatedPrincipal,
+    package_revision_id: uuid.UUID,
+    patch: PatchPackageRevisionMetadataInput,
+    if_match: str | None,
+    idempotency_key: str,
+    hmac_key: bytes,
+    now: datetime,
+) -> PackageRevisionMutationResult:
+    """Apply authenticated human metadata PATCH without committing the caller transaction."""
+    validated_now = _require_aware_utc(now, field_name="now")
+    if if_match is None:
+        raise IfMatchRequiredError()
+
+    request_digest = patch_metadata_request_digest(
+        package_revision_id=package_revision_id,
+        if_match=if_match,
+        patch=patch,
+    )
+
+    revision_result = await session.execute(
+        _load_package_revision_for_update_statement(package_revision_id)
+    )
+    package_revision = revision_result.scalar_one_or_none()
+    if package_revision is None:
+        raise PackageRevisionNotFoundError(package_revision_id=package_revision_id)
+
+    system_result = await session.execute(
+        _load_system_for_update_statement(package_revision.system_id)
+    )
+    system = system_result.scalar_one()
+    require_any_package_role(
+        principal,
+        system=system,
+        revision=package_revision,
+        roles=(ROLE_SYSTEM_OWNER, ROLE_ISSO),
+    )
+
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        OPERATION_PATCH_METADATA,
+        idempotency_key,
+        request_digest,
+        validated_now,
+    )
+    if replay is not None:
+        return _mutation_result_from_replay(replay)
+
+    assert_if_match(if_match, package_revision.revision_version)
+
+    if package_revision.status not in PATCHABLE_METADATA_STATUSES:
+        raise PatchMetadataStateError(current_state=package_revision.status)
+
+    validate_patch_metadata_boundaries(
+        current_profile_id=package_revision.profile_id,
+        current_certification_class=package_revision.certification_class,
+        current_impact_level=package_revision.impact_level,
+        patch=patch,
+    )
+
+    if "profile_id" in patch.provided_fields:
+        package_revision.profile_id = patch.profile_id
+    if "certification_class" in patch.provided_fields:
+        package_revision.certification_class = patch.certification_class
+    if "impact_level" in patch.provided_fields:
+        package_revision.impact_level = patch.impact_level
+    if "data_origin" in patch.provided_fields:
+        package_revision.data_origin = patch.data_origin
+    if "sensitivity" in patch.provided_fields:
+        package_revision.sensitivity = patch.sensitivity
+
+    package_revision.effective_data_labels = _compute_effective_data_labels(
+        data_origin=package_revision.data_origin,
+        sensitivity=package_revision.sensitivity,
+    )
+
+    await synchronize_draft_after_metadata_patch(
+        session,
+        package_revision=package_revision,
+        patch=patch,
+    )
+
+    package_revision.revision_version += 1
+
+    payload = _domain_payload_for_mutation(package_revision)
+    await append_audit_event(
+        session,
+        hmac_key=hmac_key,
+        actor_type="user",
+        actor_id=principal.actor_id,
+        action="package_revision.metadata_patched",
+        object_type="package_revision",
+        object_id=format_uuid(package_revision_id),
+        outcome="succeeded",
+        reason_code=None,
+        metadata={
+            "revision_version": package_revision.revision_version,
+            "provided_fields": sorted(patch.provided_fields),
+        },
+        occurred_at=validated_now,
+    )
+    await record_idempotency_outcome(
+        session,
+        principal=principal.actor_id,
+        operation=OPERATION_PATCH_METADATA,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        response_status=HTTP_OK,
+        response_body=payload,
+        response_headers={"ETag": format_package_revision_etag(package_revision.revision_version)},
+        now=validated_now,
+    )
+    return _mutation_result_from_domain(payload, status=HTTP_OK, replayed=False)
 
 
 async def finalize_package_revision(
@@ -836,12 +1172,7 @@ async def finalize_package_revision(
         now=validated_now,
     )
 
-    payload = await _domain_payload_with_preparation_status(
-        session,
-        package_revision,
-        project_root=project_root,
-        now=validated_now,
-    )
+    payload = _domain_payload_for_mutation(package_revision)
     await append_audit_event(
         session,
         hmac_key=hmac_key,
@@ -939,6 +1270,8 @@ async def confirm_package_revision(
             condition=PackageRevisionTransitionCondition.NORMAL_PROGRESSION.value,
         )
 
+    require_complete_revision_metadata(package_revision)
+
     draft = await load_draft_for_confirm(
         session,
         package_revision_id=package_revision_id,
@@ -1010,12 +1343,7 @@ async def confirm_package_revision(
                 now=validated_now,
             )
 
-    payload = await _domain_payload_with_preparation_status(
-        session,
-        package_revision,
-        project_root=project_root,
-        now=validated_now,
-    )
+    payload = _domain_payload_for_mutation(package_revision)
     await append_audit_event(
         session,
         hmac_key=hmac_key,

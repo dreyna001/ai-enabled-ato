@@ -11,6 +11,7 @@
     "system_owner": ["owners"],
     "viewer": ["viewers"]
   },
+  "SINGLE_USER_MODE_ENABLED": true,
   "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
     "source": "systemd_credential",
     "identifier": "oidc-client-secret"
@@ -33,6 +34,7 @@
   "TEXT_MODEL_MAX_RETRIES": 2,
   "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
   "TEXT_MODEL_TEMPERATURE": 0.0,
+  "CONTEXT_UTILIZATION_TARGET": 0.7,
   "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": true,
   "CUI_MODEL_BOUNDARY_APPROVED": true,
   "PROCESS_CAPABILITIES": {

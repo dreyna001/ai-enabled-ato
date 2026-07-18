@@ -5,19 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 from ato_service.citation_validation import CitableSource, build_sealed_citable_sources
+from ato_service.context_budget import RankedPackEntry, pack_ranked_entries
 from ato_service.db.models import SealedPackageContent
 from ato_service.normalize_proposal.json_utils import stable_json_dumps
 from ato_service.sufficiency_matrix.constants import (
-    INSTRUCTION_OVERHEAD_TOKENS,
     MAX_EVIDENCE_EXCERPT_CHARS,
     MINIMUM_BUNDLE_RESERVE_TOKENS,
     sha256_text,
 )
 from ato_service.sufficiency_matrix.profile_catalog import assessment_items_for_prompt
-from ato_service.sufficiency_matrix.tokens import (
-    compute_input_token_budget,
-    estimate_tokens_from_object,
-)
+from ato_service.sufficiency_matrix.tokens import estimate_tokens_from_object
 from ato_service.sufficiency_matrix.types import EvidenceSource, FactBundle
 
 
@@ -72,18 +69,11 @@ def build_fact_bundle(
     profile: dict[str, Any],
     assessment_item_ids: tuple[str, ...],
     sealed: SealedPackageContent,
-    context_tokens: int,
-    max_output_tokens: int,
-    instruction_overhead_tokens: int = INSTRUCTION_OVERHEAD_TOKENS,
+    input_budget_tokens: int,
 ) -> FactBundle:
     """Build one bounded immutable fact bundle for a matrix batch."""
     profile_id = str(profile["profile_id"])
-    input_budget = compute_input_token_budget(
-        context_tokens=context_tokens,
-        max_output_tokens=max_output_tokens,
-        instruction_overhead_tokens=instruction_overhead_tokens,
-    )
-    if input_budget < MINIMUM_BUNDLE_RESERVE_TOKENS:
+    if input_budget_tokens < MINIMUM_BUNDLE_RESERVE_TOKENS:
         raise ContextLimitExceededError(
             "configured context budget cannot fit the minimum sufficiency_matrix bundle"
         )
@@ -102,15 +92,14 @@ def build_fact_bundle(
         "evidence_sources": [],
         "omitted_source_ids": [],
     }
-    used_tokens = estimate_tokens_from_object(fixed_payload)
-    if used_tokens >= input_budget:
+    fixed_payload_tokens = estimate_tokens_from_object(fixed_payload)
+    if fixed_payload_tokens >= input_budget_tokens:
         raise ContextLimitExceededError(
             "assessment item metadata exceeds sufficiency_matrix context budget"
         )
 
-    included_sources: list[dict[str, Any]] = []
-    omitted_source_ids: list[str] = []
-    remaining = input_budget - used_tokens
+    ranked_entries: list[RankedPackEntry] = []
+    entry_by_id: dict[str, dict[str, Any]] = {}
     for source in all_sources:
         excerpt, truncated = _cap_excerpt(source.text)
         entry = {
@@ -120,12 +109,23 @@ def build_fact_bundle(
             "text": excerpt,
             "text_truncated": truncated,
         }
-        entry_tokens = estimate_tokens_from_object(entry)
-        if entry_tokens > remaining:
-            omitted_source_ids.append(source.source_id)
-            continue
-        included_sources.append(entry)
-        remaining -= entry_tokens
+        entry_by_id[source.source_id] = entry
+        ranked_entries.append(
+            RankedPackEntry(
+                entry_id=source.source_id,
+                token_estimate=estimate_tokens_from_object(entry),
+            )
+        )
+
+    pack_result = pack_ranked_entries(
+        entries=tuple(ranked_entries),
+        input_budget=input_budget_tokens,
+        fixed_payload_tokens=fixed_payload_tokens,
+    )
+    included_sources = [
+        entry_by_id[entry_id] for entry_id in pack_result.included_entry_ids
+    ]
+    omitted_source_ids = list(pack_result.omitted_entry_ids)
 
     prompt_payload = {
         "profile_id": profile_id,
@@ -141,7 +141,7 @@ def build_fact_bundle(
         evidence_sources=all_sources,
         omitted_source_ids=tuple(omitted_source_ids),
         fact_bundle_sha256=sha256_text(stable_json_dumps(prompt_payload)),
-        context_complete=not omitted_source_ids,
+        context_complete=pack_result.context_complete,
         prompt_payload=prompt_payload,
     )
 

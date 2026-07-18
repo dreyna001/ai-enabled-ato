@@ -110,6 +110,31 @@ sudo systemctl restart ato-analyzer-worker.service
 
 Or rerun the full deploy script (idempotent for credentials unless regenerated).
 
+## Upgrade after code changes
+
+From the repository root inside WSL:
+
+```bash
+sudo bash scripts/upgrade.sh
+sudo systemctl restart ato-api.service ato-analyzer-worker.service
+```
+
+`upgrade.sh` detects WSL, skips nginx and production systemd units, restores WSL units (port **8001**, `/opt/ato-analyzer/runtime-config.json`), and runs migrations. There is no `--no-smoke` flag; smoke is opt-in with `--smoke`.
+
+If portal auth and text-model settings were enabled, you can instead rerun `sudo bash scripts/wsl-portal-enable.sh` (or `--bedrock`) to refresh package bytes, migrations, WSL units, and storage bind in one step.
+
+Verify the upload-first create contract:
+
+```bash
+curl -s http://127.0.0.1:8001/openapi.json | python3 -c "
+import sys, json
+props = json.load(sys.stdin)['components']['schemas']['CreatePackageRevisionRequest']['properties']
+print(list(props.keys()))
+"
+```
+
+Expect `['parent_revision_id']` only.
+
 ## Options
 
 ```bash

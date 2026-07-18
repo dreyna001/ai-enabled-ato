@@ -121,6 +121,10 @@ def _approval_expiry_days(runtime_state: Any) -> int:
     return runtime_state.snapshot.config.limits.approval_expiry_days
 
 
+def _single_user_mode_enabled(runtime_state: Any) -> bool:
+    return runtime_state.config.single_user_mode_enabled
+
+
 def _export_error_response(exc: ExportValidationError) -> JSONResponse:
     status = 422
     if exc.error_code == "illegal_state_transition":
@@ -621,6 +625,7 @@ def build_extended_router() -> APIRouter:
                 project_root=runtime_state.snapshot.project_root,
                 authority_manifest_id=runtime_state.authority_manifest_id,
                 approval_expiry_days=_approval_expiry_days(runtime_state),
+                single_user_mode_enabled=_single_user_mode_enabled(runtime_state),
             )
         except SelfApprovalDeniedError:
             return JSONResponse(status_code=403, content={"error": "self_approval_denied", "error_code": "self_approval_denied"})
@@ -652,6 +657,7 @@ def build_extended_router() -> APIRouter:
                 project_root=runtime_state.snapshot.project_root,
                 authority_manifest_id=runtime_state.authority_manifest_id,
                 approval_expiry_days=_approval_expiry_days(runtime_state),
+                single_user_mode_enabled=_single_user_mode_enabled(runtime_state),
             )
         except SelfApprovalDeniedError:
             return JSONResponse(status_code=403, content={"error": "self_approval_denied", "error_code": "self_approval_denied"})

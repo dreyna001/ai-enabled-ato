@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/intake-map-step-result.schema.json",
+  "title": "Intake MAP Step Result",
+  "$comment": "Validated MAP output consumed by deterministic intake REDUCE. Dynamic target allowlists are enforced in Python before merge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "step_id",
+    "step_key",
+    "context_complete",
+    "proposals"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "step_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "step_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "maxLength": 64
+    },
+    "context_complete": {
+      "type": "boolean"
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/IntakeMapProposal"
+      }
+    },
+    "metadata_suggestions": {
+      "$ref": "#/$defs/IntakeMetadataSuggestions"
+    }
+  },
+  "$defs": {
+    "EvidenceKind": {
+      "enum": [
+        "direct_evidence",
+        "inference"
+      ]
+    },
+    "Confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "IntakeMapProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_pointer",
+        "proposed_value",
+        "evidence_kind",
+        "source_artifact_id",
+        "source_sha256",
+        "source_locator",
+        "model_step_id",
+        "confidence"
+      ],
+      "properties": {
+        "target_pointer": {
+          "type": "string",
+          "pattern": "^(/([^~/]|~[01])*)*$",
+          "maxLength": 2000
+        },
+        "proposed_value": true,
+        "evidence_kind": {
+          "$ref": "#/$defs/EvidenceKind"
+        },
+        "source_artifact_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_locator": {
+          "type": "object",
+          "maxProperties": 32
+        },
+        "chunk_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "segment_index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model_step_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "chunk_id"
+          ]
+        },
+        {
+          "required": [
+            "segment_index"
+          ]
+        }
+      ]
+    },
+    "IntakeMetadataSuggestions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "certification_class": {
+          "enum": [
+            "A",
+            "B",
+            "C"
+          ]
+        },
+        "impact_level": {
+          "enum": [
+            "low",
+            "moderate",
+            "high"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -36,7 +36,7 @@ from ato_service.package_revisions import (
 from ato_service.problems import PROBLEM_MEDIA_TYPE
 from ato_service.runtime_config import load_runtime_config_from_dict
 from ato_service.source_artifacts import UploadSourceArtifactResult
-from ato_service.systems import CreateSystemResult, SystemsPage
+from ato_service.systems import ArchiveSystemResult, CreateSystemResult, SystemsPage
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -241,6 +241,7 @@ def test_analysis_run_routes_are_mounted(
         ("post", "/api/v1/systems", {"json": {"display_name": "x", "external_system_id": None, "owner_group": "owners", "viewer_groups": []}}),
         ("get", "/api/v1/systems", {}),
         ("get", f"/api/v1/systems/{SYSTEM_ID}", {}),
+        ("post", f"/api/v1/systems/{SYSTEM_ID}/archive", {}),
         ("post", f"/api/v1/systems/{SYSTEM_ID}/package-revisions", {"json": {"parent_revision_id": None, "profile_id": "fisma_agency_security", "certification_class": None, "impact_level": "moderate", "data_origin": "synthetic", "sensitivity": "internal_unclassified"}}),
         ("get", f"/api/v1/systems/{SYSTEM_ID}/package-revisions", {}),
         ("get", f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}", {}),
@@ -425,11 +426,73 @@ def test_list_systems_returns_items_and_next_cursor(client: TestClient) -> None:
         "ato_service.api_router.list_systems",
         new_callable=AsyncMock,
         return_value=SystemsPage(items=[SYSTEM_PAYLOAD], next_cursor="cursor-1"),
-    ):
+    ) as list_systems:
         response = client.get("/api/v1/systems", params={"limit": 10})
 
     assert response.status_code == 200
     assert response.json() == {"items": [SYSTEM_PAYLOAD], "next_cursor": "cursor-1"}
+    list_systems.assert_awaited_once()
+    assert list_systems.await_args.kwargs["include_archived"] is False
+
+
+def test_list_systems_forwards_include_archived(client: TestClient) -> None:
+    with patch(
+        "ato_service.api_router.list_systems",
+        new_callable=AsyncMock,
+        return_value=SystemsPage(items=[], next_cursor=None),
+    ) as list_systems:
+        response = client.get(
+            "/api/v1/systems",
+            params={"include_archived": "true"},
+        )
+
+    assert response.status_code == 200
+    list_systems.assert_awaited_once()
+    assert list_systems.await_args.kwargs["include_archived"] is True
+
+
+def test_archive_system_returns_payload(
+    client: TestClient,
+    mutation_headers: dict[str, str],
+) -> None:
+    archived_payload = dict(SYSTEM_PAYLOAD)
+    archived_payload["archived_at"] = "2026-07-11T12:00:00Z"
+    with patch(
+        "ato_service.api_router.archive_system",
+        new_callable=AsyncMock,
+        return_value=ArchiveSystemResult(
+            payload=archived_payload,
+            status=200,
+            replayed=False,
+        ),
+    ) as archive_system:
+        response = client.post(
+            f"/api/v1/systems/{SYSTEM_ID}/archive",
+            headers=mutation_headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == archived_payload
+    archive_system.assert_awaited_once()
+
+
+def test_archive_system_requires_csrf_and_origin(
+    unauthenticated_app: FastAPI,
+    mutation_headers: dict[str, str],
+) -> None:
+    @unauthenticated_app.middleware("http")
+    async def inject_principal(request, call_next):  # type: ignore[no-untyped-def]
+        request.state.authenticated_principal = _principal()
+        return await call_next(request)
+
+    headers = dict(mutation_headers)
+    headers.pop("X-CSRF-Token")
+    with TestClient(unauthenticated_app) as csrf_client:
+        response = csrf_client.post(
+            f"/api/v1/systems/{SYSTEM_ID}/archive",
+            headers=headers,
+        )
+    _assert_problem(response, status=403, error_code="csrf_validation_failed")
 
 
 def test_get_system_returns_payload(client: TestClient) -> None:
@@ -457,23 +520,19 @@ def test_create_package_revision_returns_etag(
             etag='"v1"',
             replayed=False,
         ),
-    ):
+    ) as create_package_revision:
         response = client.post(
             f"/api/v1/systems/{SYSTEM_ID}/package-revisions",
             headers=mutation_headers,
-            json={
-                "parent_revision_id": None,
-                "profile_id": "fisma_agency_security",
-                "certification_class": None,
-                "impact_level": "moderate",
-                "data_origin": "synthetic",
-                "sensitivity": "internal_unclassified",
-            },
+            json={"parent_revision_id": None},
         )
 
     assert response.status_code == 201
     assert response.json() == PACKAGE_REVISION_PAYLOAD
     assert response.headers["ETag"] == '"v1"'
+    assert create_package_revision.await_args.kwargs[
+        "request"
+    ].parent_revision_id is None
 
 
 def test_list_package_revisions_returns_items_and_next_cursor(client: TestClient) -> None:
@@ -619,3 +678,64 @@ def test_confirm_without_if_match_maps_to_service_level_required_error(
             headers=mutation_headers,
         )
     _assert_problem(response, status=428, error_code="if_match_required")
+
+
+INTAKE_REPORT_PAYLOAD: dict[str, Any] = {
+    "schema_version": "2.0.0",
+    "object_type": "intake_report",
+    "package_revision_id": str(PACKAGE_REVISION_ID).lower(),
+    "revision_version": 2,
+    "status": "awaiting_confirmation",
+    "intake_stage": "awaiting_human_review",
+    "files": [],
+    "human_attestation": {"data_origin": "missing", "sensitivity": "missing"},
+    "suggested_metadata": {
+        "profile_id": None,
+        "certification_class": None,
+        "impact_level": None,
+    },
+    "suggestion_sources": [],
+    "gaps": [],
+    "conflicts": [],
+    "omitted_chunks": [],
+    "context_complete": True,
+    "map_steps": [],
+    "confirmation": {"allowed": False, "blockers": ["human_data_origin_missing"]},
+    "generated_at": "2026-07-17T20:00:00Z",
+}
+
+
+def test_get_intake_report_returns_payload_without_mutation_headers(
+    client: TestClient,
+) -> None:
+    with patch(
+        "ato_service.api_router.get_intake_report",
+        new_callable=AsyncMock,
+        return_value=INTAKE_REPORT_PAYLOAD,
+    ) as get_intake_report:
+        response = client.get(
+            f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}/intake-report",
+        )
+
+    assert response.status_code == 200
+    assert response.json() == INTAKE_REPORT_PAYLOAD
+    assert "ETag" not in response.headers
+    assert "Idempotency-Key" not in response.request.headers
+    get_intake_report.assert_awaited_once()
+
+
+def test_get_intake_report_not_found_maps_to_problem(
+    client: TestClient,
+) -> None:
+    from ato_service.package_revisions import PackageRevisionNotFoundError
+
+    with patch(
+        "ato_service.api_router.get_intake_report",
+        new_callable=AsyncMock,
+        side_effect=PackageRevisionNotFoundError(package_revision_id=PACKAGE_REVISION_ID),
+    ):
+        response = client.get(
+            f"/api/v1/package-revisions/{PACKAGE_REVISION_ID}/intake-report",
+        )
+
+    _assert_problem(response, status=404, error_code="resource_not_found")

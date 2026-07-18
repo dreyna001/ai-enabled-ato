@@ -18,6 +18,8 @@ This directory holds install assets and redacted configuration examples. Behavio
 | [`systemd/ato-api.service`](systemd/ato-api.service) | Unprivileged API unit; pins config path, loopback bind, and API-consumed database/audit credentials |
 | [`systemd/ato-intake-worker.service`](systemd/ato-intake-worker.service) | Long-running `ato-intake-worker` process (inactive until explicitly enabled) |
 | [`systemd/ato-analyzer-worker.service`](systemd/ato-analyzer-worker.service) | Deterministic analyzer worker unit (inactive until operator enablement) |
+| [`systemd/ato-api.wsl-local.service`](systemd/ato-api.wsl-local.service) | WSL local API unit template installed by [`scripts/wsl-local-deploy.sh`](../scripts/wsl-local-deploy.sh) |
+| [`systemd/ato-analyzer-worker.wsl-local.service`](systemd/ato-analyzer-worker.wsl-local.service) | WSL local analyzer worker template installed by [`scripts/wsl-portal-enable.sh`](../scripts/wsl-portal-enable.sh) |
 | [`nginx/ato-api.conf`](nginx/ato-api.conf) | Inactive TLS edge template for health-only API exposure |
 | [`nginx/ato-portal.conf`](nginx/ato-portal.conf) | Inactive TLS edge template serving the built React portal and proxying `/api/` |
 | [`../portal/`](../portal/) | React/Vite portal source; build with `npm run build` before packaging |

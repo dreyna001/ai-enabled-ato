@@ -316,6 +316,7 @@ def test_systemd_units_include_production_api_intake_and_wsl_local_assets() -> N
         "ato-api.service",
         "ato-api.wsl-local.service",
         "ato-analyzer-worker.service",
+        "ato-analyzer-worker.wsl-local.service",
         "ato-intake-worker.service",
         "ato-synthetic-intake-worker.service",
     }
@@ -357,14 +358,34 @@ def test_wsl_portal_runtime_config_declares_openai_text_model() -> None:
     assert '"IDENTITY_PROVIDER_MODE": "oidc"' in text
     assert '"OIDC_GROUPS_CLAIM": "groups"' in text
     assert '"OIDC_GROUP_ROLE_MAPPING"' in text
+    assert '"SINGLE_USER_MODE_ENABLED": true' in text
     assert '"TEXT_MODEL_PROVIDER": "openai_compatible"' in text
     assert '"TEXT_MODEL_NAME": "gpt-4.1"' in text
     assert '"TEXT_MODEL_ENDPOINT_URL": "https://api.openai.com/v1"' in text
     assert '"TEXT_MODEL_ENDPOINT_PROFILE": "external_openai"' in text
     assert '"TEXT_MODEL_TEMPERATURE": 0' in text
+    assert '"CONTEXT_UTILIZATION_TARGET": 0.7' in text
     assert '"TEXT_MODEL_ENDPOINT_POLICY_APPROVED": true' in text
     assert '"CUI_MODEL_BOUNDARY_APPROVED": true' in text
     assert '"TEXT_MODEL_CREDENTIAL_REFERENCE"' not in text
+
+
+def test_onprem_runtime_example_disables_single_user_mode() -> None:
+    text = _read(RUNTIME_CONFIG_EXAMPLE_SRC)
+    assert '"SINGLE_USER_MODE_ENABLED": false' in text
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    [
+        ROOT / "deployment" / "config" / "runtime-config.dev_local.portal.example.json",
+        ROOT / "deployment" / "config" / "runtime-config.dev_local.e2e.json",
+        WSL_PORTAL_RUNTIME_CONFIG,
+        WSL_PORTAL_BEDROCK_RUNTIME_CONFIG,
+    ],
+)
+def test_dev_portal_examples_enable_single_user_mode(config_path: Path) -> None:
+    assert '"SINGLE_USER_MODE_ENABLED": true' in _read(config_path)
 
 
 def test_wsl_portal_bedrock_runtime_config_declares_bedrock_text_model() -> None:
@@ -372,6 +393,7 @@ def test_wsl_portal_bedrock_runtime_config_declares_bedrock_text_model() -> None
     assert '"IDENTITY_PROVIDER_MODE": "oidc"' in text
     assert '"OIDC_GROUPS_CLAIM": "groups"' in text
     assert '"OIDC_GROUP_ROLE_MAPPING"' in text
+    assert '"SINGLE_USER_MODE_ENABLED": true' in text
     assert '"PORTAL_PUBLIC_ORIGIN": "http://localhost:5173"' in text
     assert '"TEXT_MODEL_PROVIDER": "aws_bedrock"' in text
     assert '"AWS_REGION": "us-east-1"' in text
@@ -816,7 +838,7 @@ def test_install_script_supports_dry_run_contract_validation(install_text: str) 
     assert "--dry-run" in install_text
     assert "run_install_dry_run" in install_text
     assert "validate_migration_head_contract" in install_text
-    assert 'EXPECTED_MIGRATION_HEAD="20260717_0012"' in install_text
+    assert 'EXPECTED_MIGRATION_HEAD="20260717_0013"' in install_text
     assert "--dry-run cannot be combined with --migrate" in install_text
 
 
@@ -846,7 +868,7 @@ def test_install_script_dry_run_succeeds_without_root() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "Install dry-run complete" in result.stdout
-    assert "20260717_0012" in result.stdout
+    assert "20260717_0013" in result.stdout
 
 
 @requires_bash

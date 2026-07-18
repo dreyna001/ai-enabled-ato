@@ -12,6 +12,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ato_service.audit import AuditUnavailableError, require_audit_hmac_key
+from ato_service.context_budget import (
+    DEFAULT_CONTEXT_UTILIZATION_TARGET,
+    ContextBudget,
+    INSTRUCTION_OVERHEAD_TOKENS,
+    resolve_context_budget,
+    validate_utilization_target,
+)
 from ato_service.credentials import (
     CredentialResolutionError,
     resolve_secret_bytes_from_credential_reference,
@@ -50,6 +57,7 @@ _CREDENTIAL_REFERENCE_KEYS = frozenset(
 _SAFE_CONFIGURATION_KEYS = frozenset(
     {
         "LOCAL_PASSWORD_AUTH_ENABLED",
+        "SINGLE_USER_MODE_ENABLED",
     }
 )
 _FORMAT_CHECKER = FormatChecker()
@@ -98,6 +106,8 @@ _DEFAULT_CHAT_TURN_LIMIT = 20
 _DEFAULT_CHAT_DAILY_TOKEN_LIMIT_PER_USER = 100_000
 _DEFAULT_CHAT_RATE_LIMIT = {"max_requests": 30, "window_seconds": 60}
 _DEFAULT_CHAT_INPUT_LIMIT = {"value": 4000, "unit": "characters"}
+_DEFAULT_TEXT_MODEL_CONTEXT_TOKENS = 8192
+_DEFAULT_TEXT_MODEL_MAX_OUTPUT_TOKENS = 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +135,13 @@ class RuntimeLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class ContextBudgetSettings:
+    """Immutable context-budget settings resolved from runtime configuration."""
+
+    utilization_target: float
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeConfig:
     runtime_profile: str
     storage_data_path: Path
@@ -141,6 +158,16 @@ class RuntimeConfig:
         from ato_service.extraction.limits import resolve_extraction_limits
 
         return resolve_extraction_limits(self.document)
+
+    @property
+    def single_user_mode_enabled(self) -> bool:
+        """Return whether single-user export approval is enabled; absent values are false."""
+        value = self.document.get("SINGLE_USER_MODE_ENABLED")
+        if value is None:
+            return False
+        if not isinstance(value, bool):
+            raise RuntimeConfigValidationError("SINGLE_USER_MODE_ENABLED must be a boolean")
+        return value
 
     @property
     def vision_model_enabled(self) -> bool:
@@ -166,6 +193,36 @@ class RuntimeConfig:
     def chat_limits(self) -> ChatLimits:
         """Return validated package-chat limits from runtime configuration."""
         return _resolve_chat_limits(self.document)
+
+    @property
+    def context_budget_settings(self) -> ContextBudgetSettings:
+        """Return validated context-budget settings from runtime configuration."""
+        return _resolve_context_budget_settings(self.document)
+
+    def resolve_text_model_context_budget(
+        self,
+        *,
+        instruction_overhead_tokens: int = INSTRUCTION_OVERHEAD_TOKENS,
+    ) -> ContextBudget:
+        """Resolve the text-model input budget using configured runtime limits."""
+        document = self.document
+        context_tokens = _positive_limit_from_document(
+            document,
+            "TEXT_MODEL_CONTEXT_TOKENS",
+            default=_DEFAULT_TEXT_MODEL_CONTEXT_TOKENS,
+        )
+        max_output_tokens = _positive_limit_from_document(
+            document,
+            "TEXT_MODEL_MAX_OUTPUT_TOKENS",
+            default=_DEFAULT_TEXT_MODEL_MAX_OUTPUT_TOKENS,
+        )
+        settings = self.context_budget_settings
+        return resolve_context_budget(
+            context_tokens=context_tokens,
+            max_output_tokens=max_output_tokens,
+            instruction_overhead_tokens=instruction_overhead_tokens,
+            utilization_target=settings.utilization_target,
+        )
 
     @property
     def installation_customer_enterprise_id(self) -> str:
@@ -398,6 +455,19 @@ def _validate_vision_dependencies(document: dict[str, Any]) -> None:
             )
 
 
+def _resolve_context_budget_settings(document: dict[str, Any]) -> ContextBudgetSettings:
+    raw = document.get("CONTEXT_UTILIZATION_TARGET", DEFAULT_CONTEXT_UTILIZATION_TARGET)
+    try:
+        utilization_target = validate_utilization_target(raw)
+    except ValueError as error:
+        raise RuntimeConfigValidationError(str(error)) from error
+    return ContextBudgetSettings(utilization_target=utilization_target)
+
+
+def _validate_context_utilization_target(document: dict[str, Any]) -> None:
+    _resolve_context_budget_settings(document)
+
+
 def _validate_model_token_limits(document: dict[str, Any]) -> None:
     text_context = document.get("TEXT_MODEL_CONTEXT_TOKENS")
     text_max_output = document.get("TEXT_MODEL_MAX_OUTPUT_TOKENS")
@@ -499,7 +569,17 @@ def _validate_text_model_provider(document: dict[str, Any]) -> None:
         )
 
 
+def _validate_single_user_mode_enabled(document: dict[str, Any]) -> None:
+    value = document.get("SINGLE_USER_MODE_ENABLED")
+    if value is None:
+        return
+    if not isinstance(value, bool):
+        raise RuntimeConfigValidationError("SINGLE_USER_MODE_ENABLED must be a boolean")
+
+
 def _validate_runtime_semantics(document: dict[str, Any]) -> None:
+    _validate_single_user_mode_enabled(document)
+    _validate_context_utilization_target(document)
     _validate_text_model_provider(document)
     _validate_text_model_endpoint_profile(document)
     _validate_production_endpoint_profiles(document)

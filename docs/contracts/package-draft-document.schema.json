@@ -216,10 +216,15 @@
       ],
       "properties": {
         "profile_id": {
+          "type": [
+            "string",
+            "null"
+          ],
           "enum": [
             "fedramp_20x_program",
             "fedramp_rev5_transition",
-            "fisma_agency_security"
+            "fisma_agency_security",
+            null
           ]
         },
         "title": {

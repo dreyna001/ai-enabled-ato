@@ -7,12 +7,12 @@ import os
 import secrets
 import socket
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from types import SimpleNamespace
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -66,13 +66,28 @@ from ato_service.malware_scan import (
     resolve_malware_scanner,
 )
 from ato_service.model_routing import DataOrigin
+from ato_service.intake_map import (
+    PendingIntakeMapOutcome,
+    intake_map_audit_metadata,
+    run_intake_map,
+    terminalize_intake_map_step,
+)
+from ato_service.intake_merge import (
+    IntakeMergeError,
+    IntakeMergeResult,
+    adapt_orchestrated_map_steps_for_reduce,
+    finalize_intake_merge_result,
+    intake_reduce_audit_metadata,
+    merge_result_digest,
+    reduce_intake_map_results,
+)
+from ato_service.package_revision_drafts import persist_intake_merge_draft
 from ato_service.normalization_service import (
     NormalizationDependencies,
     NormalizationInvariantError,
     PendingNormalizationOutcome,
     mark_normalization_and_intake_reconciliation_required,
     normalization_audit_metadata,
-    run_intake_normalization,
     terminalize_normalization_step,
     verify_normalization_step_for_commit,
 )
@@ -137,11 +152,11 @@ class IntakeRevisionSnapshot:
     package_revision_id: uuid.UUID
     revision_version: int
     status: str
-    profile_id: str
+    profile_id: str | None
     impact_level: str | None
     content_manifest_sha256: str
-    data_origin: str
-    sensitivity: str
+    data_origin: str | None
+    sensitivity: str | None
     system_id: uuid.UUID
     system_display_name: str
     artifacts: tuple[ArtifactSnapshot, ...]
@@ -193,6 +208,16 @@ class _ExtractComputeOutcome:
     reason_code: str | None = None
     aggregated_draft: AggregatedIntakeDraft | None = None
     artifact_outcomes: tuple[tuple[ArtifactSnapshot, ExtractionOutcome], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _IntakeReduceOutcome:
+    """Deterministic REDUCE output pending atomic intake commit."""
+
+    merge_result: IntakeMergeResult
+    merge_digest: str
+    audit_metadata: dict[str, Any]
+    segment_count: int
 
 
 def build_intake_lease_owner(*, token: str | None = None) -> str:
@@ -398,28 +423,27 @@ async def _process_claimed_operation(
         now_factory=now_factory,
     )
     normalization: PendingNormalizationOutcome | None = None
+    intake_map: PendingIntakeMapOutcome | None = None
     if (
         compute.kind == "succeeded"
         and compute.aggregated_draft is not None
         and normalization_deps is not None
     ):
-        normalization = await run_intake_normalization(
+        intake_map = await run_intake_map(
             deps=normalization_deps,
             session_factory=session_factory,
             snapshot=snapshot,
             claimed=claimed,
-            deterministic_draft=compute.aggregated_draft,
             artifact_outcomes=compute.artifact_outcomes,
             lease_owner=lease_owner,
             now_factory=now_factory,
         )
-        if normalization.reconciliation_required:
+        if intake_map.reconciliation_required:
             await _mark_reconciliation_required(
                 session_factory,
                 claimed=claimed,
                 lease_owner=lease_owner,
                 now_factory=now_factory,
-                normalization_step_id=normalization.step_id,
             )
             return IntakeResult(
                 package_revision_id=claimed.package_revision_id,
@@ -433,10 +457,89 @@ async def _process_claimed_operation(
         snapshot=snapshot,
         compute=compute,
         normalization=normalization,
+        intake_map=intake_map,
         hmac_key=hmac_key,
         lease_owner=lease_owner,
         now_factory=now_factory,
         max_attempts=max_attempts,
+    )
+
+
+def _build_trusted_extraction_bindings(
+    artifact_outcomes: Sequence[tuple[ArtifactSnapshot, ExtractionOutcome]],
+) -> tuple[dict[uuid.UUID, str], dict[uuid.UUID, dict[int, dict[str, Any]]]]:
+    artifact_sha_by_id: dict[uuid.UUID, str] = {}
+    segment_locators_by_artifact: dict[uuid.UUID, dict[int, dict[str, Any]]] = {}
+    for artifact, outcome in artifact_outcomes:
+        artifact_sha_by_id[artifact.artifact_id] = artifact.sha256
+        segment_locators_by_artifact[artifact.artifact_id] = {
+            segment.segment_index: dict(segment.locator)
+            for segment in outcome.segments
+        }
+    return artifact_sha_by_id, segment_locators_by_artifact
+
+
+def _apply_intake_reduce(
+    *,
+    aggregated: AggregatedIntakeDraft,
+    snapshot: IntakeRevisionSnapshot,
+    intake_map: PendingIntakeMapOutcome | None,
+    artifact_outcomes: Sequence[tuple[ArtifactSnapshot, ExtractionOutcome]],
+) -> _IntakeReduceOutcome:
+    """Merge deterministic extraction with MAP outputs before draft commit."""
+    if intake_map is None:
+        merge_result = IntakeMergeResult(
+            document=aggregated.document,
+            field_provenance=aggregated.field_provenance,
+            conflicts=(),
+            gaps=(),
+            metadata_suggestions={},
+            context_complete=True,
+            system_context_proposal=aggregated.system_context_proposal,
+            merged_targets=(),
+            rejected_proposals=(),
+        )
+        merge_digest = merge_result_digest(merge_result)
+        return _IntakeReduceOutcome(
+            merge_result=merge_result,
+            merge_digest=merge_digest,
+            audit_metadata={},
+            segment_count=aggregated.segment_count,
+        )
+
+    artifact_sha_by_id, segment_locators_by_artifact = _build_trusted_extraction_bindings(
+        artifact_outcomes
+    )
+    adapted = adapt_orchestrated_map_steps_for_reduce(
+        intake_map.step_results,
+        artifact_sha_by_id=artifact_sha_by_id,
+        segment_locators_by_artifact=segment_locators_by_artifact,
+    )
+    try:
+        merge_result = reduce_intake_map_results(
+            profile_id=snapshot.profile_id,
+            base_document=aggregated.document,
+            base_field_provenance=aggregated.field_provenance,
+            map_step_results=adapted.reduce_steps,
+            system_display_name=snapshot.system_display_name,
+        )
+    except IntakeMergeError as exc:
+        raise IntakeInvariantError(message=exc.message) from exc
+
+    merge_result = finalize_intake_merge_result(
+        merge_result,
+        adaptation_gaps=adapted.adaptation_gaps,
+        omitted_chunks=adapted.omitted_chunks,
+    )
+    merge_digest = merge_result_digest(merge_result)
+    return _IntakeReduceOutcome(
+        merge_result=merge_result,
+        merge_digest=merge_digest,
+        audit_metadata=intake_reduce_audit_metadata(
+            merge_result,
+            merge_digest=merge_digest,
+        ),
+        segment_count=aggregated.segment_count,
     )
 
 
@@ -731,6 +834,7 @@ async def _persist_extract_outcome(
     snapshot: IntakeRevisionSnapshot,
     compute: _ExtractComputeOutcome,
     normalization: PendingNormalizationOutcome | None = None,
+    intake_map: PendingIntakeMapOutcome | None = None,
     hmac_key: bytes,
     lease_owner: str,
     now_factory: Callable[[], datetime],
@@ -772,7 +876,9 @@ async def _persist_extract_outcome(
                     claimed=claimed,
                     snapshot=snapshot,
                     aggregated=draft_for_commit,
+                    artifact_outcomes=compute.artifact_outcomes,
                     normalization=normalization,
+                    intake_map=intake_map,
                     hmac_key=hmac_key,
                     lease_owner=lease_owner,
                     now=now,
@@ -1070,7 +1176,9 @@ async def _commit_successful_extract(
     claimed: ClaimedIntakeOperation,
     snapshot: IntakeRevisionSnapshot,
     aggregated: AggregatedIntakeDraft,
+    artifact_outcomes: Sequence[tuple[ArtifactSnapshot, ExtractionOutcome]],
     normalization: PendingNormalizationOutcome | None,
+    intake_map: PendingIntakeMapOutcome | None,
     hmac_key: bytes,
     lease_owner: str,
     now: datetime,
@@ -1115,15 +1223,45 @@ async def _commit_successful_extract(
             pending=normalization,
             now=now,
         )
-    session.add(
-        PackageRevisionDraft(
-            package_revision_id=revision.package_revision_id,
-            document_schema_version=DOCUMENT_SCHEMA_VERSION,
-            document=aggregated.document,
-            field_provenance=aggregated.field_provenance,
-            updated_by=INTAKE_ACTOR_ID,
-            updated_at=now,
-        )
+    if intake_map is not None and intake_map.step_results:
+        runtime_metadata = intake_map.runtime_metadata
+        if runtime_metadata is None:
+            raise IntakeInvariantError(
+                message="deterministic_extract commit requires intake MAP runtime metadata"
+            )
+        for step_result in intake_map.step_results:
+            step = (
+                await session.execute(
+                    select(PackageNormalizationStep)
+                    .where(PackageNormalizationStep.step_id == step_result.step_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if step is None:
+                raise IntakeInvariantError(
+                    message="deterministic_extract commit requires intake MAP step rows"
+                )
+            protected = intake_map.protected_artifacts.get(step_result.artifact_id)
+            terminalize_intake_map_step(
+                session,
+                step=step,
+                result=step_result,
+                runtime_metadata=runtime_metadata,
+                protected=protected,
+                now=now,
+            )
+    reduce_outcome = _apply_intake_reduce(
+        aggregated=aggregated,
+        snapshot=snapshot,
+        intake_map=intake_map,
+        artifact_outcomes=artifact_outcomes,
+    )
+    await persist_intake_merge_draft(
+        session,
+        package_revision=revision,
+        merge_result=reduce_outcome.merge_result,
+        actor_id=INTAKE_ACTOR_ID,
+        now=now,
     )
     for artifact in artifacts:
         artifact.extraction_status = "succeeded"
@@ -1131,7 +1269,7 @@ async def _commit_successful_extract(
     revision.revision_version += 1
     audit_metadata: dict[str, object] = {
         "artifact_count": len(artifacts),
-        "segment_count": aggregated.segment_count,
+        "segment_count": reduce_outcome.segment_count,
         "revision_version": revision.revision_version,
     }
     norm_metadata = (
@@ -1139,6 +1277,11 @@ async def _commit_successful_extract(
     )
     if norm_metadata is not None:
         audit_metadata["normalization"] = norm_metadata
+    map_metadata = intake_map_audit_metadata(intake_map) if intake_map is not None else None
+    if map_metadata is not None:
+        audit_metadata["intake_map"] = map_metadata
+    if reduce_outcome.audit_metadata:
+        audit_metadata["intake_reduce"] = reduce_outcome.audit_metadata
     await append_audit_event(
         session,
         hmac_key=hmac_key,

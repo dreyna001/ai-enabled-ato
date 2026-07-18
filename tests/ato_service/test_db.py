@@ -572,7 +572,7 @@ def test_create_session_factory_does_not_connect() -> None:
 def test_alembic_head_is_package_search_index_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260717_0012"
+    assert script.get_current_head() == "20260717_0013"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

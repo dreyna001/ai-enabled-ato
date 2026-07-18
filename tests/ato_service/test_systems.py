@@ -19,13 +19,17 @@ from ato_service.domain_mapping import map_system_to_domain
 from ato_service.idempotency import request_digest_from_payload
 from ato_service.pagination import encode_pagination_cursor
 from ato_service.systems import (
+    SYSTEMS_ARCHIVE_OPERATION,
     SYSTEMS_CREATE_OPERATION,
+    ArchiveSystemResult,
     CreateSystemResult,
     RequestSchemaInvalidError,
     ResourceNotFoundError,
     SystemsPage,
     _list_systems_select_statement,
     _system_read_access_predicate,
+    archive_system,
+    archive_system_request_digest_payload,
     create_system,
     create_system_request_digest_payload,
     get_system,
@@ -36,6 +40,8 @@ UTC = timezone.utc
 NOW = datetime(2026, 7, 11, 12, 0, 0, tzinfo=UTC)
 HMAC_KEY = b"k" * MIN_AUDIT_HMAC_KEY_BYTES
 IDEMPOTENCY_KEY = "idem-key-0123456789"
+ARCHIVE_IDEMPOTENCY_KEY = "archive-idem-0123456789"
+ARCHIVED_AT = NOW.replace(minute=5)
 OWNER_GROUP = "owners"
 VIEWER_GROUPS = ["viewers"]
 SYSTEM_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -77,6 +83,7 @@ def _make_system(
     owner_group: str = OWNER_GROUP,
     viewer_groups: list[str] | None = None,
     created_at: datetime = NOW,
+    archived_at: datetime | None = None,
 ) -> System:
     return System(
         system_id=system_id,
@@ -86,7 +93,7 @@ def _make_system(
         owner_group=owner_group,
         viewer_groups=viewer_groups if viewer_groups is not None else list(VIEWER_GROUPS),
         created_at=created_at,
-        archived_at=None,
+        archived_at=archived_at,
     )
 
 
@@ -156,12 +163,14 @@ def test_list_systems_sql_filters_in_database_with_stable_cursor_and_limit_plus_
         principal_groups=("owners", "viewers"),
         cursor=decoded,
         limit=50,
+        include_archived=False,
     )
     sql = _compile_sql(statement, literal_binds=False)
 
     assert "FROM systems" in sql
     assert "systems.owner_group IN" in sql
     assert "viewer_groups @>" in sql
+    assert "systems.archived_at IS NULL" in sql
     assert "systems.created_at >" in sql
     assert "systems.created_at =" in sql
     assert "systems.system_id >" in sql
@@ -174,6 +183,7 @@ def test_list_systems_sql_without_cursor_orders_and_limits() -> None:
         principal_groups=("owners",),
         cursor=None,
         limit=25,
+        include_archived=False,
     )
     sql = _compile_sql(statement, literal_binds=False)
     assert "systems.created_at >" not in sql
@@ -464,3 +474,193 @@ def test_list_systems_returns_null_cursor_when_page_is_exhausted() -> None:
 
     assert page.next_cursor is None
     assert len(page.items) == 1
+
+
+def test_list_systems_sql_excludes_archived_by_default() -> None:
+    statement = _list_systems_select_statement(
+        principal_groups=("owners",),
+        cursor=None,
+        limit=25,
+        include_archived=False,
+    )
+    sql = _compile_sql(statement, literal_binds=False)
+    assert "systems.archived_at IS NULL" in sql
+
+
+def test_list_systems_sql_includes_archived_when_requested() -> None:
+    statement = _list_systems_select_statement(
+        principal_groups=("owners",),
+        cursor=None,
+        limit=25,
+        include_archived=True,
+    )
+    sql = _compile_sql(statement, literal_binds=False)
+    assert "systems.archived_at IS NULL" not in sql
+
+
+def test_archive_system_request_digest_includes_system_id_only() -> None:
+    payload = archive_system_request_digest_payload(system_id=SYSTEM_ID)
+    assert payload == {"system_id": str(SYSTEM_ID).lower()}
+
+
+def test_archive_system_sets_archived_at_and_audits() -> None:
+    system = _make_system()
+    session = _RecordingSession(
+        [
+            MagicMock(),
+            _scalar_result(None),
+            _scalar_result(system),
+            MagicMock(),
+            _scalar_result(None),
+        ]
+    )
+
+    result = _run(
+        archive_system(
+            session,
+            principal=_principal(),
+            audit_hmac_key=HMAC_KEY,
+            system_id=SYSTEM_ID,
+            idempotency_key=ARCHIVE_IDEMPOTENCY_KEY,
+            now=NOW,
+        )
+    )
+
+    assert isinstance(result, ArchiveSystemResult)
+    assert result.status == 200
+    assert result.replayed is False
+    assert result.payload["archived_at"] == "2026-07-11T12:00:00Z"
+    assert system.archived_at == NOW
+
+    audit_events = [obj for obj in session.added if isinstance(obj, AuditEvent)]
+    idempotency_rows = [obj for obj in session.added if isinstance(obj, IdempotencyRecord)]
+    assert len(audit_events) == 1
+    assert audit_events[0].action == "system.archived"
+    assert len(idempotency_rows) == 1
+    assert idempotency_rows[0].operation == SYSTEMS_ARCHIVE_OPERATION
+    assert idempotency_rows[0].response_status == 200
+
+
+def test_archive_system_already_archived_is_no_op() -> None:
+    system = _make_system(archived_at=ARCHIVED_AT)
+    session = _RecordingSession(
+        [
+            MagicMock(),
+            _scalar_result(None),
+            _scalar_result(system),
+        ]
+    )
+
+    result = _run(
+        archive_system(
+            session,
+            principal=_principal(),
+            audit_hmac_key=HMAC_KEY,
+            system_id=SYSTEM_ID,
+            idempotency_key=ARCHIVE_IDEMPOTENCY_KEY,
+            now=NOW,
+        )
+    )
+
+    assert result.status == 200
+    assert result.payload["archived_at"] == "2026-07-11T12:05:00Z"
+    assert system.archived_at == ARCHIVED_AT
+    assert [obj for obj in session.added if isinstance(obj, AuditEvent)] == []
+    assert len([obj for obj in session.added if isinstance(obj, IdempotencyRecord)]) == 1
+
+
+def test_archive_system_replay_returns_stored_outcome() -> None:
+    stored_payload = {
+        "schema_version": "2.0.0",
+        "object_type": "system",
+        "system_id": str(SYSTEM_ID),
+        "display_name": "Example System",
+        "external_system_id": "EXT-1",
+        "customer_enterprise_id": "dev-local-enterprise",
+        "owner_group": OWNER_GROUP,
+        "viewer_groups": VIEWER_GROUPS,
+        "created_at": "2026-07-11T12:00:00Z",
+        "archived_at": "2026-07-11T12:00:00Z",
+    }
+    stored_record = IdempotencyRecord(
+        idempotency_record_id=uuid.uuid4(),
+        principal="operator@example.test",
+        operation=SYSTEMS_ARCHIVE_OPERATION,
+        idempotency_key=ARCHIVE_IDEMPOTENCY_KEY,
+        request_digest=request_digest_from_payload(
+            archive_system_request_digest_payload(system_id=SYSTEM_ID)
+        ),
+        response_status=200,
+        response_body=stored_payload,
+        response_headers={},
+        created_at=NOW,
+        expires_at=NOW.replace(hour=13),
+    )
+    session = _RecordingSession([MagicMock(), _scalar_result(stored_record)])
+
+    result = _run(
+        archive_system(
+            session,
+            principal=_principal(),
+            audit_hmac_key=HMAC_KEY,
+            system_id=SYSTEM_ID,
+            idempotency_key=ARCHIVE_IDEMPOTENCY_KEY,
+            now=NOW,
+        )
+    )
+
+    assert result.replayed is True
+    assert result.payload == stored_payload
+    assert session.added == []
+    assert len(session.execute_calls) == 2
+
+
+def test_archive_system_denies_non_owner_before_lookup() -> None:
+    system = _make_system(owner_group="secret-owner-group")
+    session = _RecordingSession(
+        [
+            MagicMock(),
+            _scalar_result(None),
+            _scalar_result(system),
+        ]
+    )
+
+    with pytest.raises(AuthorizationDeniedError) as exc_info:
+        _run(
+            archive_system(
+                session,
+                principal=_principal(groups=("viewers",)),
+                audit_hmac_key=HMAC_KEY,
+                system_id=SYSTEM_ID,
+                idempotency_key=ARCHIVE_IDEMPOTENCY_KEY,
+                now=NOW,
+            )
+        )
+
+    assert exc_info.value.error_code == "authorization_denied"
+    assert "secret-owner-group" not in str(exc_info.value)
+    assert [obj for obj in session.added if isinstance(obj, AuditEvent)] == []
+
+
+def test_archive_system_raises_resource_not_found_for_missing_row() -> None:
+    session = _RecordingSession(
+        [
+            MagicMock(),
+            _scalar_result(None),
+            _scalar_result(None),
+        ]
+    )
+
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        _run(
+            archive_system(
+                session,
+                principal=_principal(),
+                audit_hmac_key=HMAC_KEY,
+                system_id=SYSTEM_ID,
+                idempotency_key=ARCHIVE_IDEMPOTENCY_KEY,
+                now=NOW,
+            )
+        )
+
+    assert exc_info.value.error_code == "resource_not_found"

@@ -18,7 +18,29 @@ const systemSchema = z.object({
   display_name: z.string().min(1),
   owner_group: z.string().min(1),
   viewer_groups: z.array(z.string()),
+  archived_at: z.string().nullable().optional(),
 });
+
+const profileIdSchema = z.enum([
+  "fedramp_20x_program",
+  "fedramp_rev5_transition",
+  "fisma_agency_security",
+]);
+
+const dataOriginSchema = z.enum([
+  "synthetic",
+  "redacted_nonproduction",
+  "customer_production",
+]);
+
+const sensitivitySchema = z.enum([
+  "public",
+  "internal_unclassified",
+  "customer_sensitive",
+  "cui",
+  "classified",
+  "unknown",
+]);
 
 const packageRevisionSchema = z.object({
   package_revision_id: uuidSchema,
@@ -30,11 +52,78 @@ const packageRevisionSchema = z.object({
     "ready_for_external_review",
   ]),
   revision_version: z.number().int().nonnegative(),
-  profile_id: z.string().min(1),
-  data_origin: z.string().min(1),
-  sensitivity: z.string().min(1),
+  profile_id: profileIdSchema.nullable(),
+  data_origin: dataOriginSchema.nullable(),
+  sensitivity: sensitivitySchema.nullable(),
   impact_level: z.string().nullable().optional(),
   certification_class: z.string().nullable().optional(),
+});
+
+const intakeReportSuggestedMetadataSchema = z.object({
+  profile_id: profileIdSchema.nullable(),
+  certification_class: z.enum(["B", "C"]).nullable(),
+  impact_level: z.enum(["low", "moderate", "high"]).nullable(),
+});
+
+const intakeReportSchema = z.object({
+  schema_version: z.string().min(1),
+  object_type: z.literal("intake_report"),
+  package_revision_id: uuidSchema,
+  revision_version: z.number().int().positive(),
+  status: z.string().min(1),
+  intake_stage: z.string().min(1),
+  files: z.array(
+    z.object({
+      artifact_id: uuidSchema,
+      display_filename: z.string().min(1),
+      sha256: sha256Schema,
+      size_bytes: z.number().int().nonnegative(),
+      artifact_kind: z.string().min(1),
+      malware_scan_status: z.string().min(1),
+      extraction_status: z.string().min(1),
+      uploaded_at: z.string().min(1),
+    }),
+  ),
+  human_attestation: z.object({
+    data_origin: z.enum(["present", "missing"]),
+    sensitivity: z.enum(["present", "missing"]),
+  }),
+  suggested_metadata: intakeReportSuggestedMetadataSchema,
+  suggestion_sources: z.array(
+    z.object({
+      field: z.enum(["profile_id", "certification_class", "impact_level"]),
+      proposed_value: z.unknown(),
+      source_artifact_id: uuidSchema,
+      source_sha256: sha256Schema,
+      source_locator: z.record(z.unknown()),
+      model_step_id: uuidSchema.nullable().optional(),
+    }),
+  ),
+  gaps: z.array(
+    z.object({
+      code: z.string().min(1),
+      message: z.string().min(1),
+    }),
+  ),
+  conflicts: z.array(
+    z.object({
+      field: z.string().min(1),
+      values: z.array(z.record(z.unknown())).min(2),
+    }),
+  ),
+  omitted_chunks: z.array(
+    z.object({
+      artifact_id: uuidSchema,
+      segment_id: z.string().min(1),
+    }),
+  ),
+  context_complete: z.boolean(),
+  map_steps: z.array(z.record(z.unknown())),
+  confirmation: z.object({
+    allowed: z.boolean(),
+    blockers: z.array(z.string()),
+  }),
+  generated_at: z.string().min(1),
 });
 
 const citationSchema = z
@@ -308,6 +397,10 @@ export function parseSystem(value: unknown) {
 
 export function parsePackageRevision(value: unknown) {
   return parseWithSchema(packageRevisionSchema, value);
+}
+
+export function parseIntakeReport(value: unknown) {
+  return parseWithSchema(intakeReportSchema, value);
 }
 
 export function parseAnalysisRun(value: unknown) {

@@ -7,6 +7,7 @@
   "TEXT_MODEL_MAX_OUTPUT_TOKENS": 1024,
   "TEXT_MODEL_TIMEOUT_SECONDS": 30,
   "TEXT_MODEL_MAX_RETRIES": 2,
+  "CONTEXT_UTILIZATION_TARGET": 0.7,
   "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
   "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": false,
   "CUI_MODEL_BOUNDARY_APPROVED": false,
@@ -149,5 +150,6 @@
     "package_search": false,
     "package_chat": false
   },
-  "INSTALLATION_CUSTOMER_ENTERPRISE_ID": "customer-enterprise-example"
+  "INSTALLATION_CUSTOMER_ENTERPRISE_ID": "customer-enterprise-example",
+  "SINGLE_USER_MODE_ENABLED": false
 }

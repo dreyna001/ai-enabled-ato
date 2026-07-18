@@ -1,5 +1,4 @@
 import type {
-  CreateRevisionInput,
   DataOrigin,
   PackageRevision,
   ProfileId,
@@ -37,7 +36,10 @@ export const IMPACT_LEVEL_OPTIONS = [
   { id: "high", label: "High" },
 ] as const;
 
-type ProfileFields = Pick<CreateRevisionInput, "certification_class" | "impact_level">;
+export type RevisionProfileFields = {
+  certification_class?: "B" | "C" | null;
+  impact_level?: "low" | "moderate" | "high" | null;
+};
 
 function isCertificationClass(value: unknown): value is "B" | "C" {
   return value === "B" || value === "C";
@@ -47,10 +49,15 @@ function isImpactLevel(value: unknown): value is "low" | "moderate" | "high" {
   return value === "low" || value === "moderate" || value === "high";
 }
 
-export function profileFieldsForRevision(profileId: ProfileId, source?: { certification_class?: unknown; impact_level?: unknown } | null): ProfileFields {
+export function profileFieldsForRevision(
+  profileId: ProfileId,
+  source?: { certification_class?: unknown; impact_level?: unknown } | null,
+): RevisionProfileFields {
   if (profileId === "fedramp_20x_program") {
     return {
-      certification_class: isCertificationClass(source?.certification_class) ? source.certification_class : "B",
+      certification_class: isCertificationClass(source?.certification_class)
+        ? source.certification_class
+        : "B",
       impact_level: null,
     };
   }
@@ -60,16 +67,19 @@ export function profileFieldsForRevision(profileId: ProfileId, source?: { certif
   };
 }
 
-export function defaultRevisionInput(
+export function metadataDefaultsFromParent(
   parentRevision?: PackageRevision | null,
-): CreateRevisionInput {
+): {
+  profile_id: ProfileId;
+  data_origin: DataOrigin;
+  sensitivity: Sensitivity;
+} & RevisionProfileFields {
   const dataOrigin: DataOrigin =
     parentRevision?.data_origin === "customer_production"
       ? "customer_production"
       : "synthetic";
   const profileId = (parentRevision?.profile_id as ProfileId) ?? "fisma_agency_security";
   return {
-    parent_revision_id: parentRevision?.package_revision_id ?? null,
     profile_id: profileId,
     ...profileFieldsForRevision(profileId, parentRevision),
     data_origin: dataOrigin,

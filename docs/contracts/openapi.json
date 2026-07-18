@@ -95,6 +95,9 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeArchived"
           }
         ],
         "responses": {
@@ -158,6 +161,48 @@
             "$ref": "#/components/responses/ProblemResponse"
           },
           "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/systems/{system_id}/archive": {
+      "post": {
+        "tags": [
+          "Systems"
+        ],
+        "operationId": "archiveSystem",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SystemId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SystemResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
             "$ref": "#/components/responses/ProblemResponse"
           },
           "default": {
@@ -297,6 +342,65 @@
             "$ref": "#/components/responses/ProblemResponse"
           },
           "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "patchPackageRevisionMetadata",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchPackageRevisionMetadataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PackageRevisionResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "412": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "428": {
             "$ref": "#/components/responses/ProblemResponse"
           },
           "default": {
@@ -537,6 +641,39 @@
             "$ref": "#/components/responses/ProblemResponse"
           },
           "428": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ProblemResponse"
+          }
+        }
+      }
+    },
+    "/package-revisions/{id}/intake-report": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "getPackageRevisionIntakeReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PackageRevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IntakeReportResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "500": {
             "$ref": "#/components/responses/ProblemResponse"
           },
           "default": {
@@ -1883,6 +2020,16 @@
           "default": 50
         }
       },
+      "IncludeArchived": {
+        "name": "include_archived",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": "When false or omitted, archived systems are excluded from the page. When true, authorized archived systems are included."
+      },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
@@ -1961,6 +2108,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/PackageRevisionDraftView"
+            }
+          }
+        }
+      },
+      "IntakeReportResponse": {
+        "description": "Deterministic intake readiness report",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./domain.schema.json#/$defs/IntakeReport"
             }
           }
         }
@@ -2135,14 +2292,6 @@
       "CreatePackageRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "parent_revision_id",
-          "profile_id",
-          "certification_class",
-          "impact_level",
-          "data_origin",
-          "sensitivity"
-        ],
         "properties": {
           "parent_revision_id": {
             "anyOf": [
@@ -2153,7 +2302,15 @@
                 "type": "null"
               }
             ]
-          },
+          }
+        },
+        "$comment": "Upload-first create accepts only an optional parent revision link. Profile, class/impact, and human-only data labels are deferred until PATCH /package-revisions/{id}."
+      },
+      "PatchPackageRevisionMetadataRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
           "profile_id": {
             "$ref": "./domain.schema.json#/$defs/ProfileId"
           },

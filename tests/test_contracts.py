@@ -31,9 +31,9 @@ P1_GATE_PATH = ROOT / "docs" / "P1_GATE_RECORD.md"
 P0_GATE_PATH = ROOT / "docs" / "P0_GATE_RECORD.md"
 RELEASE_EVIDENCE_INDEX_PATH = ROOT / "docs" / "RELEASE_EVIDENCE_INDEX.md"
 P6_GATE_PATH = ROOT / "docs" / "P6_GATE_RECORD.md"
-MIGRATION_HEAD_REVISION = "20260717_0012"
+MIGRATION_HEAD_REVISION = "20260717_0013"
 MIGRATION_HEAD_PATH = (
-    ROOT / "migrations" / "versions" / "20260717_0012_package_search_index.py"
+    ROOT / "migrations" / "versions" / "20260717_0013_defer_package_revision_metadata.py"
 )
 RUNTIME_DEPLOYMENT_RULE_PATH = (
     ROOT / ".cursor" / "rules" / "ato-runtime-deployment-contract.mdc"
@@ -77,6 +77,7 @@ REQUIRED_API_METHODS = {
     ("post", "/systems"),
     ("get", "/systems"),
     ("get", "/systems/{system_id}"),
+    ("post", "/systems/{system_id}/archive"),
     ("post", "/systems/{system_id}/package-revisions"),
     ("get", "/systems/{system_id}/package-revisions"),
     ("post", "/package-revisions/{id}/files"),
@@ -114,6 +115,7 @@ REQUIRED_API_METHODS = {
 
 IDEMPOTENCY_KEY_OPERATIONS = {
     ("post", "/systems"),
+    ("post", "/systems/{system_id}/archive"),
     ("post", "/systems/{system_id}/package-revisions"),
     ("post", "/package-revisions/{id}/files"),
     ("post", "/package-revisions/{id}/finalize"),
@@ -130,7 +132,9 @@ IDEMPOTENCY_KEY_OPERATIONS = {
 
 P11_IDEMPOTENCY_KEY_OPERATIONS = {
     ("post", "/systems"),
+    ("post", "/systems/{system_id}/archive"),
     ("post", "/systems/{system_id}/package-revisions"),
+    ("patch", "/package-revisions/{id}"),
     ("post", "/package-revisions/{id}/files"),
     ("post", "/package-revisions/{id}/finalize"),
     ("put", "/package-revisions/{id}/draft"),
@@ -138,6 +142,7 @@ P11_IDEMPOTENCY_KEY_OPERATIONS = {
 }
 
 IF_MATCH_OPERATIONS = {
+    ("patch", "/package-revisions/{id}"),
     ("post", "/package-revisions/{id}/confirm"),
     ("put", "/package-revisions/{id}/draft"),
     ("post", "/proposals/{id}/accept"),
@@ -546,6 +551,22 @@ def test_openapi_minimum_methods_and_health_root_override() -> None:
         )
 
 
+def test_openapi_intake_report_route_uses_domain_contract() -> None:
+    openapi = _load_json(CONTRACTS_DIR / "openapi.json")
+    operation = openapi["paths"]["/package-revisions/{id}/intake-report"]["get"]
+    assert operation["operationId"] == "getPackageRevisionIntakeReport"
+    assert "PackageRevisionId" in {
+        parameter["$ref"].split("/")[-1]
+        for parameter in operation["parameters"]
+        if "$ref" in parameter
+    }
+    response = openapi["components"]["responses"]["IntakeReportResponse"]
+    assert response["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/IntakeReport"
+    )
+    assert "headers" not in response
+
+
 def test_openapi_idempotency_concurrency_and_security_contracts() -> None:
     openapi = _load_json(CONTRACTS_DIR / "openapi.json")
     parameters = openapi["components"]["parameters"]
@@ -597,9 +618,9 @@ def test_duplicated_closed_enums_are_synchronized() -> None:
     openapi = _load_json(openapi_path)
     domain_defs = domain["$defs"]
     profile_defs = profile["$defs"]
-    create_revision = openapi["components"]["schemas"]["CreatePackageRevisionRequest"][
-        "properties"
-    ]
+    patch_revision = openapi["components"]["schemas"][
+        "PatchPackageRevisionMetadataRequest"
+    ]["properties"]
 
     assert (
         _closed_values(domain_defs["ProfileId"])
@@ -608,7 +629,7 @@ def test_duplicated_closed_enums_are_synchronized() -> None:
         == _closed_values(
             preflight["$defs"]["profileFingerprint"]["properties"]["profile_id"]
         )
-        == _closed_values(create_revision["profile_id"], openapi_path)
+        == _closed_values(patch_revision["profile_id"], openapi_path)
     )
     assert _closed_values(runtime_config["properties"]["runtime_profile"]) == {
         "dev_local",
@@ -627,14 +648,14 @@ def test_duplicated_closed_enums_are_synchronized() -> None:
         assert (
             _closed_values(domain_defs["PackageRevision"]["properties"][property_name])
             == _closed_values(profile["properties"][property_name])
-            == _closed_values(create_revision[property_name], openapi_path)
+            == _closed_values(patch_revision[property_name], openapi_path)
         )
     for definition_name, property_name in (
         ("DataOrigin", "data_origin"),
         ("Sensitivity", "sensitivity"),
     ):
         assert _closed_values(domain_defs[definition_name]) == _closed_values(
-            create_revision[property_name], openapi_path
+            patch_revision[property_name], openapi_path
         )
 
     upload_kind = openapi["paths"]["/package-revisions/{id}/files"]["post"][
@@ -1094,6 +1115,23 @@ def test_frozen_contract_amendment_cross_doc_consistency() -> None:
     )
 
 
+def test_evidence_context_budgeting_spec_matches_runtime_contract() -> None:
+    technical_spec = TECHNICAL_SPEC_PATH.read_text(encoding="utf-8")
+    runtime_schema = _load_json(CONTRACTS_DIR / "runtime-config.schema.json")
+
+    section_start = technical_spec.index("### 17.1 Evidence context budgeting")
+    section_end = technical_spec.index("## 18. Model contract", section_start)
+    section = technical_spec[section_start:section_end]
+
+    assert "CONTEXT_UTILIZATION_TARGET" in section
+    assert "max(0, min(floor(context × target), context − output − instruction reserve))" in section
+    assert "2,048 tokens for instructions and schema overhead" in section
+
+    utilization = runtime_schema["properties"]["CONTEXT_UTILIZATION_TARGET"]
+    assert utilization["default"] == 0.7
+    assert utilization["maximum"] == 1
+
+
 def _lifecycle_error_taxonomy_section() -> str:
     lifecycle = (CONTRACTS_DIR / "LIFECYCLE_AND_ERRORS.md").read_text(encoding="utf-8")
     section_start = lifecycle.index("### 4.1")
@@ -1460,7 +1498,7 @@ def test_phase6_documentation_reconciliation_contract() -> None:
         "missing docs/RELEASE_EVIDENCE_INDEX.md"
     )
     assert P6_GATE_PATH.is_file(), "missing docs/P6_GATE_RECORD.md"
-    assert MIGRATION_HEAD_PATH.is_file(), "missing package search index migration"
+    assert MIGRATION_HEAD_PATH.is_file(), "missing defer package revision metadata migration"
 
     release_index = RELEASE_EVIDENCE_INDEX_PATH.read_text(encoding="utf-8")
     readme = README_PATH.read_text(encoding="utf-8")

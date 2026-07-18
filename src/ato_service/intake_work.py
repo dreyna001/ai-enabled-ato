@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.db import enums as ev
@@ -221,7 +221,10 @@ def _claim_select_statement(
             PackageRevisionIntakeWork.attempt_count < max_attempts,
             PackageRevision.status == _expected_revision_status(work_phase),
             PackageRevision.content_manifest_sha256.is_not(None),
-            PackageRevision.data_origin.in_(sorted(allowed_origins)),
+            or_(
+                PackageRevision.data_origin.is_(None),
+                PackageRevision.data_origin.in_(sorted(allowed_origins)),
+            ),
         )
         .order_by(
             PackageRevisionIntakeWork.available_at.asc(),

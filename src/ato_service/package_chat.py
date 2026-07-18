@@ -28,6 +28,11 @@ from ato_service.db.models import (
     ReviewRevision,
     SealedPackageContent,
 )
+from ato_service.context_budget import (
+    RankedPackEntry,
+    estimate_tokens_from_text,
+    pack_ranked_entries,
+)
 from ato_service.model_gateway import (
     ModelCallRequest,
     ModelCallResult,
@@ -53,6 +58,13 @@ _OFFICIAL_COMPLIANCE_REFUSAL = "official_compliance"
 _OUT_OF_PACKAGE_REFUSAL = "out_of_package"
 _UNSAFE_REFUSAL = "unsafe_instruction"
 _RESPONSE_SCHEMA_VERSION = "1.0.0"
+_CHAT_SYSTEM_PREFIX = (
+    "You are a bounded package assistant. Answer only from supplied chunks. "
+    "Do not authorize, certify, browse the web, run tools, or write data. "
+    "Return strict JSON with schema_version, answer, and citations. "
+    "Every factual claim must include citations referencing supplied chunk ids "
+    "and offsets only.\n\n"
+)
 
 
 class ChatValidationError(Exception):
@@ -458,8 +470,16 @@ async def _model_grounded_answer(
 ) -> dict[str, Any]:
     from ato_service.text_llm import ChatMessage
 
+    budget = config.resolve_text_model_context_budget()
+    included_hits = _select_hits_for_context_budget(
+        question=question,
+        hits=hits,
+        input_budget_tokens=budget.input_budget_tokens,
+    )
+    filtered_sources = _sources_for_hits(hits=included_hits, base_sources=sources)
+
     base_request = _chat_model_request(config=config, revision=revision)
-    prompt = _build_chat_prompt(question=question, hits=hits)
+    prompt = _build_chat_prompt(question=question, hits=included_hits)
     raw, llm_call_count = await _invoke_chat_completion(
         request=base_request,
         config=config,
@@ -468,7 +488,7 @@ async def _model_grounded_answer(
     )
 
     try:
-        return _format_model_answer(raw=raw, hits=hits, sources=sources)
+        return _format_model_answer(raw=raw, hits=included_hits, sources=filtered_sources)
     except ChatValidationError:
         if llm_call_count >= base_request.max_llm_calls:
             raise
@@ -487,7 +507,7 @@ async def _model_grounded_answer(
             ],
             system=prompt,
         )
-        return _format_model_answer(raw=raw, hits=hits, sources=sources)
+        return _format_model_answer(raw=raw, hits=included_hits, sources=filtered_sources)
 
 
 async def _model_chat_allowed(*, config: RuntimeConfig, revision: PackageRevision) -> bool:
@@ -519,26 +539,58 @@ def _endpoint_profile(config: RuntimeConfig) -> EndpointProfile:
     return EndpointProfile.MOCK
 
 
-def _build_chat_prompt(*, question: str, hits: Sequence[SearchChunkHit]) -> str:
-    chunks = []
-    for hit in hits:
-        chunks.append(
-            json.dumps(
-                {
-                    "chunk_id": hit.chunk_id,
-                    "artifact_id": str(hit.artifact_id),
-                    "citation": hit.citation,
-                    "text": _trusted_excerpt(hit),
-                },
-                sort_keys=True,
-            )
+def _chat_fixed_prompt_tokens(*, question: str) -> int:
+    prefix = f"{_CHAT_SYSTEM_PREFIX}Question: {question}\n\nAuthorized chunks:\n"
+    return estimate_tokens_from_text(prefix)
+
+
+def _hit_prompt_entry(hit: SearchChunkHit) -> str:
+    return json.dumps(
+        {
+            "chunk_id": hit.chunk_id,
+            "artifact_id": str(hit.artifact_id),
+            "citation": hit.citation,
+            "text": _trusted_excerpt(hit),
+        },
+        sort_keys=True,
+    )
+
+
+def _hit_prompt_tokens(hit: SearchChunkHit) -> int:
+    return estimate_tokens_from_text(_hit_prompt_entry(hit))
+
+
+def _select_hits_for_context_budget(
+    *,
+    question: str,
+    hits: Sequence[SearchChunkHit],
+    input_budget_tokens: int,
+) -> tuple[SearchChunkHit, ...]:
+    fixed_tokens = _chat_fixed_prompt_tokens(question=question)
+    if fixed_tokens > input_budget_tokens:
+        raise ChatValidationError("configured context budget cannot fit chat prompt")
+
+    entries = tuple(
+        RankedPackEntry(entry_id=hit.chunk_id, token_estimate=_hit_prompt_tokens(hit))
+        for hit in hits
+    )
+    pack_result = pack_ranked_entries(
+        entries=entries,
+        input_budget=input_budget_tokens,
+        fixed_payload_tokens=fixed_tokens,
+    )
+    included_ids = set(pack_result.included_entry_ids)
+    if hits and not included_ids:
+        raise ChatValidationError(
+            "configured context budget cannot fit an authorized chat chunk"
         )
+    return tuple(hit for hit in hits if hit.chunk_id in included_ids)
+
+
+def _build_chat_prompt(*, question: str, hits: Sequence[SearchChunkHit]) -> str:
+    chunks = [_hit_prompt_entry(hit) for hit in hits]
     return (
-        "You are a bounded package assistant. Answer only from supplied chunks. "
-        "Do not authorize, certify, browse the web, run tools, or write data. "
-        "Return strict JSON with schema_version, answer, and citations. "
-        "Every factual claim must include citations referencing supplied chunk ids "
-        "and offsets only.\n\n"
+        f"{_CHAT_SYSTEM_PREFIX}"
         f"Question: {question}\n\n"
         f"Authorized chunks:\n" + "\n".join(chunks)
     )

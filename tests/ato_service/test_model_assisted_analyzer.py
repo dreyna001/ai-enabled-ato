@@ -66,6 +66,10 @@ def _config(tmp_path: Path, **overrides: Any) -> Any:
     return load_runtime_config_from_dict(document, base_dir=tmp_path)
 
 
+def _resolved_input_budget(tmp_path: Path, **overrides: Any) -> int:
+    return _config(tmp_path, **overrides).resolve_text_model_context_budget().input_budget_tokens
+
+
 @dataclass
 class FakeTextClient:
     responses: list[str] = field(default_factory=list)
@@ -257,7 +261,7 @@ def test_routing_denial_makes_zero_llm_calls(tmp_path: Path) -> None:
             assessment_item_ids=("FR-1",),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=revision, config=_config(tmp_path)),
-            context_tokens=8192,
+            input_budget_tokens=_resolved_input_budget(tmp_path),
             max_output_tokens=1024,
             model_requested="mock-assisted",
             text_client=FakeTextClient(responses=[_valid_response_json()]),
@@ -384,7 +388,7 @@ def test_malformed_response_uses_one_repair_then_fails(tmp_path: Path) -> None:
             assessment_item_ids=("FR-1",),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
-            context_tokens=8192,
+            input_budget_tokens=_resolved_input_budget(tmp_path),
             max_output_tokens=1024,
             model_requested="mock-assisted",
             text_client=client,
@@ -408,7 +412,7 @@ def test_malformed_response_after_repair_fails_without_persistence(tmp_path: Pat
                 package_revision=_package_revision(),
                 config=_config(tmp_path, MAX_MODEL_CALLS_PER_RUN=2),
             ),
-            context_tokens=8192,
+            input_budget_tokens=_resolved_input_budget(tmp_path),
             max_output_tokens=1024,
             model_requested="mock-assisted",
             text_client=client,
@@ -428,7 +432,7 @@ def test_timeout_is_retryable_and_surfaces_model_timeout(tmp_path: Path) -> None
             assessment_item_ids=("FR-1",),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
-            context_tokens=8192,
+            input_budget_tokens=_resolved_input_budget(tmp_path),
             max_output_tokens=1024,
             model_requested="mock-assisted",
             text_client=client,
@@ -449,7 +453,7 @@ def test_citation_mismatch_rejects_row(tmp_path: Path) -> None:
             assessment_item_ids=("FR-1",),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
-            context_tokens=8192,
+            input_budget_tokens=_resolved_input_budget(tmp_path),
             max_output_tokens=1024,
             model_requested="mock-assisted",
             text_client=FakeTextClient(responses=[json.dumps(raw)]),
@@ -495,7 +499,7 @@ def test_status_ceiling_rejects_supported_without_evidence(tmp_path: Path) -> No
             assessment_item_ids=("FR-1",),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
-            context_tokens=8192,
+            input_budget_tokens=_resolved_input_budget(tmp_path),
             max_output_tokens=1024,
             model_requested="mock-assisted",
             text_client=FakeTextClient(responses=[json.dumps(raw)]),

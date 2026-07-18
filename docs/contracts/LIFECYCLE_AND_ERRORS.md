@@ -55,6 +55,26 @@ The following rules apply to every state machine:
 
 ## 2. Legal state transitions
 
+### 2.0 System
+
+A `System` is soft-archived by setting `archived_at` to a non-null UTC timestamp.
+Hard delete is not supported.
+
+| From | To | Required condition |
+| --- | --- | --- |
+| active (`archived_at IS NULL`) | archived (`archived_at IS NOT NULL`) | Authorized `POST /api/v1/systems/{system_id}/archive` by a principal with `system_owner` access to the owning `System.owner_group`. |
+
+Archive semantics:
+
+- Repeating archive on an already-archived system is a no-op: return HTTP 200 with
+  the current `System` representation and do not append a new audit event.
+- `GET /api/v1/systems` excludes archived systems by default. `include_archived=true`
+  includes them; `include_archived=false` is equivalent to the default.
+- `GET /api/v1/systems/{system_id}` returns archived systems when the caller has read
+  access.
+- List filtering and detail authorization agree on package-scoped visibility; archived
+  status affects list filtering only.
+
 ### 2.1 PackageRevision
 
 Normal path:
@@ -151,6 +171,29 @@ processing. Customer extraction remains blocked while **HS-005** is open.
   assignment and `revision_version` increment.
 - No scan or extraction work is claimed complete by this operation.
 
+**Create revision** (`POST /api/v1/systems/{system_id}/package-revisions`):
+
+- Accepts only an optional `parent_revision_id`.
+- Root revisions persist `profile_id`, `data_origin`, and `sensitivity` as
+  null with `effective_data_labels=[]` while pre-ready.
+- Child revisions require a parent in `ready` status and inherit
+  `profile_id`, `certification_class`, and `impact_level` from that parent.
+  `data_origin` and `sensitivity` remain null until explicit human PATCH.
+
+**Metadata PATCH** (`PATCH /api/v1/package-revisions/{id}`):
+
+- Legal only while the revision is `scanning`, `extracting`, or
+  `awaiting_confirmation`.
+- Requires current `If-Match`, `Idempotency-Key`, CSRF validation, and owner
+  mutation roles.
+- Accepts at least one of `profile_id`, `certification_class`, `impact_level`,
+  `data_origin`, or `sensitivity`. Human-only `data_origin` and `sensitivity`
+  are written only by this authenticated mutation.
+- Successful PATCH increments `revision_version` once, recomputes
+  `effective_data_labels` when both human labels are present, synchronizes an
+  existing draft shell when profile/class/impact change, and returns ETag
+  `"v{revision_version}"`.
+
 **Draft read/save** (`GET` / `PUT /api/v1/package-revisions/{id}/draft`):
 
 - `GET` is legal for owner and viewer groups while a draft row exists.
@@ -173,6 +216,10 @@ processing. Customer extraction remains blocked while **HS-005** is open.
   `awaiting_confirmation -> ready` atomically with `revision_version`
   increment. Package-level confirm does not require per-leaf `FactProposal`
   decisions on the draft path.
+- Confirm requires complete revision metadata: valid profile/class-or-impact
+  boundaries, human-set `data_origin` and `sensitivity`, and at least two
+  `effective_data_labels`. Incomplete metadata returns HTTP 422
+  `revision_metadata_incomplete`.
 - When no draft row exists, succeeds only when every `FactProposal` for the
   revision is non-`pending` (legacy compatibility path) and performs
   `awaiting_confirmation -> ready` without sealed package content.
@@ -201,9 +248,11 @@ groups through `OIDC_GROUP_ROLE_MAPPING` with the normative defaults in
 | `/systems` | `GET` | `viewer` |
 | `/systems` | `POST` | `system_owner` (prospective `owner_group`) |
 | `/systems/{system_id}` | `GET` | `viewer` |
+| `/systems/{system_id}/archive` | `POST` | `system_owner` |
 | `/systems/{system_id}/package-revisions` | `POST` | `system_owner`, `isso` |
 | `/systems/{system_id}/package-revisions` | `GET` | `viewer` |
 | `/package-revisions/{id}` | `GET` | `viewer` |
+| `/package-revisions/{id}` | `PATCH` | `system_owner`, `isso` |
 | `/package-revisions/{id}/files` | `POST` | `system_owner`, `control_owner` |
 | `/package-revisions/{id}/finalize` | `POST` | `system_owner`, `isso` |
 | `/package-revisions/{id}/draft` | `GET` | `viewer` |
@@ -252,7 +301,9 @@ artifacts MUST NOT leak cross-system data: unauthorized callers receive HTTP
 | Operation | Route |
 | --- | --- |
 | Create system | `POST /api/v1/systems` |
+| Archive system | `POST /api/v1/systems/{system_id}/archive` |
 | Create revision | `POST /api/v1/systems/{system_id}/package-revisions` |
+| Patch revision metadata | `PATCH /api/v1/package-revisions/{id}` |
 | Upload artifact | `POST /api/v1/package-revisions/{id}/files` |
 | Finalize upload | `POST /api/v1/package-revisions/{id}/finalize` |
 | Save package draft | `PUT /api/v1/package-revisions/{id}/draft` |
@@ -819,6 +870,8 @@ the error.
 | `unconfirmed_fact_proposals` | 422 | No | `PackageRevision` | Remains `awaiting_confirmation`; confirmation and dependent analysis are blocked. | `denied` | Yes |
 | `analysis_not_eligible` | 422 | No | `PackageRevision` | No run is created, or an already-created queued run follows only a separately listed legal transition. | `denied` | Yes |
 | `export_not_eligible` | 422 | No | `ExportDraft` | Remains `draft`; no Approval is created. | `denied` | Yes |
+| `export_not_ready` | 422 | No | `PackageRevision` or `ExportDraft` | Confirmation or export remains blocked while deterministic export-readiness blockers remain unresolved. | `denied` | Yes |
+| `revision_metadata_incomplete` | 422 | No | `PackageRevision` | Remains pre-ready; confirm and model routing stay blocked until human metadata PATCH completes profile/class-or-impact/origin/sensitivity validation. | `denied` | Yes |
 
 ### 4.2 Malware quarantine
 

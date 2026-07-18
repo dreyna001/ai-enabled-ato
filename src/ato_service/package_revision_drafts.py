@@ -44,7 +44,12 @@ from ato_service.domain_mapping import (
     format_uuid,
     map_package_revision_draft_to_domain,
 )
-from ato_service.draft_builder import validate_package_draft_document
+from ato_service.draft_builder import (
+    DOCUMENT_SCHEMA_VERSION,
+    apply_profile_shell_to_draft,
+    validate_package_draft_document,
+)
+from ato_service.intake_merge import IntakeMergeResult
 from ato_service.legacy_proposal_compat import ensure_legacy_draft_for_read
 from ato_service.project_root import contract_path
 from ato_service.idempotency import (
@@ -192,9 +197,11 @@ def validate_system_context_document(document: dict[str, Any]) -> None:
 def validate_draft_profile_match(
     *,
     document: dict[str, Any],
-    profile_id: str,
+    profile_id: str | None,
 ) -> None:
     """Ensure the draft document profile matches the owning revision."""
+    if profile_id is None:
+        return
     package = document.get("package")
     if not isinstance(package, dict):
         raise _validation_error("draft package section is required")
@@ -222,10 +229,12 @@ def _expected_authorization_path(profile_id: str) -> str:
 def normalize_draft_document_for_profile(
     document: dict[str, Any],
     *,
-    profile_id: str,
+    profile_id: str | None,
     revision_impact_level: str | None = None,
 ) -> dict[str, Any]:
     """Coerce profile-specific draft fields so invalid combinations cannot persist."""
+    if profile_id is None:
+        return json.loads(json.dumps(document))
     normalized = json.loads(json.dumps(document))
     package = normalized.get("package")
     if isinstance(package, dict) and isinstance(package.get("profile_id"), str):
@@ -295,6 +304,9 @@ def validate_draft_profile_field_combinations(document: dict[str, Any]) -> None:
     profile_id = package.get("profile_id")
     system = document.get("system")
     if not isinstance(system, dict):
+        return
+
+    if profile_id is None:
         return
 
     impact_level = system.get("impact_level")
@@ -460,7 +472,7 @@ def _draft_view_payload(
     draft: PackageRevisionDraft,
     *,
     revision_version: int,
-    profile_id: str,
+    profile_id: str | None,
     revision_impact_level: str | None = None,
 ) -> dict[str, Any]:
     payload = map_package_revision_draft_to_domain(draft)
@@ -573,6 +585,113 @@ async def get_package_revision_draft(
     )
 
 
+async def persist_intake_merge_draft(
+    session: AsyncSession,
+    *,
+    package_revision: PackageRevision,
+    merge_result: IntakeMergeResult,
+    actor_id: str,
+    now: datetime,
+    expected_revision_version: int | None = None,
+) -> PackageRevisionDraft:
+    """Insert or update the package draft from one deterministic REDUCE result."""
+    validated_now = _require_aware_utc(now, field_name="now")
+    if expected_revision_version is not None:
+        assert_if_match(
+            format_package_revision_etag(expected_revision_version),
+            package_revision.revision_version,
+        )
+
+    current_status = PackageRevisionStatus(package_revision.status)
+    if current_status not in {
+        PackageRevisionStatus.EXTRACTING,
+        PackageRevisionStatus.AWAITING_CONFIRMATION,
+    }:
+        raise IllegalStateTransitionError(
+            error_code="illegal_state_transition",
+            current_state=package_revision.status,
+            target_state=PackageRevisionStatus.AWAITING_CONFIRMATION.value,
+            condition=PackageRevisionTransitionCondition.NORMAL_PROGRESSION.value,
+        )
+
+    draft_result = await session.execute(
+        _load_draft_for_update_statement(package_revision.package_revision_id)
+    )
+    draft = draft_result.scalar_one_or_none()
+
+    document = normalize_draft_document_for_profile(
+        merge_result.document,
+        profile_id=package_revision.profile_id,
+        revision_impact_level=package_revision.impact_level,
+    )
+
+    if package_revision.profile_id is None:
+        validate_package_draft_document(document)
+    else:
+        validate_draft_profile_match(
+            document=document,
+            profile_id=package_revision.profile_id,
+        )
+        validate_draft_profile_field_combinations(document)
+        validate_package_draft_document(document)
+
+    if draft is None:
+        draft = PackageRevisionDraft(
+            package_revision_id=package_revision.package_revision_id,
+            document_schema_version=DOCUMENT_SCHEMA_VERSION,
+            document=document,
+            field_provenance=dict(merge_result.field_provenance),
+            updated_by=actor_id,
+            updated_at=validated_now,
+        )
+        session.add(draft)
+    else:
+        draft.document = document
+        draft.field_provenance = dict(merge_result.field_provenance)
+        draft.updated_by = actor_id
+        draft.updated_at = validated_now
+
+    return draft
+
+
+async def synchronize_draft_after_metadata_patch(
+    session: AsyncSession,
+    *,
+    package_revision: PackageRevision,
+    patch: Any,
+) -> None:
+    """Synchronize an existing draft after authenticated revision metadata PATCH."""
+    if not (
+        {"profile_id", "certification_class", "impact_level"} & patch.provided_fields
+    ):
+        return
+
+    draft_result = await session.execute(
+        _load_draft_for_update_statement(package_revision.package_revision_id)
+    )
+    draft = draft_result.scalar_one_or_none()
+    if draft is None:
+        return
+
+    system_result = await session.execute(
+        select(System).where(System.system_id == package_revision.system_id)
+    )
+    system = system_result.scalar_one()
+
+    draft.document = apply_profile_shell_to_draft(
+        document=draft.document,
+        profile_id=package_revision.profile_id,
+        system=system,
+        revision_impact_level=package_revision.impact_level,
+    )
+    if package_revision.profile_id is not None:
+        validate_draft_profile_match(
+            document=draft.document,
+            profile_id=package_revision.profile_id,
+        )
+        validate_package_draft_document(draft.document)
+
+
 async def save_package_revision_draft(
     session: AsyncSession,
     *,
@@ -648,12 +767,15 @@ async def save_package_revision_draft(
         revision_impact_level=package_revision.impact_level,
     )
 
-    validate_draft_ready_to_seal(
-        document=document,
-        profile_id=package_revision.profile_id,
-        system=system,
-        revision=package_revision,
-    )
+    if package_revision.profile_id is None:
+        validate_package_draft_document(document)
+    else:
+        validate_draft_ready_to_seal(
+            document=document,
+            profile_id=package_revision.profile_id,
+            system=system,
+            revision=package_revision,
+        )
 
     draft.document = document
     draft.updated_by = principal.actor_id
@@ -831,9 +953,11 @@ __all__ = [
     "get_package_revision_draft",
     "get_draft_export_readiness",
     "load_draft_for_confirm",
+    "persist_intake_merge_draft",
     "save_draft_request_digest",
     "save_package_revision_draft",
     "seal_package_revision_draft",
+    "synchronize_draft_after_metadata_patch",
     "validate_draft_profile_match",
     "validate_system_context_document",
 ]

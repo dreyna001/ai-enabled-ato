@@ -11,6 +11,7 @@ import {
   parsePackageRevision,
   parsePackageRevisionDraft,
   parseDraftExportReadiness,
+  parseIntakeReport,
   parsePreflight,
   parseReadinessResponse,
   parseReviewComment,
@@ -39,6 +40,8 @@ import type {
   PackageRevision,
   PackageRevisionDraft,
   DraftExportReadiness,
+  IntakeReport,
+  PatchPackageRevisionMetadataInput,
   PreflightResult,
   ReviewComment,
   ReviewRevision,
@@ -319,13 +322,40 @@ export async function fetchReadiness(
 }
 
 export async function listSystems(
-  options: ApiFetchOptions = {},
+  options: ApiFetchOptions & { includeArchived?: boolean } = {},
 ): Promise<System[]> {
-  const response = await apiFetch(`${API_BASE}/systems`, {
+  const { includeArchived, ...fetchOptions } = options;
+  const params = new URLSearchParams();
+  if (includeArchived) {
+    params.set("include_archived", "true");
+  }
+  const query = params.toString();
+  const response = await apiFetch(
+    `${API_BASE}/systems${query ? `?${query}` : ""}`,
+    {
+      credentials: "include",
+      ...fetchOptions,
+    },
+  );
+  return readValidatedJson(response, parseSystemList);
+}
+
+export async function archiveSystem(
+  session: SessionInfo,
+  systemId: string,
+  options: ApiFetchOptions = {},
+): Promise<System> {
+  const response = await apiFetch(`${API_BASE}/systems/${systemId}/archive`, {
+    method: "POST",
     credentials: "include",
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session),
+      ...options.headers,
+    },
     ...options,
   });
-  return readValidatedJson(response, parseSystemList);
+  return readValidatedJson(response, parseSystem);
 }
 
 export async function createSystem(
@@ -364,6 +394,14 @@ export async function listRevisions(
   return readValidatedJson(response, parseRevisionList);
 }
 
+export function buildCreateRevisionBody(
+  input: CreateRevisionInput,
+): Record<string, string | null> {
+  return {
+    parent_revision_id: input.parent_revision_id ?? null,
+  };
+}
+
 export async function createRevision(
   session: SessionInfo,
   systemId: string,
@@ -381,14 +419,7 @@ export async function createRevision(
         ...mutationHeaders(session),
         ...options.headers,
       },
-      body: JSON.stringify({
-        parent_revision_id: input.parent_revision_id ?? null,
-        profile_id: input.profile_id,
-        certification_class: input.certification_class ?? null,
-        impact_level: input.impact_level ?? null,
-        data_origin: input.data_origin,
-        sensitivity: input.sensitivity,
-      }),
+      body: JSON.stringify(buildCreateRevisionBody(input)),
       ...options,
     },
   );
@@ -404,6 +435,71 @@ export async function getRevision(
     ...options,
   });
   return readValidatedJson(response, parsePackageRevision);
+}
+
+export async function getIntakeReport(
+  revisionId: string,
+  options: ApiFetchOptions = {},
+): Promise<IntakeReport> {
+  const response = await apiFetch(
+    `${API_BASE}/package-revisions/${revisionId}/intake-report`,
+    {
+      credentials: "include",
+      ...options,
+    },
+  );
+  return readValidatedJson(response, parseIntakeReport);
+}
+
+export function buildPatchRevisionMetadataBody(
+  patch: PatchPackageRevisionMetadataInput,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (patch.profile_id !== undefined) {
+    body.profile_id = patch.profile_id;
+  }
+  if (patch.certification_class !== undefined) {
+    body.certification_class = patch.certification_class;
+  }
+  if (patch.impact_level !== undefined) {
+    body.impact_level = patch.impact_level;
+  }
+  if (patch.data_origin !== undefined) {
+    body.data_origin = patch.data_origin;
+  }
+  if (patch.sensitivity !== undefined) {
+    body.sensitivity = patch.sensitivity;
+  }
+  return body;
+}
+
+export async function patchRevisionMetadata(
+  session: SessionInfo,
+  revisionId: string,
+  etag: string,
+  patch: PatchPackageRevisionMetadataInput,
+  options: ApiFetchOptions = {},
+): Promise<{ revision: PackageRevision; etag: string }> {
+  const response = await apiFetch(`${API_BASE}/package-revisions/${revisionId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID(),
+      ...mutationHeaders(session, { "If-Match": etag }),
+      ...options.headers,
+    },
+    body: JSON.stringify(buildPatchRevisionMetadataBody(patch)),
+    ...options,
+  });
+  const { data, etag: responseEtag } = await readValidatedJsonWithEtag(
+    response,
+    parsePackageRevision,
+  );
+  return {
+    revision: data,
+    etag: responseEtag ?? revisionEtag(data.revision_version),
+  };
 }
 
 export async function uploadPackageFile(

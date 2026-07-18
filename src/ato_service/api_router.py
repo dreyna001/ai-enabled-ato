@@ -45,17 +45,21 @@ from ato_service.package_revision_drafts import (
     get_draft_export_readiness,
     save_package_revision_draft,
 )
+from ato_service.intake_readiness import get_intake_report
 from ato_service.package_revisions import (
     CreatePackageRevisionInput,
     PackageRevisionMutationResult,
+    PatchPackageRevisionMetadataInput,
     confirm_package_revision,
     create_package_revision,
     finalize_package_revision,
     get_package_revision,
     list_package_revisions,
+    patch_package_revision_metadata,
+    validate_patch_metadata_input,
 )
 from ato_service.source_artifacts import UploadSourceArtifactResult, upload_source_artifact
-from ato_service.systems import create_system, get_system, list_systems
+from ato_service.systems import archive_system, create_system, get_system, list_systems
 from ato_service.run_artifacts import list_run_artifacts
 
 ProfileId = Literal[
@@ -99,16 +103,23 @@ class CreateSystemRequest(BaseModel):
 
 
 class CreatePackageRevisionRequest(BaseModel):
-    """OpenAPI-aligned create-package-revision payload."""
+    """OpenAPI-aligned upload-first create-package-revision payload."""
 
     model_config = ConfigDict(extra="forbid")
 
-    parent_revision_id: uuid.UUID | None
-    profile_id: ProfileId
-    certification_class: Literal["B", "C"] | None
-    impact_level: Literal["low", "moderate", "high"] | None
-    data_origin: DataOrigin
-    sensitivity: Sensitivity
+    parent_revision_id: uuid.UUID | None = None
+
+
+class PatchPackageRevisionMetadataRequest(BaseModel):
+    """OpenAPI-aligned metadata PATCH payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile_id: ProfileId | None = None
+    certification_class: Literal["B", "C"] | None = None
+    impact_level: Literal["low", "moderate", "high"] | None = None
+    data_origin: DataOrigin | None = None
+    sensitivity: Sensitivity | None = None
 
 
 class PaginatedSystemsResponse(BaseModel):
@@ -301,12 +312,14 @@ def create_api_router() -> APIRouter:
         session: Annotated[AsyncSession, Depends(get_db_session)],
         cursor: str | None = None,
         limit: int | None = None,
+        include_archived: bool = False,
     ) -> PaginatedSystemsResponse:
         page = await list_systems(
             session,
             principal=principal,
             cursor=cursor,
             limit=limit,
+            include_archived=include_archived,
         )
         return PaginatedSystemsResponse(
             items=page.items,
@@ -325,6 +338,24 @@ def create_api_router() -> APIRouter:
             system_id=system_id,
         )
         return map_system_to_domain(system)
+
+    @router.post("/systems/{system_id}/archive", tags=["Systems"])
+    async def post_archive_system(
+        system_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> JSONResponse:
+        result = await archive_system(
+            session,
+            principal=principal,
+            audit_hmac_key=audit_hmac_key,
+            system_id=system_id,
+            idempotency_key=idempotency_key,
+            now=_utc_now(),
+        )
+        return JSONResponse(status_code=result.status, content=result.payload)
 
     @router.post(
         "/systems/{system_id}/package-revisions",
@@ -346,13 +377,34 @@ def create_api_router() -> APIRouter:
             system_id=system_id,
             request=CreatePackageRevisionInput(
                 parent_revision_id=body.parent_revision_id,
-                profile_id=body.profile_id,
-                certification_class=body.certification_class,
-                impact_level=body.impact_level,
-                data_origin=body.data_origin,
-                sensitivity=body.sensitivity,
             ),
             authority_manifest_id=runtime_state.authority_manifest_id,
+            idempotency_key=idempotency_key,
+            hmac_key=audit_hmac_key,
+            now=_utc_now(),
+        )
+        return _package_revision_json_response(result)
+
+    @router.patch("/package-revisions/{id}", tags=["Packages"])
+    async def patch_package_revision_metadata_route(
+        id: uuid.UUID,
+        body: PatchPackageRevisionMetadataRequest,
+        request: Request,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        idempotency_key: IdempotencyKeyHeader,
+    ) -> JSONResponse:
+        if_match = request.headers.get("if-match")
+        patch = validate_patch_metadata_input(
+            provided=body.model_dump(exclude_unset=True),
+        )
+        result = await patch_package_revision_metadata(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            patch=patch,
+            if_match=if_match,
             idempotency_key=idempotency_key,
             hmac_key=audit_hmac_key,
             now=_utc_now(),
@@ -481,6 +533,22 @@ def create_api_router() -> APIRouter:
             hmac_key=audit_hmac_key,
         )
         return _draft_json_response(result)
+
+    @router.get("/package-revisions/{id}/intake-report", tags=["Packages"])
+    async def get_package_revision_intake_report(
+        id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+    ) -> JSONResponse:
+        payload = await get_intake_report(
+            session,
+            principal=principal,
+            package_revision_id=id,
+            project_root=runtime_state.snapshot.project_root,
+            now=_utc_now(),
+        )
+        return JSONResponse(content=payload)
 
     @router.get(
         "/package-revisions/{id}/draft/export-readiness",

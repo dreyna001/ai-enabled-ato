@@ -31,6 +31,7 @@ from ato_service.pagination import (
 )
 
 SYSTEMS_CREATE_OPERATION = "systems.create"
+SYSTEMS_ARCHIVE_OPERATION = "systems.archive"
 
 MAX_DISPLAY_NAME_LENGTH = 255
 MIN_DISPLAY_NAME_LENGTH = 1
@@ -65,6 +66,13 @@ class FieldValidationError:
 
 @dataclass(frozen=True, slots=True)
 class CreateSystemResult:
+    payload: dict[str, Any]
+    status: int
+    replayed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveSystemResult:
     payload: dict[str, Any]
     status: int
     replayed: bool
@@ -272,6 +280,11 @@ def create_system_request_digest_payload(
     }
 
 
+def archive_system_request_digest_payload(*, system_id: uuid.UUID) -> dict[str, Any]:
+    """Return the replay-safe archive request digest payload."""
+    return {"system_id": str(system_id).lower()}
+
+
 def _system_read_access_predicate(principal_groups: tuple[str, ...]) -> Any:
     if not principal_groups:
         return false()
@@ -286,10 +299,15 @@ def _list_systems_select_statement(
     principal_groups: tuple[str, ...],
     cursor: PaginationCursor | None,
     limit: int,
+    include_archived: bool,
 ) -> Any:
+    filters: list[Any] = [_system_read_access_predicate(principal_groups)]
+    if not include_archived:
+        filters.append(System.archived_at.is_(None))
+
     statement = (
         select(System)
-        .where(_system_read_access_predicate(principal_groups))
+        .where(*filters)
         .order_by(System.created_at.asc(), System.system_id.asc())
         .limit(limit + 1)
     )
@@ -427,12 +445,85 @@ async def get_system(
     return system
 
 
+async def archive_system(
+    session: AsyncSession,
+    *,
+    principal: AuthenticatedPrincipal,
+    audit_hmac_key: bytes,
+    system_id: uuid.UUID,
+    idempotency_key: str,
+    now: datetime,
+) -> ArchiveSystemResult:
+    """Soft-archive one system with replay-safe idempotency inside the caller transaction."""
+    validated_now = _require_aware_utc(now, field_name="now")
+    request_digest = request_digest_from_payload(
+        archive_system_request_digest_payload(system_id=system_id)
+    )
+
+    replay = await load_idempotency_replay(
+        session,
+        principal.actor_id,
+        SYSTEMS_ARCHIVE_OPERATION,
+        idempotency_key,
+        request_digest,
+        validated_now,
+    )
+    if replay is not None:
+        return ArchiveSystemResult(
+            payload=dict(replay.response_body),
+            status=replay.response_status,
+            replayed=True,
+        )
+
+    result = await session.execute(
+        select(System).where(System.system_id == system_id)
+    )
+    system = result.scalar_one_or_none()
+    if system is None:
+        raise ResourceNotFoundError()
+
+    require_system_mutation_access(principal, system)
+
+    payload = map_system_to_domain(system)
+    if system.archived_at is None:
+        system.archived_at = validated_now
+        payload = map_system_to_domain(system)
+        await append_audit_event(
+            session,
+            hmac_key=audit_hmac_key,
+            actor_type="user",
+            actor_id=principal.actor_id,
+            action="system.archived",
+            object_type="system",
+            object_id=str(system_id),
+            outcome="succeeded",
+            reason_code=None,
+            metadata={},
+            occurred_at=validated_now,
+        )
+
+    await record_idempotency_outcome(
+        session,
+        principal=principal.actor_id,
+        operation=SYSTEMS_ARCHIVE_OPERATION,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        response_status=200,
+        response_body=payload,
+        response_headers={},
+        now=validated_now,
+    )
+
+    return ArchiveSystemResult(payload=payload, status=200, replayed=False)
+
+
 async def list_systems(
     session: AsyncSession,
     *,
     principal: AuthenticatedPrincipal,
     cursor: str | None,
     limit: int | None,
+    include_archived: bool = False,
 ) -> SystemsPage:
     """List systems visible to the principal using PostgreSQL authorization filters."""
     validated_limit = validate_page_limit(limit)
@@ -445,6 +536,7 @@ async def list_systems(
             principal_groups=principal.groups,
             cursor=decoded_cursor,
             limit=validated_limit,
+            include_archived=include_archived,
         )
     )
     rows = list(result.scalars().all())

@@ -31,7 +31,7 @@ assessor systems.
 | Kind | Where | Role |
 |------|--------|------|
 | **Deterministic rules** | Intake parsing, draft validation, seal, deterministic analysis, export assembly | Schema, state machine, digests, control catalogs, hard-stops |
-| **LLM (text model)** | Optional intake normalization; targeted/full analysis; package chat | Propose field values or sufficiency judgments from evidence text |
+| **LLM (text model)** | Optional intake MAP (pre-attestation, policy-gated); targeted/full analysis; package chat | Propose field values, path suggestions, or sufficiency judgments from evidence text — never human-only labels |
 | **Human reviewer** | Draft edit, dispositions, export approval | Official judgment; triggers POA&M candidates and evidence requests |
 
 **WSL demo note:** the **Start Deterministic Run** button creates a
@@ -68,11 +68,14 @@ package chat) may be disabled even if the page loads.
 
 ```text
 Sign In
-  → Create / Select System
-  → Create / Select Revision
+  → Create / Select System (optional archive / show archived)
+  → Create Minimal Revision (optional parent only)
   → Upload Files + Finalize
   → Scanning / Extracting (auto)
-  → Edit Draft + Save
+  → Intake MAP (bounded LLM; may policy_block pre-attestation)
+  → Intake REDUCE (deterministic merge + conflicts)
+  → Revision Metadata (human attestation + editable suggestions)
+  → Edit Draft + Resolve Conflicts + Save
   → Confirm Package (seal)
   → Revision Ready
   → Preflight
@@ -104,49 +107,38 @@ block some features like chat but often still allows walking the workflow.
 
 ### 1. Create system
 
-**Portal:** **Systems** card — **Create System**, system selection pills.
+**Portal:** **Systems** card — **Create System**, system selection pills, **Show archived**, per-system **Archive**.
 
 | | |
 |--|--|
 | **LLM** | None |
 | **Domain** | Names the authorization target for all package revisions |
-| **Technical** | RBAC; UUID identity; audit event |
+| **Technical** | RBAC; UUID identity; soft archive via `archived_at`; default list excludes archived; audit event |
 | **Artifacts** | `System` database record only |
 
 ---
 
-### 2. Create revision
+### 2. Create revision (upload-first)
 
-**Portal:** **Package Revisions** card — quick **Create Revision** or full form.
+**Portal:** **Package Revisions** card — **Create revision** form (minimal).
 
-#### Full form fields
+#### Create form fields
 
 | Field | Purpose |
 |-------|---------|
-| **Parent Revision (Optional)** | Start from a prior ready revision (change analysis, targeted reruns) |
-| **Profile** | Agency FISMA, FedRAMP Rev. 5 transition, or FedRAMP 20x program |
-| **Certification Class** | FedRAMP 20x only — Class B or C (replaces impact level) |
-| **Impact Level** | FISMA / FedRAMP Rev5 — Low, Moderate, or High |
-| **Data Origin** | Synthetic, redacted non-production, or customer production |
-| **Sensitivity** | Data classification labels |
-| **Create Revision With Selected Options** | Creates and selects the revision |
+| **Parent Revision (Optional)** | Link a prior `ready` revision for lineage and change analysis |
+| **Create revision** | Creates revision with status `uploading`; no profile or labels at create |
 
-Parent selection inherits profile and locks the profile dropdown.
+Profile, certification class, impact level, data origin, and sensitivity are **hidden at create** and appear on **Revision metadata** after upload finalize begins.
+
+Parent selection inherits profile and locks the profile field when set.
 
 | | |
 |--|--|
 | **LLM** | None |
-| **Domain** | Chooses authorization framework path and baseline metadata |
-| **Technical** | Profile enum validation; parent must be `ready` |
-| **Artifacts** | `PackageRevision` row with status `uploading` |
-
-#### Profile behavior at create
-
-| Profile | Impact / class | Authorization path (later) |
-|---------|----------------|----------------------------|
-| FISMA | Impact level required | Agency |
-| FedRAMP Rev5 | Impact level required | FedRAMP |
-| FedRAMP 20x | Certification class B/C; no draft impact level | FedRAMP |
+| **Domain** | Opens an upload cycle; path metadata deferred until post-upload PATCH |
+| **Technical** | Parent must be `ready`; optional parent link only on create |
+| **Artifacts** | `PackageRevision` row with status `uploading` and nullable path metadata |
 
 ---
 
@@ -193,15 +185,25 @@ Revision status: `uploading` → `scanning` after finalize.
 
 ---
 
-### 5. Extracting (intake)
+### 5. Extracting and intake (MAP + REDUCE)
 
-**Portal:** "Extracting and Mapping Package Content" (read-only, auto-refresh).
+**Portal:** **Intake progress** — "Extracting and Mapping Package Content" (read-only, auto-refresh). After `awaiting_confirmation`, **Intake readiness** and **Revision metadata** panels.
 
 | | |
 |--|--|
-| **LLM (optional)** | **Yes — `normalize_proposal`, 0–2 calls per normalization step** |
-| **Domain (ATO)** | Parses uploads into draft structure |
-| **Technical** | PDF/DOCX/XLSX/JSON/XML extraction with limits; zip/XML safety; draft JSON schema; provenance |
+| **LLM (optional, pre-attestation)** | **Yes — intake MAP**, one bounded call per covered artifact (packed to `CONTEXT_UTILIZATION_TARGET`, default **0.70**, minus output and instruction reserves). Routing may return `policy_blocked` before human attestation. |
+| **LLM (REDUCE)** | **No** — deterministic merge in application code |
+| **Domain (ATO)** | Parses uploads into draft structure; AI may suggest profile/class/impact only — never `data_origin` or `sensitivity` |
+| **Technical** | PDF/DOCX/XLSX/JSON/XML extraction with limits; zip/XML safety; chunk/index; draft JSON schema; provenance; conflict records |
+
+#### Intake pipeline stages
+
+| Stage | Owner | Notes |
+|-------|--------|-------|
+| Deterministic extract | Parsers | Known formats without model calls |
+| Chunk / index | Worker | Spec chunk model; `package_search_index` after seal |
+| **MAP** | Worker + model gateway | Structured JSON per artifact; persisted step artifacts |
+| **REDUCE** | `intake_merge.py` | Merge into draft + `field_provenance` + conflicts + readiness report |
 
 #### What intake produces in the draft (domain)
 
@@ -212,26 +214,59 @@ Revision status: `uploading` → `scanning` after finalize.
 - **Assessor-owned fields** tagged import-only; owner uploads cannot populate assessor sections
 - **Evidence links** and profile-specific sections (FedRAMP 20x, Rev5, FISMA)
 
-#### Intake LLM (`normalize_proposal`) — when it runs
+#### Intake MAP — when it runs
 
 | Aspect | Detail |
 |--------|--------|
-| **When** | After deterministic extraction, if empty draft fields exist and extracted text segments are available |
-| **Input** | Fact bundle: empty targets + evidence excerpts |
-| **Output** | Proposed values for allowed empty fields only |
-| **Guardrails** | Cannot write assessor inputs, findings, POA&M, or profile_id; must cite source artifact; max 2 calls; routing/policy can block (`policy_blocked`) |
-| **Debug artifacts (if run)** | `revisions/{id}/normalization/{step_id}/prompt.json`, `fact-bundle.json`, `response.json` |
+| **When** | After deterministic extraction on clean artifacts |
+| **Input** | Ranked chunk groups packed to context budget |
+| **Output** | Proposed draft field values and optional path metadata suggestions |
+| **Guardrails** | Cannot write assessor inputs, findings, POA&M, `data_origin`, or `sensitivity`; must cite source artifact; routing/policy can block (`policy_blocked`) |
+| **Debug artifacts (if run)** | `revisions/{id}/intake-map/{step_id}/` prompt, fact bundle, response |
 
 #### Artifacts after intake
 
 | Artifact | Content |
 |----------|---------|
 | **`PackageRevisionDraft`** (database) | Full editable package document |
-| **`field_provenance`** | Which upload pre-filled each field |
-| Status | `awaiting_confirmation` |
+| **`field_provenance`** | Which upload or MAP step pre-filled each field |
+| **`GET /package-revisions/{id}/intake-report`** | Files, gaps, conflicts, MAP summaries, confirm readiness |
+| Status | `awaiting_confirmation` when merge completes |
 
-The product does **not** generate official signed SSP/SAR/POA&M at intake — only
-imports and draft fields.
+The product does **not** generate official signed SSP/SAR/POA&M at intake — only imports and draft fields.
+
+---
+
+### 5a. Revision metadata and human attestation (`scanning` → `awaiting_confirmation`)
+
+**Portal:** **Revision metadata** panel (visible once status is not `uploading`).
+
+| Field | Purpose |
+|-------|---------|
+| **Profile** | Authorization path — editable; AI suggestion shown only when unset |
+| **Certification class / Impact level** | Path-specific; editable suggestions |
+| **Data origin** | **Human-only** attestation (required before confirm) |
+| **Sensitivity** | **Human-only** attestation (required before confirm) |
+| **Save metadata** | `PATCH` with `If-Match` ETag |
+
+| | |
+|--|--|
+| **LLM** | None on save; MAP may have suggested profile/class/impact only |
+| **Domain** | Routing and confirm gates require complete human attestation |
+| **Technical** | Stale metadata returns 412/409; backend intake-report `confirmation.allowed` is source of truth |
+
+---
+
+### 5b. Intake readiness and conflicts (`awaiting_confirmation`)
+
+**Portal:** **Intake readiness** panel — inventory, suggested path, gaps, MAP step status, conflicts.
+
+| Conflict type | Resolution |
+|---------------|------------|
+| Draft JSON pointer | Pick candidate or **Edit in Package Editor** → **Save Draft** (ETag) |
+| Metadata-only (`/_intake_metadata/*`) | Edit in **Revision metadata** → **Save metadata** (ETag) |
+
+Backend readiness and confirm eligibility remain authoritative over local UI state.
 
 ---
 
@@ -249,7 +284,7 @@ imports and draft fields.
 
 | Tab | Key fields | Notes |
 |-----|------------|-------|
-| **Package** | Title (required), Prepared For, Profile (read-only) | |
+| **Package** | Title (required), Prepared For, Profile (read-only after metadata save) | |
 | **System** | Display Name, Authorization Boundary, Mission Summary (required); Impact Level (FISMA/Rev5 only); Authorization Path (read-only) | FedRAMP 20x hides impact level |
 | **Contacts** | System Owner, ISSO (name, role, email) | |
 | **Controls** | Add/Remove control; Implementation Status; **Implementation Statement** (required per control) | |
@@ -268,15 +303,15 @@ imports and draft fields.
 | Button | Disabled when | Action |
 |--------|---------------|--------|
 | **Save Draft** | Not dirty, saving, stale conflict, validation errors | Persists draft with ETag |
-| **Confirm Package** | Dirty, saving, stale, validation errors | Opens confirm dialog → seals package |
+| **Confirm Package** | Dirty draft/metadata, saving, stale conflict, validation errors, incomplete metadata, intake readiness blockers | Opens confirm dialog → seals package |
 
 **Confirm dialog:** "Seal the displayed package draft as an immutable ready revision?"
 
 | | |
 |--|--|
 | **LLM** | None |
-| **Domain** | Required fields, profile field combinations, control statements, authorization path |
-| **Technical** | JSON schema; `If-Match` ETag; idempotency; RBAC (system owner / ISSO) |
+| **Domain** | Required fields, complete revision metadata (including human-only labels), profile field combinations, control statements, authorization path; intake-report confirm gate |
+| **Technical** | JSON schema; separate ETags for draft and revision metadata; idempotency; RBAC (system owner / ISSO) |
 
 Save runs the same seal-readiness validation as confirm.
 
@@ -475,7 +510,7 @@ and `validation/`; current workers primarily emit `machine/matrix.json`.
 |--|--|
 | **LLM** | None — deterministic assembly from sealed package + matrix + dispositions |
 | **Domain** | Bundles draft authorization package for handoff; disclaimers throughout |
-| **Technical** | Payload manifest hash sealed; separate approver required; approval expiry (HS-010) |
+| **Technical** | Payload manifest hash sealed; separate approver required unless `SINGLE_USER_MODE_ENABLED` is explicitly `true` (default `false`); approval expiry (HS-010) |
 
 Export does **not** certify compliance or authorize the system.
 
@@ -551,7 +586,9 @@ export outputs remain **draft** artifacts.
 |-------|-----------|------------|
 | Upload / scan / finalize | 0 | — |
 | Extract (deterministic) | 0 | Format parsers |
-| Intake normalize (optional) | 0–2 | Map extracted text → empty draft fields |
+| Intake MAP (optional, pre-attestation) | 0–N (per artifact; policy may block) | Map extracted text → draft fields and path suggestions |
+| Intake REDUCE | 0 | Deterministic merge |
+| Revision metadata save | 0 | Human attestation |
 | Draft edit / seal | 0 | — |
 | Preflight | 0 | — |
 | Search | 0 | PostgreSQL full-text |
@@ -564,14 +601,19 @@ export outputs remain **draft** artifacts.
 
 - Classified data unsupported
 - Customer production / CUI on external endpoints requires explicit policy approval
+- Pre-attestation intake MAP may be `policy_blocked` until human attestation and routing allow
 - Per-run and per-step call budgets
+- Context packing uses `CONTEXT_UTILIZATION_TARGET` (default `0.70`) plus fixed output and instruction reserves
 - Embedding capability always prohibited
 - Vision extraction deferred (not live in current workers)
 
 Primary implementation files:
 
 - `src/ato_service/model_gateway.py` — central policy gate
-- `src/ato_service/normalize_proposal/` — intake LLM
+- `src/ato_service/intake_map.py` — bounded intake MAP steps
+- `src/ato_service/intake_merge.py` — deterministic REDUCE merge
+- `src/ato_service/context_budget.py` — shared context packer
+- `src/ato_service/normalize_proposal/` — shared MAP response schemas and guardrails
 - `src/ato_service/sufficiency_matrix/` — analysis LLM
 - `src/ato_service/package_chat.py` — chat LLM
 
@@ -623,16 +665,18 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 
 1. **Sign in** at `/login`
 2. **Create System** → select it
-3. **Create Revision** (profile, impact or cert class, data origin, sensitivity)
+3. **Create revision** (optional parent only) — no profile or labels yet
 4. **Upload** evidence → **Finalize upload**
-5. Wait for **scanning / extracting**
-6. **Edit draft** → fix validation → **Save Draft**
-7. **Confirm Package** → status **Ready**
-8. Check **Preflight** (analysis eligible = yes)
-9. **Start Deterministic Run** (or targeted/full for LLM sufficiency) → wait for **Succeeded**
-10. Inspect **Run Artifacts** and **Matrix**
-11. **Open Review Revision** → set every disposition → **Submit review**
-12. **Create export draft** → **Submit for approval** → approver **Approve** → **Download ZIP**
+5. Wait for **scanning / extracting / intake MAP+REDUCE**
+6. Set **Revision metadata** (profile, class or impact, **data origin**, **sensitivity**) → **Save metadata**
+7. Review **Intake readiness** → resolve **conflicts** in editor or metadata
+8. **Edit draft** → fix validation → **Save Draft**
+9. **Confirm Package** → status **Ready**
+10. Check **Preflight** (analysis eligible = yes)
+11. **Start Deterministic Run** (or targeted/full for LLM sufficiency) → wait for **Succeeded**
+12. Inspect **Run Artifacts** and **Matrix**
+13. **Open Review Revision** → set every disposition → **Submit review**
+14. **Create export draft** → **Submit for approval** → approver **Approve** (or same user when single-user mode enabled) → **Download ZIP**
 
 ---
 
@@ -657,6 +701,7 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 | `docs/contracts/README.md` | JSON schemas and OpenAPI |
 | `docs/requirements/hard-stops.yaml` | Governance hard-stops |
 | `docs/PACKAGE_EDITOR_PLAN.md` | Package editor product intent |
+| `docs/UPLOAD_FIRST_INTAKE_PLAN.md` | Upload-first intake implementation plan and phase status |
 | `docs/WSL_LOCAL_DEPLOY.md` | Local deployment and portal enable |
 | `docs/CONFIGURATION.md` | Runtime config including text model settings |
 | `docs/AI_EVALUATION_GUIDE.md` | AI qualification harness (non-production) |
@@ -668,9 +713,15 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 | Area | Path |
 |------|------|
 | Portal workflow page | `portal/src/pages/WorkflowPage.tsx` |
+| Revision create (minimal) | `portal/src/components/RevisionCreateForm.tsx` |
+| Revision metadata | `portal/src/components/RevisionMetadataPanel.tsx` |
+| Intake readiness / conflicts | `portal/src/components/IntakeReadinessPanel.tsx`, `IntakeConflictList.tsx` |
 | Package editor | `portal/src/components/PackageEditor.tsx` |
 | Draft validation (client) | `portal/src/utils/draftValidation.ts` |
-| Intake | `src/ato_service/intake.py` |
+| Intake orchestration | `src/ato_service/intake.py` |
+| Intake MAP / REDUCE | `src/ato_service/intake_map.py`, `intake_merge.py` |
+| Context packer | `src/ato_service/context_budget.py` |
+| Systems archive | `src/ato_service/systems.py` |
 | Draft seal | `src/ato_service/package_revision_drafts.py` |
 | Preflight | `src/ato_service/preflight.py` |
 | Deterministic analysis | `src/ato_service/deterministic_analyzer.py` |

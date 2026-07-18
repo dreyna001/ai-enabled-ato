@@ -19,8 +19,10 @@ from ato_service.citation_validation import (
 from ato_service.model_gateway import ModelPolicyNotApprovedError
 from ato_service.package_chat import (
     ChatValidationError,
+    _build_chat_prompt,
     _chat_model_request,
     _model_grounded_answer,
+    _select_hits_for_context_budget,
 )
 from ato_service.package_search_index import SearchChunkHit
 from ato_service.runtime_config import RuntimeConfig, load_runtime_config_from_dict
@@ -116,11 +118,11 @@ def _sources() -> dict[str, Any]:
     )
 
 
-def _search_hit(*, chunk_id: str | None = None) -> SearchChunkHit:
+def _search_hit(*, chunk_id: str | None = None, text: str | None = None) -> SearchChunkHit:
     sources = _sources()
     source = sources[str(ARTIFACT_ID)]
-    citation = build_evidence_citation(source=source, start_offset=0, end_offset=20)
     excerpt = source.text[0:20]
+    citation = build_evidence_citation(source=source, start_offset=0, end_offset=20)
     resolved_chunk_id = chunk_id or derive_chunk_id(
         source_sha256=source.source_sha256,
         start_offset=0,
@@ -133,7 +135,7 @@ def _search_hit(*, chunk_id: str | None = None) -> SearchChunkHit:
         artifact_id=ARTIFACT_ID,
         score=1.0,
         citation=citation,
-        text=source.text[:500],
+        text=text if text is not None else source.text[:500],
     )
 
 
@@ -309,3 +311,69 @@ def test_model_grounded_answer_repair_stops_after_two_calls(
 
     assert invoke_counts == [0, 1]
     assert client.calls == 2
+
+
+def test_chat_prompt_omits_lower_ranked_hits_when_budget_tight() -> None:
+    hits = [
+        _search_hit(chunk_id=f"chunk-{index}", text=f"chunk-{index} " + ("word " * 700))
+        for index in range(3)
+    ]
+
+    included = _select_hits_for_context_budget(
+        question="What access controls are implemented?",
+        hits=hits,
+        input_budget_tokens=400,
+    )
+
+    assert len(included) < len(hits)
+    assert included == tuple(hits[: len(included)])
+    prompt = _build_chat_prompt(
+        question="What access controls are implemented?",
+        hits=included,
+    )
+    assert hits[-1].chunk_id not in prompt
+
+
+def test_chat_prompt_rejects_when_no_authorized_chunk_fits() -> None:
+    hit = _search_hit(text="word " * 700)
+
+    with pytest.raises(
+        ChatValidationError,
+        match="cannot fit an authorized chat chunk",
+    ):
+        _select_hits_for_context_budget(
+            question="What access controls are implemented?",
+            hits=[hit],
+            input_budget_tokens=100,
+        )
+
+
+def test_chat_prompt_rejects_fixed_payload_over_budget_without_model_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _chat_config(
+        tmp_path,
+        TEXT_MODEL_CONTEXT_TOKENS=64,
+        TEXT_MODEL_MAX_OUTPUT_TOKENS=16,
+        CONTEXT_UTILIZATION_TARGET=1.0,
+    )
+    revision = _package_revision()
+    client = FakeTextClient(responses=[_valid_chat_response()])
+    monkeypatch.setattr(
+        "ato_service.text_llm.build_text_model_client",
+        lambda _config: client,
+    )
+
+    with pytest.raises(ChatValidationError, match="cannot fit chat prompt"):
+        _run(
+            _model_grounded_answer(
+                config=config,
+                revision=revision,
+                question="What access controls are implemented?" + (" extra" * 200),
+                hits=[_search_hit()],
+                sources=_sources(),
+            )
+        )
+
+    assert client.calls == 0

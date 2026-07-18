@@ -1,10 +1,26 @@
 # Release Evidence Index
 
-**Status:** Phase 6 integration and release gate (2026-07-14)  
+**Status:** Phase 6 integration and release gate (2026-07-14); upload-first intake **P0–P6** doc reconciliation note (2026-07-17)  
 **Repository tip:** snapshot at Phase 6 reconciliation; branch name is historical (`cursor/phase-6-integration-and-release-gate-f4f1`)  
-**Alembic head:** `20260717_0012` (`migrations/versions/20260717_0012_package_search_index.py`)
+**Alembic head:** `20260717_0013` (`migrations/versions/20260717_0013_defer_package_revision_metadata.py`)
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
+
+## Upload-first intake plan (bounded index note)
+
+Implementation plan [`UPLOAD_FIRST_INTAKE_PLAN.md`](UPLOAD_FIRST_INTAKE_PLAN.md) records **P0–P6 complete** and **P7 integration gate pending** (2026-07-17). Relevant automated evidence includes:
+
+| Area | Representative paths | Classification |
+| --- | --- | --- |
+| System soft-archive (P0) | [`tests/ato_service/test_systems.py`](../tests/ato_service/test_systems.py), OpenAPI/domain archive fields | PASS (code) |
+| Context packer (P1) | [`tests/ato_service/test_context_budget.py`](../tests/ato_service/test_context_budget.py), runtime schema `CONTEXT_UTILIZATION_TARGET` | PASS (code) |
+| Upload-first metadata deferral (P2) | Migration `20260717_0013`, OpenAPI create/PATCH metadata, portal minimal create | PASS (code) |
+| Intake MAP/REDUCE (P3) | [`src/ato_service/intake_map.py`](../src/ato_service/intake_map.py), [`intake_merge.py`](../src/ato_service/intake_merge.py), intake report contract in [`tests/test_contracts.py`](../tests/test_contracts.py) | PASS (code); pre-attestation MAP may be `policy_blocked` — not production model evidence |
+| Portal reveal UX (P4) | Portal components under `portal/src/components/RevisionMetadataPanel.tsx`, `IntakeReadinessPanel.tsx` | PASS (code) |
+| Single-user RBAC (P5) | [`tests/ato_service/test_ep06_security_matrix.py`](../tests/ato_service/test_ep06_security_matrix.py) (`SINGLE_USER_MODE_ENABLED`, default `false`) | PASS (code) |
+| User docs (P6) | Epics §2, talking track, [`PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md) | Reconciled 2026-07-17 |
+
+This note does **not** close **P7**, claim full product release, or close any hard stop. Dev mock scanner/routing behavior is not production evidence (**HS-004**, **HS-005** remain open).
 
 ## Evidence classification
 
@@ -37,7 +53,7 @@ This index links automated contract evidence, qualification assets, drill schema
 | Focused contract/operator/release suite | **219 passed** |
 | Non-integration regression (`-m "not integration"`) | **1619 passed**, 1 skipped, 20 deselected |
 | Ruff (`ruff check .`) | **0 errors** |
-| Alembic heads | **single head `20260717_0012`** |
+| Alembic heads | **single head `20260717_0013`** |
 | Portal vitest | **22 passed** |
 | Portal production build | **PASS** |
 | Playwright mocked rendering/authz | **6 passed** |
@@ -63,7 +79,7 @@ Historical doc-reconciliation record (unchanged gate record [`P6_GATE_RECORD.md`
 | --- | --- | --- |
 | Drill catalog and dispatch | [`src/ato_operator/drill_catalog.py`](../src/ato_operator/drill_catalog.py), [`drill_handlers.py`](../src/ato_operator/drill_handlers.py) | Dry-run default; hard-stop claims never close from mocks |
 | Drill record persistence | [`src/ato_operator/drill_records.py`](../src/ato_operator/drill_records.py) | Append-only under operator-supplied root |
-| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260717_0012` |
+| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260717_0013` |
 | Audit chain verify | [`src/ato_operator/audit_verify.py`](../src/ato_operator/audit_verify.py) | Requires live PostgreSQL for full chain walk |
 
 Live customer validation drills on RHEL hosts: **environment-not-run**.
@@ -78,15 +94,15 @@ Live customer validation drills on RHEL hosts: **environment-not-run**.
 
 | Check | Path | Expected head |
 | --- | --- | --- |
-| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260717_0012` |
-| Head assertion tests | [`tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration`](../tests/ato_service/test_db.py) | `20260717_0012` |
-| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260717_0012` |
+| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260717_0013` |
+| Head assertion tests | [`tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration`](../tests/ato_service/test_db.py) | `20260717_0013` |
+| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260717_0013` |
 
 ## Release package verification
 
 | Step | Command / asset | Classification |
 | --- | --- | --- |
-| Deterministic archive build | [`scripts/build_release.sh`](../scripts/build_release.sh) | PASS (code); integration dry-run **360 files**, migration head `20260717_0012` |
+| Deterministic archive build | [`scripts/build_release.sh`](../scripts/build_release.sh) | PASS (code); integration dry-run **360 files**, migration head `20260717_0013` |
 | Offline archive verify | [`scripts/verify_release.sh`](../scripts/verify_release.sh) | PASS (code); `signature_status: unavailable` (no publication/signing) |
 | Install layout (no side effects by default) | [`scripts/install.sh`](../scripts/install.sh) | PASS (code) via deployment-contract tests |
 | Portal bundle staging | `portal/dist` after `npm run build` | PASS (code) in integration environment |

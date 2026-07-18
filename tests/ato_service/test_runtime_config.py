@@ -10,7 +10,9 @@ from unittest.mock import patch
 import pytest
 
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
+from ato_service.package_rbac import DEFAULT_PACKAGE_ROLE_GROUPS, package_role_groups
 from ato_service.runtime_config import (
+    ContextBudgetSettings,
     RuntimeConfig,
     RuntimeConfigError,
     RuntimeConfigPathError,
@@ -18,6 +20,7 @@ from ato_service.runtime_config import (
     RuntimeConfigValidationError,
     RuntimeLimits,
     _parse_model_endpoint_url,
+    _resolve_context_budget_settings,
     _resolve_storage_data_path,
     load_runtime_config,
     load_runtime_config_from_dict,
@@ -375,6 +378,55 @@ def test_vision_model_enabled_rejects_non_boolean(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeConfigValidationError, match="VISION_MODEL_ENABLED"):
         _ = config.vision_model_enabled
+
+
+def test_single_user_mode_enabled_defaults_false(tmp_path: Path) -> None:
+    config = load_runtime_config_from_dict(_minimal_dev_document(), base_dir=tmp_path)
+    assert config.single_user_mode_enabled is False
+
+
+def test_single_user_mode_enabled_accepts_true(tmp_path: Path) -> None:
+    config = load_runtime_config_from_dict(
+        _minimal_dev_document(SINGLE_USER_MODE_ENABLED=True),
+        base_dir=tmp_path,
+    )
+    assert config.single_user_mode_enabled is True
+
+
+def test_single_user_mode_enabled_rejects_non_boolean(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="SINGLE_USER_MODE_ENABLED"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(SINGLE_USER_MODE_ENABLED="yes"),
+            base_dir=tmp_path,
+        )
+
+
+def test_runtime_config_load_resets_single_user_role_expansion(tmp_path: Path) -> None:
+    mapping = {
+        "system_owner": ["single-user-owners"],
+        "reviewer": ["single-user-reviewers"],
+    }
+    load_runtime_config_from_dict(
+        _minimal_dev_document(
+            SINGLE_USER_MODE_ENABLED=True,
+            OIDC_GROUP_ROLE_MAPPING=mapping,
+        ),
+        base_dir=tmp_path,
+    )
+    assert "single-user-owners" in package_role_groups()["approver"]
+    assert "single-user-reviewers" in package_role_groups()["approver"]
+
+    load_runtime_config_from_dict(
+        _minimal_dev_document(
+            SINGLE_USER_MODE_ENABLED=False,
+            OIDC_GROUP_ROLE_MAPPING=mapping,
+        ),
+        base_dir=tmp_path,
+    )
+    assert package_role_groups()["approver"] == ("approvers",)
+
+    load_runtime_config_from_dict(_minimal_dev_document(), base_dir=tmp_path)
+    assert package_role_groups() == DEFAULT_PACKAGE_ROLE_GROUPS
 
 
 def test_limits_property_validates_manually_constructed_config(tmp_path: Path) -> None:
@@ -917,3 +969,76 @@ def test_resolve_runtime_audit_hmac_key_enables_metadata_enforcement_for_onprem(
             reference,
             enforce_root_owned_file_metadata=True,
         )
+
+
+def test_context_utilization_target_defaults_to_point_seven(tmp_path: Path) -> None:
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+    }
+
+    config = load_runtime_config_from_dict(document, base_dir=tmp_path)
+
+    assert config.context_budget_settings == ContextBudgetSettings(utilization_target=0.70)
+
+
+def test_context_utilization_target_accepts_explicit_value(tmp_path: Path) -> None:
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+        "CONTEXT_UTILIZATION_TARGET": 0.85,
+    }
+
+    config = load_runtime_config_from_dict(document, base_dir=tmp_path)
+
+    assert config.context_budget_settings.utilization_target == 0.85
+
+
+@pytest.mark.parametrize(
+    ("invalid_value", "message"),
+    (
+        (0, "greater than 0"),
+        (1.01, "at most 1"),
+        (True, "must be a number"),
+    ),
+)
+def test_context_utilization_target_rejects_invalid_values(
+    invalid_value: object,
+    message: str,
+) -> None:
+    document = {
+        "CONTEXT_UTILIZATION_TARGET": invalid_value,
+    }
+
+    with pytest.raises(RuntimeConfigValidationError, match=message):
+        _resolve_context_budget_settings(document)
+
+
+@pytest.mark.parametrize("invalid_value", (0, 1.01, True))
+def test_context_utilization_target_schema_rejects_invalid_values(
+    tmp_path: Path,
+    invalid_value: object,
+) -> None:
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+        "CONTEXT_UTILIZATION_TARGET": invalid_value,
+    }
+
+    with pytest.raises(RuntimeConfigValidationError):
+        load_runtime_config_from_dict(document, base_dir=tmp_path)
+
+
+def test_resolve_text_model_context_budget_uses_runtime_defaults(tmp_path: Path) -> None:
+    document = {
+        "schema_version": "1.0.0",
+        "runtime_profile": "dev_local",
+        "TEXT_MODEL_CONTEXT_TOKENS": 8192,
+        "TEXT_MODEL_MAX_OUTPUT_TOKENS": 1024,
+    }
+
+    config = load_runtime_config_from_dict(document, base_dir=tmp_path)
+    budget = config.resolve_text_model_context_budget()
+
+    assert budget.utilization_target == 0.70
+    assert budget.input_budget_tokens == 5120

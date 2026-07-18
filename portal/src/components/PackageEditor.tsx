@@ -36,6 +36,7 @@ import {
   lookupDraftIssue,
   type DraftFieldIssue,
 } from "@/utils/draftValidation";
+import { focusDraftField, tabForDraftPointer } from "@/utils/draftEditorFocus";
 
 type PackageEditorProps = {
   draft: PackageRevisionDraft;
@@ -47,10 +48,14 @@ type PackageEditorProps = {
   validationIssues: DraftFieldIssue[];
   exportBlocked?: boolean;
   exportBlockers?: string[];
+  confirmationBlocked?: boolean;
+  confirmationBlockers?: string[];
   onDocumentChange: (document: PackageDraftDocument) => void;
   onSave: () => void;
   onReload: () => void;
   onConfirm: () => void;
+  focusRequestPointer?: string | null;
+  focusRequestNonce?: number;
 };
 
 const IMPLEMENTATION_STATUS_OPTIONS = [
@@ -108,7 +113,7 @@ function FieldRow({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" data-draft-pointer={pointer}>
       <div className="flex flex-wrap items-center gap-2">
         <Label className={fieldError ? "text-destructive" : undefined}>{label}</Label>
         <ProvenanceBadge pointer={pointer} provenance={provenance} />
@@ -130,10 +135,14 @@ export function PackageEditor({
   validationIssues,
   exportBlocked = false,
   exportBlockers = [],
+  confirmationBlocked = false,
+  confirmationBlockers = [],
   onDocumentChange,
   onSave,
   onReload,
   onConfirm,
+  focusRequestPointer = null,
+  focusRequestNonce = 0,
 }: PackageEditorProps) {
   const [activeTab, setActiveTab] = useState("package");
   const provenance = draft.field_provenance;
@@ -156,6 +165,35 @@ export function PackageEditor({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
+
+  useEffect(() => {
+    if (!focusRequestPointer) {
+      return;
+    }
+    const tab = tabForDraftPointer(focusRequestPointer, document);
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [activeTab, document, focusRequestNonce, focusRequestPointer]);
+
+  useEffect(() => {
+    if (
+      !focusRequestPointer ||
+      tabForDraftPointer(focusRequestPointer, document) !== activeTab
+    ) {
+      return;
+    }
+    let focusFrame = 0;
+    const mountFrame = window.requestAnimationFrame(() => {
+      focusFrame = window.requestAnimationFrame(() => {
+        focusDraftField(focusRequestPointer);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(mountFrame);
+      window.cancelAnimationFrame(focusFrame);
+    };
+  }, [activeTab, document, focusRequestNonce, focusRequestPointer]);
 
   const controlIds = useMemo(() => listSecurityControlIds(document), [document]);
 
@@ -603,17 +641,24 @@ export function PackageEditor({
           type="button"
           variant="default"
           disabled={
-            isDirty || saving || staleConflict || hasValidationIssues || exportBlocked
+            isDirty ||
+            saving ||
+            staleConflict ||
+            hasValidationIssues ||
+            exportBlocked ||
+            confirmationBlocked
           }
           onClick={onConfirm}
           title={
-            exportBlocked
-              ? "Resolve export readiness blockers before confirming."
-              : hasValidationIssues
-                ? "Resolve the highlighted validation issues before confirming."
-                : isDirty
-                  ? "Save draft before confirming."
-                  : undefined
+            confirmationBlocked
+              ? "Resolve confirmation readiness blockers before confirming."
+              : exportBlocked
+                ? "Resolve export readiness blockers before confirming."
+                : hasValidationIssues
+                  ? "Resolve the highlighted validation issues before confirming."
+                  : isDirty
+                    ? "Save draft before confirming."
+                    : undefined
           }
         >
           Confirm Package
@@ -623,6 +668,15 @@ export function PackageEditor({
             Confirm is blocked until required uploads and profile content are present
             {exportBlockers.length > 0 ? ` (${exportBlockers.length} item${exportBlockers.length === 1 ? "" : "s"})` : ""}.
             See Confirm readiness above.
+          </p>
+        ) : null}
+        {confirmationBlocked ? (
+          <p className="w-full text-sm text-destructive">
+            Confirm is blocked until revision metadata and intake readiness checks pass
+            {confirmationBlockers.length > 0
+              ? ` (${confirmationBlockers.join(", ")})`
+              : ""}
+            .
           </p>
         ) : null}
       </div>

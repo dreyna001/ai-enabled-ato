@@ -25,12 +25,6 @@ const PACKAGE_FILES: Record<SupportedProfileId, string> = {
   ),
 };
 
-const PROFILE_LABELS: Record<SupportedProfileId, string> = {
-  fisma_agency_security: "Agency FISMA security",
-  fedramp_rev5_transition: "FedRAMP Rev. 5 transition",
-  fedramp_20x_program: "FedRAMP 20x program",
-};
-
 export function packageFileForProfile(profileId: SupportedProfileId): string {
   return PACKAGE_FILES[profileId];
 }
@@ -40,14 +34,18 @@ export async function createSystem(page: Page, displayName: string): Promise<voi
   await expect(page.getByText(displayName)).toBeVisible({ timeout: 15_000 });
 }
 
+export async function createRevision(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Create revision" }).click();
+  await expect(page.getByText(/Revision created|Upload package files/i)).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
 export async function createRevisionForProfile(
   page: Page,
-  profileId: SupportedProfileId,
+  _profileId: SupportedProfileId,
 ): Promise<void> {
-  await page.locator("#profile-id").selectOption(profileId);
-  await expect(page.locator("#profile-id")).toHaveValue(profileId);
-  await page.getByRole("button", { name: "Create Revision With Selected Options" }).click();
-  await expect(page.getByText(PROFILE_LABELS[profileId])).toBeVisible({ timeout: 15_000 });
+  await createRevision(page);
 }
 
 export async function uploadAndFinalizePackage(

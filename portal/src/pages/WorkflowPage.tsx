@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Archive, Plus } from "lucide-react";
 import {
   ApiError,
+  archiveSystem,
   cancelRun,
   confirmRevision,
   createRevision,
@@ -27,6 +28,15 @@ import { PackageAssistantPanel } from "@/components/PackageAssistantPanel";
 import { PreflightPanel } from "@/components/PreflightPanel";
 import { ReviewExportWorkbench } from "@/components/ReviewExportWorkbench";
 import { RevisionCreateForm } from "@/components/RevisionCreateForm";
+import {
+  IntakeReadinessPanel,
+  type IntakeReportLike,
+} from "@/components/IntakeReadinessPanel";
+import type {
+  IntakeConflictManualEdit,
+  IntakeConflictResolution,
+} from "@/components/IntakeConflictList";
+import { RevisionMetadataPanel } from "@/components/RevisionMetadataPanel";
 import { TerminalIntakePanel } from "@/components/TerminalIntakePanel";
 import {
   RevisionWorkflowSkeleton,
@@ -50,9 +60,12 @@ import { cn } from "@/lib/utils";
 import type {
   AnalysisRun,
   CreateRevisionInput,
+  IntakeReport,
+  PackageDraftDocument,
   PackageRevision,
   PreflightResult,
   DraftExportReadiness,
+  RevisionMetadataSaveState,
   SessionInfo,
   System,
 } from "@/types";
@@ -72,6 +85,14 @@ import {
   runStatusLabel,
   runStatusVariant,
 } from "@/utils/statusLabels";
+import { shouldRevealRevisionMetadata } from "@/utils/revisionMetadata";
+import {
+  applyConflictCandidateSelection,
+  isMetadataOnlyConflictField,
+  pruneResolvedConflictsAfterEdit,
+} from "@/utils/draftConflictResolution";
+import { isEditableDraftPointer } from "@/utils/draftEditorFocus";
+import { validateDraftJsonPointer } from "@/utils/jsonPointer";
 
 type LoadState = "loading" | "ready" | "error" | "empty";
 
@@ -85,7 +106,20 @@ type ConfirmState =
       revisionId: string;
       etag: string;
     }
+  | {
+      kind: "archive-system";
+      systemId: string;
+      displayName: string;
+    }
   | null;
+
+function isSystemArchived(system: System): boolean {
+  return system.archived_at != null;
+}
+
+function visibleSystems(systems: System[], showArchived: boolean): System[] {
+  return showArchived ? systems : systems.filter((system) => !isSystemArchived(system));
+}
 
 function AlertBanner({
   tone,
@@ -140,6 +174,52 @@ function SelectionList({
   );
 }
 
+function Phase4IntakePanels({
+  intakeReport,
+  reportLoading,
+  reportError,
+  onRefresh,
+  conflictControlsDisabled,
+  conflictStatusMessage,
+  conflictActionError,
+  onSelectConflictCandidate,
+  onManualConflictEdit,
+}: {
+  intakeReport: IntakeReport | null;
+  reportLoading: boolean;
+  reportError: string;
+  onRefresh: () => void;
+  conflictControlsDisabled: boolean;
+  conflictStatusMessage: string;
+  conflictActionError: string;
+  onSelectConflictCandidate?: (resolution: IntakeConflictResolution) => void;
+  onManualConflictEdit?: (resolution: IntakeConflictManualEdit) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {conflictStatusMessage ? (
+        <p className="text-sm text-foreground" role="status">
+          {conflictStatusMessage}
+        </p>
+      ) : null}
+      {conflictActionError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {conflictActionError}
+        </p>
+      ) : null}
+      <IntakeReadinessPanel
+        report={intakeReport as IntakeReportLike | null}
+        loading={reportLoading}
+        error={reportError || null}
+        onRetry={onRefresh}
+        conflictControlsDisabled={conflictControlsDisabled}
+        onManualConflictEdit={onManualConflictEdit}
+        onSelectConflictCandidate={onSelectConflictCandidate}
+      />
+    </div>
+  );
+}
+
 type WorkflowPageProps = {
   session: SessionInfo;
   readinessLoaded?: boolean;
@@ -174,17 +254,67 @@ export function WorkflowPage({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [systemsState, setSystemsState] = useState<LoadState>("loading");
+  const [showArchived, setShowArchived] = useState(false);
   const [revisionState, setRevisionState] = useState<LoadState>("empty");
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
+  const [metadataSaveState, setMetadataSaveState] = useState<RevisionMetadataSaveState>({
+    isDirty: false,
+    saving: false,
+    staleConflict: false,
+    isComplete: false,
+  });
+  const [intakeReport, setIntakeReport] = useState<IntakeReport | null>(null);
+  const [intakeReportLoadState, setIntakeReportLoadState] = useState({
+    loading: false,
+    error: "",
+  });
+  const [intakeReportRefreshKey, setIntakeReportRefreshKey] = useState(0);
+  const [conflictStatusMessage, setConflictStatusMessage] = useState("");
+  const [conflictActionError, setConflictActionError] = useState("");
+  const [editorFocusPointer, setEditorFocusPointer] = useState<string | null>(null);
+  const [editorFocusNonce, setEditorFocusNonce] = useState(0);
 
   const draftEnabled =
     Boolean(revision) && revision?.status === "awaiting_confirmation";
 
   const draftExportBlocked =
     draftExportReadiness !== null && !draftExportReadiness.export_eligible;
+
+  const metadataBlocked =
+    metadataSaveState.isDirty ||
+    metadataSaveState.saving ||
+    metadataSaveState.staleConflict ||
+    !metadataSaveState.isComplete;
+
+  const intakeReportIsCurrent =
+    intakeReport?.package_revision_id === revision?.package_revision_id;
+  const intakeBlocked =
+    revision?.status === "awaiting_confirmation" &&
+    (intakeReportLoadState.loading ||
+      Boolean(intakeReportLoadState.error) ||
+      !intakeReportIsCurrent ||
+      intakeReport?.confirmation.allowed !== true);
+  const confirmationBlockers = Array.from(
+    new Set([
+      ...(metadataSaveState.isDirty ? ["unsaved_metadata"] : []),
+      ...(metadataSaveState.saving ? ["metadata_saving"] : []),
+      ...(metadataSaveState.staleConflict ? ["metadata_stale"] : []),
+      ...(!metadataSaveState.isComplete ? ["metadata_incomplete"] : []),
+      ...(intakeReportLoadState.loading ? ["intake_report_loading"] : []),
+      ...(intakeReportLoadState.error ? ["intake_report_error"] : []),
+      ...(!intakeReportIsCurrent && !intakeReportLoadState.loading
+        ? ["intake_report_unavailable"]
+        : []),
+      ...(intakeReportIsCurrent && intakeReport && !intakeReport.confirmation.allowed
+        ? intakeReport.confirmation.blockers.length > 0
+          ? intakeReport.confirmation.blockers
+          : ["intake_confirmation_not_allowed"]
+        : []),
+    ]),
+  );
 
   const readinessState = {
     loaded: readinessLoaded,
@@ -197,8 +327,103 @@ export function WorkflowPage({
   const packageDraft = usePackageDraft(session, selectedRevisionId, {
     enabled: draftEnabled,
     revisionImpactLevel: revision?.impact_level ?? null,
-    onSaved: () => setMessage("Draft saved."),
+    onSaved: () => {
+      setMessage("Draft saved.");
+      setIntakeReportRefreshKey((value) => value + 1);
+    },
   });
+
+  const conflictControlsDisabled =
+    revision?.status !== "awaiting_confirmation" ||
+    packageDraft.loadState !== "ready" ||
+    !packageDraft.document ||
+    packageDraft.saving ||
+    packageDraft.staleConflict;
+
+  const handleDraftDocumentChange = useCallback(
+    (nextDocument: PackageDraftDocument) => {
+      const previousDocument = packageDraft.document;
+      if (!previousDocument) {
+        packageDraft.updateDocument(nextDocument);
+        return;
+      }
+      const conflicts = intakeReport?.conflicts ?? [];
+      const prunedDocument = pruneResolvedConflictsAfterEdit(
+        previousDocument,
+        nextDocument,
+        conflicts,
+      );
+      packageDraft.updateDocument(prunedDocument);
+    },
+    [intakeReport?.conflicts, packageDraft.document, packageDraft.updateDocument],
+  );
+
+  const handleSelectConflictCandidate = useCallback(
+    (resolution: IntakeConflictResolution) => {
+      setConflictActionError("");
+      setConflictStatusMessage("");
+      if (!packageDraft.document) {
+        setConflictActionError("Load the package draft before resolving conflicts.");
+        return;
+      }
+      if (isMetadataOnlyConflictField(resolution.field)) {
+        setConflictActionError(
+          "This conflict targets revision metadata. Edit it in the metadata panel above.",
+        );
+        return;
+      }
+      const pointerError = validateDraftJsonPointer(resolution.field);
+      if (pointerError) {
+        setConflictActionError(pointerError.message);
+        return;
+      }
+      const result = applyConflictCandidateSelection(
+        packageDraft.document,
+        intakeReport?.conflicts ?? [],
+        resolution.field,
+        resolution.candidateIndex,
+      );
+      if (!result.ok) {
+        setConflictActionError(result.error);
+        return;
+      }
+      packageDraft.updateDocument(result.document);
+      setConflictStatusMessage(
+        "Applied the selected value to the draft. Save draft to refresh intake readiness.",
+      );
+    },
+    [intakeReport?.conflicts, packageDraft.document, packageDraft.updateDocument],
+  );
+
+  const handleManualConflictEdit = useCallback(
+    (resolution: IntakeConflictManualEdit) => {
+      setConflictActionError("");
+      setConflictStatusMessage("");
+      if (isMetadataOnlyConflictField(resolution.field)) {
+        setConflictActionError(
+          "This conflict targets revision metadata. Edit it in the metadata panel above.",
+        );
+        return;
+      }
+      const pointerError = validateDraftJsonPointer(resolution.field);
+      if (pointerError) {
+        setConflictActionError(pointerError.message);
+        return;
+      }
+      if (!isEditableDraftPointer(resolution.field)) {
+        setConflictActionError(
+          "This field is not editable in the package editor. Resolve it another way or leave the conflict for review.",
+        );
+        return;
+      }
+      setEditorFocusPointer(resolution.field);
+      setEditorFocusNonce((value) => value + 1);
+      setConflictStatusMessage(
+        "Edit the highlighted field in the package editor below. The conflict stays open until the value changes.",
+      );
+    },
+    [],
+  );
 
   const syncRoute = useCallback(
     (systemId: string, revisionId: string) => {
@@ -221,7 +446,7 @@ export function WorkflowPage({
     async (signal?: AbortSignal) => {
       setSystemsState("loading");
       try {
-        const items = await listSystems({ signal });
+        const items = await listSystems({ signal, includeArchived: showArchived });
         setSystems(items);
         setSystemsState(items.length === 0 ? "empty" : "ready");
         setError("");
@@ -233,7 +458,7 @@ export function WorkflowPage({
         setError(formatApiError(err));
       }
     },
-    [],
+    [showArchived],
   );
 
   const refreshRevisions = useCallback(
@@ -331,7 +556,14 @@ export function WorkflowPage({
 
   useEffect(() => {
     if (!selectedSystemId && systems.length > 0) {
-      const next = routeSystemId || systems[0].system_id;
+      const available = visibleSystems(systems, showArchived);
+      if (available.length === 0) {
+        return;
+      }
+      const next =
+        routeSystemId && available.some((system) => system.system_id === routeSystemId)
+          ? routeSystemId
+          : available[0].system_id;
       setSelectedSystemId(next);
       syncRoute(next, selectedRevisionId);
     }
@@ -339,8 +571,42 @@ export function WorkflowPage({
     routeSystemId,
     selectedRevisionId,
     selectedSystemId,
+    showArchived,
     syncRoute,
     systems,
+  ]);
+
+  useEffect(() => {
+    if (systemsState !== "ready") {
+      return;
+    }
+    const available = visibleSystems(systems, showArchived);
+    if (available.length === 0) {
+      if (selectedSystemId) {
+        setSelectedSystemId("");
+        setSelectedRevisionId("");
+        syncRoute("", "");
+      }
+      return;
+    }
+    const selectedVisible = available.some((system) => system.system_id === selectedSystemId);
+    if (selectedVisible) {
+      return;
+    }
+    const next =
+      routeSystemId && available.some((system) => system.system_id === routeSystemId)
+        ? routeSystemId
+        : available[0].system_id;
+    setSelectedSystemId(next);
+    setSelectedRevisionId("");
+    syncRoute(next, "");
+  }, [
+    routeSystemId,
+    selectedSystemId,
+    showArchived,
+    syncRoute,
+    systems,
+    systemsState,
   ]);
 
   useEffect(() => {
@@ -381,6 +647,18 @@ export function WorkflowPage({
     return () => controller.abort();
   }, [refreshRunDetail]);
 
+  useEffect(() => {
+    setMetadataSaveState({
+      isDirty: false,
+      saving: false,
+      staleConflict: false,
+      isComplete: false,
+    });
+    setIntakeReport(null);
+    setIntakeReportLoadState({ loading: false, error: "" });
+    setIntakeReportRefreshKey(0);
+  }, [selectedRevisionId]);
+
   usePolling(() => refreshRevisionDetail(undefined, { silent: true }), {
     enabled:
       Boolean(revision) &&
@@ -411,6 +689,11 @@ export function WorkflowPage({
         setMessage("Revision confirmed and sealed.");
         await refreshRevisionDetail();
       }
+      if (confirmState.kind === "archive-system") {
+        await archiveSystem(session, confirmState.systemId);
+        setMessage(`System "${confirmState.displayName}" archived.`);
+        await refreshSystems();
+      }
       setConfirmState(null);
     } catch (err) {
       if (
@@ -430,6 +713,12 @@ export function WorkflowPage({
     }
   };
 
+  const displayedSystems = visibleSystems(systems, showArchived);
+  const selectedSystem = systems.find((system) => system.system_id === selectedSystemId);
+  const canArchiveSelectedSystem =
+    Boolean(selectedSystem) && !isSystemArchived(selectedSystem!);
+  const showRevisionMetadata = Boolean(revision && shouldRevealRevisionMetadata(revision));
+
   if (systemsState === "error" && systems.length === 0) {
     return <PortalLoadFailure message={error || "Could not load systems."} />;
   }
@@ -445,19 +734,47 @@ export function WorkflowPage({
             <CardTitle>Systems</CardTitle>
             <CardDescription>Select or create a system for Package Revisions.</CardDescription>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
-              void createSystem(session, `System ${systems.length + 1}`)
-                .then(() => refreshSystems())
-                .then(() => setMessage("System created."))
-                .catch((err) => setError(formatApiError(err)));
-            }}
-          >
-            <Plus />
-            Create System
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={showArchived ? "default" : "outline"}
+              aria-pressed={showArchived}
+              onClick={() => setShowArchived((value) => !value)}
+            >
+              Show archived
+            </Button>
+            {canArchiveSelectedSystem ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setConfirmState({
+                    kind: "archive-system",
+                    systemId: selectedSystem!.system_id,
+                    displayName: selectedSystem!.display_name,
+                  })
+                }
+              >
+                <Archive />
+                Archive System
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                void createSystem(session, `System ${systems.length + 1}`)
+                  .then(() => refreshSystems())
+                  .then(() => setMessage("System created."))
+                  .catch((err) => setError(formatApiError(err)));
+              }}
+            >
+              <Plus />
+              Create System
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {systemsState === "loading" ? <SystemsListSkeleton /> : null}
@@ -476,18 +793,41 @@ export function WorkflowPage({
             />
           ) : null}
           {systemsState === "ready" ? (
-            <SelectionList
-              items={systems.map((item) => ({
-                id: item.system_id,
-                label: item.display_name,
-              }))}
-              selectedId={selectedSystemId}
-              onSelect={(id) => {
-                setSelectedSystemId(id);
-                setSelectedRevisionId("");
-                syncRoute(id, "");
-              }}
-            />
+            displayedSystems.length === 0 ? (
+              <EmptyState
+                title="No active systems"
+                description={
+                  showArchived
+                    ? "No systems match the current view."
+                    : "All systems are archived. Turn on Show archived to view them."
+                }
+              />
+            ) : (
+              <SelectionList
+                items={displayedSystems.map((item) => ({
+                  id: item.system_id,
+                  label: item.display_name,
+                  status: isSystemArchived(item) ? "archived" : undefined,
+                }))}
+                selectedId={selectedSystemId}
+                onSelect={(id) => {
+                  setSelectedSystemId(id);
+                  setSelectedRevisionId("");
+                  syncRoute(id, "");
+                }}
+                renderLabel={(item) => (
+                  <>
+                    {item.label}
+                    {item.status === "archived" ? (
+                      <>
+                        {" "}
+                        <Badge variant="muted">Archived</Badge>
+                      </>
+                    ) : null}
+                  </>
+                )}
+              />
+            )
           ) : null}
         </CardContent>
       </Card>
@@ -587,6 +927,37 @@ export function WorkflowPage({
               <IntakeProgressPanel status={revision.status} />
             ) : null}
 
+            {showRevisionMetadata ? (
+              <>
+                <RevisionMetadataPanel
+                  session={session}
+                  revision={revision}
+                  refreshKey={`${revision.revision_version}:${intakeReportRefreshKey}`}
+                  onRevisionUpdated={(updated) => {
+                    setRevision(updated);
+                    setIntakeReportRefreshKey((value) => value + 1);
+                    if (updated.status === "awaiting_confirmation") {
+                      void packageDraft.reload();
+                    }
+                  }}
+                  onMetadataStateChange={setMetadataSaveState}
+                  onIntakeReportChange={setIntakeReport}
+                  onReportLoadStateChange={setIntakeReportLoadState}
+                />
+                <Phase4IntakePanels
+                  intakeReport={intakeReport}
+                  reportLoading={intakeReportLoadState.loading}
+                  reportError={intakeReportLoadState.error}
+                  onRefresh={() => setIntakeReportRefreshKey((value) => value + 1)}
+                  conflictControlsDisabled={conflictControlsDisabled}
+                  conflictStatusMessage={conflictStatusMessage}
+                  conflictActionError={conflictActionError}
+                  onManualConflictEdit={handleManualConflictEdit}
+                  onSelectConflictCandidate={handleSelectConflictCandidate}
+                />
+              </>
+            ) : null}
+
             {revision.status === "invalid" ||
             revision.status === "quarantined" ||
             revision.status === "archived" ? (
@@ -635,7 +1006,9 @@ export function WorkflowPage({
                       validationIssues={packageDraft.validationIssues}
                       exportBlocked={draftExportBlocked}
                       exportBlockers={draftExportReadiness?.export_blockers ?? []}
-                      onDocumentChange={packageDraft.updateDocument}
+                      confirmationBlocked={metadataBlocked || intakeBlocked}
+                      confirmationBlockers={confirmationBlockers}
+                      onDocumentChange={handleDraftDocumentChange}
                       onSave={() => void packageDraft.saveDraft()}
                       onReload={() => void packageDraft.reload()}
                       onConfirm={() =>
@@ -645,6 +1018,8 @@ export function WorkflowPage({
                           etag: packageDraft.etag,
                         })
                       }
+                      focusRequestPointer={editorFocusPointer}
+                      focusRequestNonce={editorFocusNonce}
                     />
                   </div>
                 ) : null}
@@ -816,19 +1191,25 @@ export function WorkflowPage({
             ? "Cancel Analysis Run"
             : confirmState?.kind === "confirm-revision"
               ? "Confirm Package"
-              : "Confirm Action"
+              : confirmState?.kind === "archive-system"
+                ? "Archive System"
+                : "Confirm Action"
         }
         description={
           confirmState?.kind === "cancel-run"
             ? "Cancel the in-flight deterministic analysis run?"
             : confirmState?.kind === "confirm-revision"
               ? "Seal the displayed package draft as an immutable ready revision?"
-              : ""
+              : confirmState?.kind === "archive-system"
+                ? `Archive "${confirmState.displayName}"? It will be hidden from the default system list. You can show archived systems again with Show archived.`
+                : ""
         }
         confirmLabel={
           confirmState?.kind === "cancel-run"
             ? "Cancel Run"
-            : "Confirm Package"
+            : confirmState?.kind === "archive-system"
+              ? "Archive System"
+              : "Confirm Package"
         }
         confirming={confirming}
         error={confirmError}
