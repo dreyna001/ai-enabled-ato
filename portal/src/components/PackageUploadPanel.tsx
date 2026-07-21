@@ -10,6 +10,7 @@ import {
   inferArtifactKind,
   isArtifactKind,
   UPLOAD_ACCEPT,
+  validateUploadFile,
 } from "@/utils/artifactKinds";
 import { formatApiError } from "@/utils/formatApiError";
 import { sanitizeDisplayFilename } from "@/utils/downloadFilename";
@@ -50,13 +51,23 @@ export function PackageUploadPanel({
   const [panelError, setPanelError] = useState("");
 
   const enqueueFiles = (files: FileList | File[]) => {
-    const next = Array.from(files).map((file) => ({
-      file,
-      artifactKind: inferArtifactKind(file),
-      status: "pending" as const,
-    }));
+    const next = Array.from(files).map((file) => {
+      const validationError = validateUploadFile(file);
+      return {
+        file,
+        artifactKind: inferArtifactKind(file),
+        status: validationError ? ("error" as const) : ("pending" as const),
+        error: validationError ?? undefined,
+      };
+    });
     setQueue((current) => [...current, ...next]);
-    setPanelError("");
+    if (next.some((entry) => entry.status === "error")) {
+      setPanelError(
+        "One or more selected files are not supported for upload. Remove them or choose a supported format.",
+      );
+    } else {
+      setPanelError("");
+    }
   };
 
   const uploadAll = async () => {

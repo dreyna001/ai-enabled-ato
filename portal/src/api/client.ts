@@ -50,7 +50,7 @@ import type {
   SessionInfo,
   System,
 } from "../types";
-import type { ArtifactKind } from "@/utils/artifactKinds";
+import { prepareUploadFile, type ArtifactKind } from "@/utils/artifactKinds";
 import { parseContentDispositionFilename } from "@/utils/downloadFilename";
 
 export type ApiErrorKind = "cancelled" | "timeout" | "http" | "invalid_response";
@@ -509,8 +509,9 @@ export async function uploadPackageFile(
   artifactKind: ArtifactKind,
   options: ApiFetchOptions = {},
 ): Promise<void> {
+  const uploadFile = prepareUploadFile(file);
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", uploadFile);
   form.append("artifact_kind", artifactKind);
   const response = await apiFetch(
     `${API_BASE}/package-revisions/${revisionId}/files`,

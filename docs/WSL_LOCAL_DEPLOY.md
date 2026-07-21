@@ -211,8 +211,8 @@ From the repository root inside WSL:
 
 Open http://localhost:5173 in Windows. The launcher installs portal dependencies when missing and configures the Vite dev server to proxy API calls to the WSL API on http://127.0.0.1:8001.
 
-Synthetic demo package walkthrough:
-`data/synthetic-packages/fisma-demo-portal/README.md`.
+Synthetic demo package walkthrough: [`docs/PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md).
+Upload `data/synthetic-packages/fisma-demo-portal/agency-security-plan-excerpt.json` only.
 
 ## Out of scope
 
