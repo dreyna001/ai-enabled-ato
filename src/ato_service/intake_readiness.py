@@ -61,7 +61,6 @@ _INTAKE_EXTENSION_KEYS = frozenset(
         "intake_gaps",
         "intake_omitted_chunks",
         "intake_context_complete",
-        "intake_metadata_suggestions",
     }
 )
 _HUMAN_ONLY_FIELDS = frozenset({"data_origin", "sensitivity"})
@@ -158,7 +157,6 @@ class IntakeMergeSnapshot:
     omitted_chunk_refs: tuple[OmittedChunkRef, ...] = ()
     context_complete: bool | None = None
     extra_gaps: tuple[IntakeGap, ...] = ()
-    metadata_suggestions: dict[str, Any] | None = None
 
 
 class IntakeMergeAdapter(Protocol):
@@ -201,7 +199,6 @@ class DefaultIntakeMergeAdapter:
             extra_gaps=_parse_intake_gaps(extensions),
             omitted_chunk_refs=_parse_intake_omitted_chunks(extensions),
             context_complete=_parse_intake_context_complete(extensions),
-            metadata_suggestions=_parse_metadata_suggestions(extensions),
         )
 
 
@@ -563,14 +560,8 @@ def _validate_metadata_suggestions(value: Any) -> dict[str, Any]:
     return suggestions
 
 
-def _parse_metadata_suggestions(
-    extensions: dict[str, Any],
-) -> dict[str, Any] | None:
-    if "intake_metadata_suggestions" not in extensions:
-        return None
-    return _validate_metadata_suggestions(
-        extensions["intake_metadata_suggestions"]
-    )
+def _empty_suggested_metadata() -> dict[str, Any]:
+    return _validate_metadata_suggestions(None)
 
 
 def _human_attestation(revision: Any) -> dict[str, AttestationPresence]:
@@ -959,9 +950,7 @@ def build_intake_report(
         project_root=project_root,
         draft_document=context.draft_document,
     )
-    suggested_metadata = _validate_metadata_suggestions(
-        merge_snapshot.metadata_suggestions
-    )
+    suggested_metadata = _empty_suggested_metadata()
     gaps = _collect_gaps(
         revision=context.package_revision,
         source_artifacts=context.source_artifacts,

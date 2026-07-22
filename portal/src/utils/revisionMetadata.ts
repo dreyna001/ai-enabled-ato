@@ -1,6 +1,6 @@
 import type {
+  CreateRevisionInput,
   DataOrigin,
-  IntakeReportSuggestedMetadata,
   PackageRevision,
   PatchPackageRevisionMetadataInput,
   ProfileId,
@@ -15,20 +15,17 @@ export type RevisionMetadataFormValues = {
   sensitivity: Sensitivity | "";
 };
 
-export function shouldRevealRevisionMetadata(revision: PackageRevision): boolean {
-  return revision.status !== "uploading";
+export function shouldRevealRevisionMetadata(_revision: PackageRevision): boolean {
+  return true;
 }
 
 export function isRevisionMetadataEditable(revision: PackageRevision): boolean {
   return (
+    revision.status === "uploading" ||
     revision.status === "scanning" ||
     revision.status === "extracting" ||
     revision.status === "awaiting_confirmation"
   );
-}
-
-function isUnsetRevisionValue(value: string | null | undefined): boolean {
-  return value == null || value === "";
 }
 
 function isProfileId(value: unknown): value is ProfileId {
@@ -80,29 +77,29 @@ export function metadataValuesFromRevision(
   };
 }
 
-export function applySuggestedMetadata(
-  revision: PackageRevision,
-  suggestions: IntakeReportSuggestedMetadata | null | undefined,
-): RevisionMetadataFormValues {
-  const base = metadataValuesFromRevision(revision);
-  if (!suggestions) {
-    return base;
+export function buildCreateRevisionInput(
+  values: RevisionMetadataFormValues,
+  parentRevisionId: string | null,
+): CreateRevisionInput {
+  const normalized = normalizeMetadataFormForProfile(values);
+  const base: CreateRevisionInput = {
+    parent_revision_id: parentRevisionId,
+    profile_id: normalized.profile_id as ProfileId,
+    data_origin: normalized.data_origin as DataOrigin,
+    sensitivity: normalized.sensitivity as Sensitivity,
+  };
+  if (normalized.profile_id === "fedramp_20x_program") {
+    return {
+      ...base,
+      certification_class: normalized.certification_class as "B" | "C",
+      impact_level: null,
+    };
   }
-
-  if (isUnsetRevisionValue(revision.profile_id) && isProfileId(suggestions.profile_id)) {
-    base.profile_id = suggestions.profile_id;
-  }
-  if (
-    isUnsetRevisionValue(revision.certification_class) &&
-    isCertificationClass(suggestions.certification_class)
-  ) {
-    base.certification_class = suggestions.certification_class;
-  }
-  if (isUnsetRevisionValue(revision.impact_level) && isImpactLevel(suggestions.impact_level)) {
-    base.impact_level = suggestions.impact_level;
-  }
-
-  return normalizeMetadataFormForProfile(base);
+  return {
+    ...base,
+    certification_class: null,
+    impact_level: normalized.impact_level as "low" | "moderate" | "high",
+  };
 }
 
 export function normalizeMetadataFormForProfile(

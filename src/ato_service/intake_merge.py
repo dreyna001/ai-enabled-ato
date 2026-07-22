@@ -36,12 +36,10 @@ from ato_service.intake_map import (
     IntakeMapStepResult as MapOrchestrationStepResult,
     ParsedMapFact,
     ParsedMapResponse,
-    ParsedMapSuggestions,
 )
 from ato_service.normalize_proposal.value_validation import validate_proposed_value_for_target
 
 MAP_RESULT_SCHEMA_VERSION = "1.0.0"
-METADATA_CONFLICT_PREFIX = "/_intake_metadata"
 _HUMAN_ONLY_TARGET_MARKERS = ("data_origin", "sensitivity")
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _FORMAT_CHECKER = FormatChecker()
@@ -88,7 +86,6 @@ class IntakeMapStepResult:
     step_key: str
     context_complete: bool
     proposals: tuple[IntakeMapProposal, ...]
-    metadata_suggestions: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,11 +211,7 @@ def reduce_intake_map_results(
             )
         )
 
-    metadata_suggestions, metadata_conflicts = _aggregate_metadata_suggestions(
-        validated_steps
-    )
-    conflicts.extend(metadata_conflicts)
-
+    metadata_suggestions: dict[str, Any] = {}
     context_complete = all(step.context_complete for step in validated_steps)
     extensions["intake_conflicts"] = [
         _conflict_to_dict(conflict) for conflict in _sorted_conflicts(conflicts)
@@ -320,14 +313,10 @@ def adapt_orchestrated_map_steps_for_reduce(
             )
 
         proposals: list[IntakeMapProposal] = []
-        metadata_suggestions: dict[str, Any] = {}
         if (
             orchestration.parsed_response is not None
             and orchestration.validation_outcome in _MAP_SUCCESS_OUTCOMES
         ):
-            metadata_suggestions = _metadata_from_map_suggestions(
-                orchestration.parsed_response.suggestions
-            )
             for fact in orchestration.parsed_response.facts:
                 proposal, gap = _proposal_from_map_fact(
                     fact=fact,
@@ -347,7 +336,6 @@ def adapt_orchestrated_map_steps_for_reduce(
                 step_key=orchestration.step_key,
                 context_complete=orchestration.context_complete,
                 proposals=tuple(proposals),
-                metadata_suggestions=metadata_suggestions,
             )
         )
 
@@ -432,24 +420,7 @@ def intake_reduce_audit_metadata(
     }
     if merge_digest is not None:
         payload["merge_digest"] = merge_digest
-    if merge_result.metadata_suggestions:
-        payload["metadata_suggestions"] = dict(
-            sorted(merge_result.metadata_suggestions.items())
-        )
     return payload
-
-
-def _metadata_from_map_suggestions(
-    suggestions: ParsedMapSuggestions,
-) -> dict[str, Any]:
-    metadata: dict[str, Any] = {}
-    if suggestions.profile_id:
-        metadata["profile_id"] = suggestions.profile_id.strip()
-    if suggestions.impact_level in {"low", "moderate", "high"}:
-        metadata["impact_level"] = suggestions.impact_level
-    if suggestions.certification_class in {"A", "B", "C"}:
-        metadata["certification_class"] = suggestions.certification_class
-    return _validate_metadata_suggestions(metadata) if metadata else {}
 
 
 def _proposal_from_map_fact(
@@ -579,23 +550,11 @@ def _coerce_map_step_result(
         seen_proposal_ids.add(proposal_id)
         parsed_proposals.append(proposal)
 
-    metadata = payload.get("metadata_suggestions")
-    if metadata is None:
-        metadata_dict: dict[str, Any] = {}
-    elif isinstance(metadata, dict):
-        metadata_dict = _validate_metadata_suggestions(metadata)
-    else:
-        raise IntakeMergeError(
-            "metadata_suggestions must be an object",
-            error_code="intake_merge_invalid_input",
-        )
-
     return IntakeMapStepResult(
         step_id=step_id,
         step_key=step_key,
         context_complete=bool(payload["context_complete"]),
         proposals=tuple(parsed_proposals),
-        metadata_suggestions=metadata_dict,
     )
 
 
@@ -789,90 +748,6 @@ def _merge_target_group(
     return None
 
 
-def _aggregate_metadata_suggestions(
-    steps: Sequence[IntakeMapStepResult],
-) -> tuple[dict[str, Any], list[IntakeFieldConflict]]:
-    collected: dict[str, list[tuple[str, IntakeMapStepResult]]] = {
-        "profile_id": [],
-        "certification_class": [],
-        "impact_level": [],
-    }
-    for step in steps:
-        for field_name, value in step.metadata_suggestions.items():
-            if field_name not in collected:
-                continue
-            collected[field_name].append((stable_json_dumps(value), step))
-
-    suggestions: dict[str, Any] = {}
-    conflicts: list[IntakeFieldConflict] = []
-    for field_name in sorted(collected):
-        entries = collected[field_name]
-        if not entries:
-            continue
-        unique_values = sorted({normalized for normalized, _ in entries})
-        if len(unique_values) > 1:
-            target_pointer = f"{METADATA_CONFLICT_PREFIX}/{field_name}"
-            candidates = tuple(
-                {
-                    "value": json.loads(normalized),
-                    "source_step_key": step.step_key,
-                    "source_step_id": str(step.step_id).lower(),
-                    "resolution": "unresolved",
-                }
-                for normalized, step in sorted(entries, key=lambda item: item[1].step_key)
-            )
-            conflicts.append(
-                IntakeFieldConflict(
-                    conflict_id=_metadata_conflict_id(field_name, entries),
-                    target_pointer=target_pointer,
-                    resolution="unresolved",
-                    candidates=candidates,
-                )
-            )
-            continue
-        suggestions[field_name] = json.loads(unique_values[0])
-    return suggestions, conflicts
-
-
-def _validate_metadata_suggestions(metadata: dict[str, Any]) -> dict[str, Any]:
-    validated: dict[str, Any] = {}
-    for key, value in metadata.items():
-        if key in {"data_origin", "sensitivity"}:
-            raise IntakeMergeError(
-                "metadata_suggestions must not include data_origin or sensitivity",
-                error_code="intake_merge_invalid_input",
-            )
-        if key == "profile_id":
-            if not isinstance(value, str) or not value.strip():
-                raise IntakeMergeError(
-                    "profile_id suggestion must be a non-empty string",
-                    error_code="intake_merge_invalid_input",
-                )
-            validated[key] = value.strip()
-            continue
-        if key == "certification_class":
-            if value not in {"A", "B", "C"}:
-                raise IntakeMergeError(
-                    "certification_class suggestion is invalid",
-                    error_code="intake_merge_invalid_input",
-                )
-            validated[key] = value
-            continue
-        if key == "impact_level":
-            if value not in {"low", "moderate", "high"}:
-                raise IntakeMergeError(
-                    "impact_level suggestion is invalid",
-                    error_code="intake_merge_invalid_input",
-                )
-            validated[key] = value
-            continue
-        raise IntakeMergeError(
-            f"unsupported metadata suggestion field: {key}",
-            error_code="intake_merge_invalid_input",
-        )
-    return validated
-
-
 def _reject_human_only_or_prohibited_target(pointer: str) -> None:
     lowered = pointer.casefold()
     for marker in _HUMAN_ONLY_TARGET_MARKERS:
@@ -1005,20 +880,6 @@ def _conflict_id(target_pointer: str, entries: Sequence[IntakeMapProposal]) -> s
         {
             "target_pointer": target_pointer,
             "candidates": [_proposal_identity(entry) for entry in entries],
-        }
-    )
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
-
-
-def _metadata_conflict_id(
-    field_name: str,
-    entries: Sequence[tuple[str, IntakeMapStepResult]],
-) -> str:
-    material = stable_json_dumps(
-        {
-            "field_name": field_name,
-            "steps": [step.step_key for _, step in entries],
-            "values": sorted({normalized for normalized, _ in entries}),
         }
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()

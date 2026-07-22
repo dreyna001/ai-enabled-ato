@@ -34,7 +34,18 @@ export async function createSystem(page: Page, displayName: string): Promise<voi
   await expect(page.getByText(displayName)).toBeVisible({ timeout: 15_000 });
 }
 
-export async function createRevision(page: Page): Promise<void> {
+export async function createRevision(
+  page: Page,
+  profileId: SupportedProfileId,
+): Promise<void> {
+  await page.getByLabel("Profile").selectOption(profileId);
+  if (profileId === "fedramp_20x_program") {
+    await page.getByLabel("Certification class").selectOption("C");
+  } else {
+    await page.getByLabel("Impact level").selectOption("moderate");
+  }
+  await page.getByLabel("Data origin").selectOption("synthetic");
+  await page.getByLabel("Sensitivity").selectOption("internal_unclassified");
   await page.getByRole("button", { name: "Create revision" }).click();
   await expect(page.getByText(/Revision created|Upload package files/i)).toBeVisible({
     timeout: 15_000,
@@ -43,9 +54,9 @@ export async function createRevision(page: Page): Promise<void> {
 
 export async function createRevisionForProfile(
   page: Page,
-  _profileId: SupportedProfileId,
+  profileId: SupportedProfileId,
 ): Promise<void> {
-  await createRevision(page);
+  await createRevision(page, profileId);
 }
 
 export async function uploadAndFinalizePackage(

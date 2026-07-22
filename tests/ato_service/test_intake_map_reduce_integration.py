@@ -21,7 +21,6 @@ from ato_service.intake_map import (
     PendingIntakeMapOutcome,
     ParsedMapFact,
     ParsedMapResponse,
-    ParsedMapSuggestions,
 )
 
 REVISION_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -189,11 +188,6 @@ def _accepted_response(*, title: str = "Accepted MAP Title") -> ParsedMapRespons
                 confidence="high",
             ),
         ),
-        suggestions=ParsedMapSuggestions(
-            profile_id="fisma_agency_security",
-            impact_level="moderate",
-            certification_class=None,
-        ),
     )
 
 
@@ -224,6 +218,8 @@ def test_accepted_map_merges_into_draft_with_provenance() -> None:
     assert provenance["source_sha256"] == SHA256
     assert provenance["extraction_method"] == "llm_normalize"
     assert outcome.audit_metadata["merged_target_count"] == 1
+    assert outcome.merge_result.metadata_suggestions == {}
+    assert outcome.merge_result.document["extensions"]["intake_metadata_suggestions"] == {}
 
 
 def test_conflict_produces_unresolved_record_without_overwrite() -> None:

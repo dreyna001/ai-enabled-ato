@@ -1,6 +1,6 @@
 # ATO Portal Demo Talking Track
 
-**Status:** Approved product language for demos (Phase 6A upload-first reconciliation 2026-07-17)
+**Status:** Approved product language for demos (Phase 6 metadata-first reconciliation 2026-07-21)
 **Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)
 **Portal click-path reference:** [`docs/PORTAL_WORKFLOW_GUIDE.md`](docs/PORTAL_WORKFLOW_GUIDE.md)
 
@@ -68,24 +68,24 @@ Privacy work remains outside the product and must be completed in the agency pro
 - Official government submission
 - Live GRC/scanner/cloud collection
 
-## Upload-first workflow (not profile-first)
+## Metadata-first workflow
 
-**Upload first.** The operator creates a **System**, creates a **minimal revision** (optional parent link only), uploads whatever they have, and finalizes. Only after scan, extract, and intake does the portal reveal **Revision metadata** and the **Package Editor** with pre-filled, editable fields.
+**Upload before confirm.** The operator creates a **System**, creates a **revision with required path metadata** (profile, class or impact, data origin, sensitivity), uploads whatever they have, and finalizes. Intake reads the documents and pre-fills **package draft facts** for human edit. **Revision metadata** remains visible from create and is correctable via PATCH while pre-ready.
 
-**Not the demo story:** pick FedRAMP vs FISMA and impact level correctly before anyone uploads.
+**Not the demo story:** rely on intake to guess FedRAMP vs FISMA and impact level after upload.
 
-### What happens after upload
+### What happens after create and upload
 
 1. Scan → extract → chunk/index (deterministic)
 2. Intake **MAP** — bounded model calls packed to the configured context cap (default **70%** utilization minus reserves); may be `policy_blocked` before human attestation
 3. Intake **REDUCE** — deterministic merge into draft + provenance + conflict list; backend readiness is the confirm gate
-4. Operator sets **data origin** and **sensitivity** manually (AI never writes these); reviews AI **suggestions** for profile, class, and impact (editable, never auto-locked)
+4. Operator reviews pre-filled draft facts; corrects path metadata via **Revision metadata** if needed (origin/sensitivity are human-only and set at create)
 5. Operator resolves conflicts, edits draft, **Confirm Package** → sealed `ready`
 6. Preflight → analysis → review → export (same as before)
 
-### Choosing a profile (path) — after upload, before confirm
+### Choosing a profile (path) — at create, correctable before confirm
 
-**Profile = which rulebook this upload follows.** You set it on the **Revision metadata** panel after upload begins — not at minimal revision create, not on the System, and not after the package is locked.
+**Profile = which rulebook this upload follows.** You set it on **Create revision** and may correct it on the **Revision metadata** panel while the revision is pre-ready — not on the System, and not after the package is locked.
 
 #### The three choices
 
@@ -111,24 +111,24 @@ Once saved on a revision before confirm, profile drives:
 
 | Situation | What happens |
 | --- | --- |
-| **Creating a new revision** | Minimal create only; upload first |
-| **After upload + intake** | Metadata panel + editor appear; AI may suggest profile/class/impact |
-| **Data origin / sensitivity** | Operator must select; AI never fills these |
+| **Creating a new revision** | Set profile, class/impact, data origin, and sensitivity at create |
+| **After upload + intake** | Package Editor shows pre-filled draft facts; intake does not suggest path metadata |
+| **Data origin / sensitivity** | Required at create; human-only; AI never fills these |
 | **After Confirm Package (locked)** | Profile **cannot** be changed on that revision |
 | **Need a different path** | Create a **new revision** — a new rulebook, not an edit |
-| **Update with parent linked** | Parent must be `ready`; profile inherits from parent and locks in the portal |
+| **Update with parent linked** | Parent must be `ready`; portal pre-fills metadata from parent |
 | **Same System, different profiles over time** | Allowed — e.g. a Rev. 5 transition revision and a separate 20x revision |
 | **Switching paths mid-work** | Old locked revision stays on the old path; new path starts fresh upload and checklist — prior analysis does **not** auto-carry over |
 | **Systems no longer active** | **Archive** hides a system from the default list (soft archive only) |
 
-**Say after upload when setting metadata:**
+**Say when creating a revision and setting metadata:**
 
-> We upload first, then the product reads the documents. Intake may suggest a profile and class or impact level — we review and save those. Data origin and sensitivity are human attestation only; the model never writes them. Once we confirm and lock the package, the path is fixed. To change paths, we start a new revision.
+> We declare the authorization path and human data labels when we create the revision — profile, class or impact, origin, and sensitivity. Then we upload and the product reads the documents. Intake pre-fills package facts in the editor; it does not guess the path for us. Data origin and sensitivity are human attestation only; the model never writes them. We can correct path metadata before confirm. Once we confirm and lock the package, the path is fixed. To change paths, we start a new revision.
 
 **Do not say:**
 
-- "Pick FedRAMP before you upload." (Upload-first.)
-- "The model set our data classification." (Human-only labels.)
+- "Pick the profile only after upload." (Metadata-first create.)
+- "Intake suggested our FedRAMP path." (Intake does not suggest path metadata.)
 - "We can switch this package to FedRAMP later." (Not on a locked revision.)
 - "The system is a FedRAMP system." (Path is per revision.)
 - "Parent link copies the old package into the new path." (Parent locks the same path; no copy.)
@@ -151,11 +151,11 @@ The long-lived workspace for one cloud service or agency system — like a proje
 
 One upload cycle: the files you uploaded plus the package facts someone confirmed. After **Confirm Package**, that snapshot is **locked** — like saving a PDF you can open later but not edit in place.
 
-Each revision picks its own path (FedRAMP 20x, Rev. 5 transition, or agency FISMA) on the metadata panel after upload. The System does not lock you to one path forever. See **Upload-first workflow** for what that choice controls and when it can change.
+Each revision picks its own path (FedRAMP 20x, Rev. 5 transition, or agency FISMA) at **create** (correctable before lock). The System does not lock you to one path forever. See **Metadata-first workflow** for what that choice controls and when it can change.
 
 ### Profile
 
-The authorization path rulebook for one revision: `fedramp_20x_program`, `fedramp_rev5_transition`, or `fisma_agency_security`. Set on **Revision metadata** after upload begins; fixed after lock.
+The authorization path rulebook for one revision: `fedramp_20x_program`, `fedramp_rev5_transition`, or `fisma_agency_security`. Set at **create**; fixed after lock.
 
 ### Parent revision (optional)
 
@@ -202,11 +202,11 @@ Say:
 
 > A **System** is the workspace for one service — for example, “Agency CRM” or “Cloud Platform X.”
 >
-> We **create a minimal revision first**, then upload. We do **not** pick FedRAMP or FISMA before files are on the system.
+> We **create a revision with profile and human data labels first**, then upload. We do **not** wait for intake to guess FedRAMP or FISMA.
 >
 > Each time the team uploads and confirms a package, that snapshot becomes a locked **package revision**. You can have many revisions over time: first submission, quarterly update, new evidence after a finding.
 >
-> After upload and intake, we set **profile** and **Class B/C** or **impact level** on the **Revision metadata** panel. **Data origin** and **sensitivity** are human attestation only — the model never writes those. That path sets the editor, checklist, and export shape for this upload only, and it is **fixed after Confirm Package**.
+> At create we set **profile** and **Class B/C** or **impact level**, plus **data origin** and **sensitivity** (human attestation only — the model never writes those). That path sets the editor, checklist, and export shape for this upload only, and it is **fixed after Confirm Package**.
 >
 > Optionally, a new revision can **link a parent** — the prior locked package it follows on the **same path**. Parent link locks the profile; it is for history and comparison, not for switching rulebooks and not for copying files.
 >
@@ -217,9 +217,9 @@ Say:
 Show:
 
 - System name
-- **Create revision** (minimal; optional parent only)
+- **Create revision** (profile, class/impact, data origin, sensitivity; optional parent pre-fill)
 - **Show archived** toggle when demoing archive
-- After upload: **Revision metadata** panel with profile, class or impact, data origin, sensitivity
+- Revision metadata panel from create through confirm
 - Selected revision and path label
 - Revision status (uploading → ready) and whether analysis can run
 - **Parent revision** field when creating an update (optional; locks profile)
@@ -227,7 +227,7 @@ Show:
 
 Do not say:
 
-- "Pick the profile before upload."
+- "Pick the profile only after upload."
 - "This system is compliant."
 - "This system will receive an ATO."
 - "The product selected the baseline."
@@ -240,9 +240,9 @@ Say:
 
 > Files are checked, scanned, and extracted safely. Every file is fingerprinted so we always know which upload a fact came from.
 >
-> Intake runs bounded **MAP** passes — packed to about **70%** of the model context window minus reserves — then a deterministic **REDUCE** merge into the draft. MAP may be **policy-blocked** before we attest data labels; that is routing discipline, not a failure of the upload-first story.
+> Intake runs bounded **MAP** passes — packed to about **70%** of the model context window minus reserves — then a deterministic **REDUCE** merge into the draft. MAP may be **policy-blocked** before we attest data labels; that is routing discipline, not a failure of the workflow.
 >
-> The portal shows an **intake readiness** report: files received, suggested path, gaps, and conflicts. AI may suggest profile and class or impact, but we edit everything in the **Package Editor** and set origin/sensitivity ourselves. We click **Confirm Package** once to lock the revision — not hundreds of separate approve/reject cards.
+> The portal shows an **intake readiness** report: files received, declared path metadata, gaps, and conflicts. Intake pre-fills **package draft facts** in the **Package Editor**; path metadata comes from create, not from the model. We click **Confirm Package** once to lock the revision — not hundreds of separate approve/reject cards.
 >
 > After lock, that revision cannot be edited. New files or fixes mean a **new revision**. You can point the new one at the old one as **parent** so the product knows what changed.
 
@@ -401,7 +401,7 @@ No. The product checks both the official schema and the applicable package rules
 
 ### Can we change profile after the package is locked?
 
-No. Profile is set on **Revision metadata** after upload and fixed at **Confirm Package**. To use a different path (for example FISMA → FedRAMP 20x), create a **new revision** with the new profile. Prior locked revisions and their analysis stay on the old path.
+No. Profile is set at **create** (correctable on **Revision metadata** while pre-ready) and fixed at **Confirm Package**. To use a different path (for example FISMA → FedRAMP 20x), create a **new revision** with the new profile. Prior locked revisions and their analysis stay on the old path.
 
 ### Does it perform continuous monitoring?
 

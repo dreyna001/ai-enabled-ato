@@ -47,7 +47,6 @@ from ato_service.package_revision_drafts import (
 )
 from ato_service.intake_readiness import get_intake_report
 from ato_service.package_revisions import (
-    CreatePackageRevisionInput,
     PackageRevisionMutationResult,
     PatchPackageRevisionMetadataInput,
     confirm_package_revision,
@@ -56,6 +55,7 @@ from ato_service.package_revisions import (
     get_package_revision,
     list_package_revisions,
     patch_package_revision_metadata,
+    validate_create_input,
     validate_patch_metadata_input,
 )
 from ato_service.source_artifacts import UploadSourceArtifactResult, upload_source_artifact
@@ -103,11 +103,16 @@ class CreateSystemRequest(BaseModel):
 
 
 class CreatePackageRevisionRequest(BaseModel):
-    """OpenAPI-aligned upload-first create-package-revision payload."""
+    """OpenAPI-aligned metadata-first create-package-revision payload."""
 
     model_config = ConfigDict(extra="forbid")
 
-    parent_revision_id: uuid.UUID | None = None
+    parent_revision_id: uuid.UUID | None
+    profile_id: ProfileId
+    certification_class: Literal["B", "C"] | None
+    impact_level: Literal["low", "moderate", "high"] | None
+    data_origin: DataOrigin
+    sensitivity: Sensitivity
 
 
 class PatchPackageRevisionMetadataRequest(BaseModel):
@@ -375,8 +380,13 @@ def create_api_router() -> APIRouter:
             session,
             principal=principal,
             system_id=system_id,
-            request=CreatePackageRevisionInput(
+            request=validate_create_input(
                 parent_revision_id=body.parent_revision_id,
+                profile_id=body.profile_id,
+                certification_class=body.certification_class,
+                impact_level=body.impact_level,
+                data_origin=body.data_origin,
+                sensitivity=body.sensitivity,
             ),
             authority_manifest_id=runtime_state.authority_manifest_id,
             idempotency_key=idempotency_key,

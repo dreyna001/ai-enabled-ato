@@ -379,7 +379,7 @@ export function ReviewExportWorkbench({
   };
 
   return (
-    <Card>
+    <Card id="review-export">
       <CardHeader>
         <CardTitle className="text-base">Review and Export</CardTitle>
         <CardDescription>

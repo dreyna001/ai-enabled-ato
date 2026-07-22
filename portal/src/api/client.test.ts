@@ -176,30 +176,66 @@ describe("createRevision request body", () => {
     vi.unstubAllGlobals();
   });
 
-  it("builds a minimal payload with only parent_revision_id", () => {
-    expect(buildCreateRevisionBody({})).toEqual({ parent_revision_id: null });
-    expect(buildCreateRevisionBody({ parent_revision_id: null })).toEqual({
+  it("builds a create payload with required metadata fields", () => {
+    expect(
+      buildCreateRevisionBody({
+        profile_id: "fisma_agency_security",
+        data_origin: "synthetic",
+        sensitivity: "internal_unclassified",
+        impact_level: "moderate",
+        certification_class: null,
+      }),
+    ).toEqual({
       parent_revision_id: null,
+      profile_id: "fisma_agency_security",
+      data_origin: "synthetic",
+      sensitivity: "internal_unclassified",
+      impact_level: "moderate",
+      certification_class: null,
     });
     const parentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    expect(buildCreateRevisionBody({ parent_revision_id: parentId })).toEqual({
+    expect(
+      buildCreateRevisionBody({
+        parent_revision_id: parentId,
+        profile_id: "fedramp_20x_program",
+        data_origin: "customer_production",
+        sensitivity: "cui",
+        certification_class: "B",
+        impact_level: null,
+      }),
+    ).toEqual({
       parent_revision_id: parentId,
+      profile_id: "fedramp_20x_program",
+      data_origin: "customer_production",
+      sensitivity: "cui",
+      certification_class: "B",
+      impact_level: null,
     });
   });
 
-  it("posts a minimal create payload without metadata fields", async () => {
+  it("posts create payload with metadata fields", async () => {
     const systemId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.body).toBe(JSON.stringify({ parent_revision_id: null }));
+      expect(init?.body).toBe(
+        JSON.stringify({
+          parent_revision_id: null,
+          profile_id: "fisma_agency_security",
+          data_origin: "synthetic",
+          sensitivity: "internal_unclassified",
+          impact_level: "moderate",
+          certification_class: null,
+        }),
+      );
       return jsonResponse({
         package_revision_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         system_id: systemId,
-        status: "draft",
+        status: "uploading",
         package_preparation_status: "in_progress",
         revision_version: 1,
         profile_id: "fisma_agency_security",
         data_origin: "synthetic",
         sensitivity: "internal_unclassified",
+        impact_level: "moderate",
       });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -212,7 +248,13 @@ describe("createRevision request body", () => {
         portal_origin: "http://localhost:5173",
       },
       systemId,
-      {},
+      {
+        profile_id: "fisma_agency_security",
+        data_origin: "synthetic",
+        sensitivity: "internal_unclassified",
+        impact_level: "moderate",
+        certification_class: null,
+      },
     );
 
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -351,8 +393,8 @@ describe("getIntakeReport response validation", () => {
           intake_stage: "extract",
           files: [],
           human_attestation: {
-            data_origin: "missing",
-            sensitivity: "missing",
+            data_origin: "present",
+            sensitivity: "present",
           },
           suggested_metadata: {
             profile_id: null,
@@ -367,7 +409,7 @@ describe("getIntakeReport response validation", () => {
           map_steps: [],
           confirmation: {
             allowed: false,
-            blockers: ["metadata_incomplete"],
+            blockers: ["revision_not_awaiting_confirmation"],
           },
           generated_at: "2026-07-17T12:00:00Z",
         }),

@@ -124,7 +124,7 @@ describe("IntakeReadinessPanel states", () => {
 });
 
 describe("IntakeReadinessPanel report content", () => {
-  it("renders inventory, gaps, suggestions, and MAP status", () => {
+  it("renders inventory, gaps, attestation, and MAP status", () => {
     render(<IntakeReadinessPanel report={buildReport()} />);
     expect(screen.getByRole("heading", { name: "Intake readiness" })).toBeInTheDocument();
     expect(screen.getByText(/1 file\(s\) uploaded/i)).toBeInTheDocument();
@@ -132,9 +132,9 @@ describe("IntakeReadinessPanel report content", () => {
     expect(
       screen.getByText(/System boundary statement was not found/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Fedramp 20x Program/i)).toBeInTheDocument();
     expect(screen.getByText("metadata_map")).toBeInTheDocument();
     expect(screen.getByText(/Omitted chunks/i)).toBeInTheDocument();
+    expect(screen.queryByText("Suggested metadata")).not.toBeInTheDocument();
   });
 
   it("shows context incomplete as a visible gap without inventing confirm blockers", () => {
@@ -165,6 +165,48 @@ describe("IntakeReadinessPanel report content", () => {
     expect(screen.getByText("Not yet provided")).toBeInTheDocument();
     expect(screen.queryByText(/synthetic/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/customer_production/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a trimmed completed view when intake is confirmed", () => {
+    render(
+      <IntakeReadinessPanel
+        report={buildReport({
+          status: "ready",
+          intake_stage: "confirmed",
+          confirmation: { allowed: true, blockers: [] },
+          omitted_chunks: [],
+          map_steps: [],
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Intake is complete. Review the file inventory/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 file\(s\) uploaded/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/System boundary statement was not found/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Suggested metadata")).not.toBeInTheDocument();
+    expect(screen.queryByText("Human attestation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Confirm blockers")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No MAP steps recorded yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No omitted chunks reported/i)).not.toBeInTheDocument();
+  });
+
+  it("recognizes completed intake when only intake_stage is confirmed", () => {
+    render(
+      <IntakeReadinessPanel
+        report={buildReport({
+          intake_stage: "confirmed",
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Intake is complete. Review the file inventory/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Suggested metadata")).not.toBeInTheDocument();
   });
 });
 

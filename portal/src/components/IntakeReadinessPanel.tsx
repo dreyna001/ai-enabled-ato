@@ -152,17 +152,14 @@ function attestationVariant(state: "present" | "missing"): "success" | "warning"
   return state === "present" ? "success" : "warning";
 }
 
-function formatSuggestedValue(value: string | null): string {
-  if (!value) {
-    return "Not suggested";
-  }
-  return toTitleCaseWords(value.replaceAll("_", " "));
-}
-
 function countFileStatuses(files: IntakeReportFileLike[]) {
   const cleanCount = files.filter((file) => file.malware_scan_status === "clean").length;
   const extractedCount = files.filter((file) => file.extraction_status === "succeeded").length;
   return { cleanCount, extractedCount };
+}
+
+function isIntakeCompleted(report: IntakeReportLike): boolean {
+  return report.status === "ready" || report.intake_stage === "confirmed";
 }
 
 function IntakeReadinessLoading() {
@@ -246,6 +243,7 @@ export function IntakeReadinessPanel({
   const { cleanCount, extractedCount } = countFileStatuses(report.files);
   const contextGapVisible = !report.context_complete;
   const confirmBlockers = report.confirmation.allowed ? [] : report.confirmation.blockers;
+  const intakeCompleted = isIntakeCompleted(report);
 
   return (
     <Card aria-labelledby="intake-readiness-title" className="bg-muted/10" id="intake-readiness">
@@ -254,7 +252,9 @@ export function IntakeReadinessPanel({
           Intake readiness
         </h2>
         <CardDescription>
-          Review uploaded files, suggested metadata, and gaps before confirming the package.
+          {intakeCompleted
+            ? "Intake is complete. Review the file inventory and any reported gaps below."
+            : "Review uploaded files, human attestation, and gaps before confirming the package."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -312,63 +312,35 @@ export function IntakeReadinessPanel({
           )}
         </section>
 
-        <section aria-labelledby="intake-suggestions-heading" className="space-y-2">
-          <h3 className="text-sm font-medium" id="intake-suggestions-heading">
-            Suggested metadata
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            AI suggestions only. Edit these fields before confirming; they are not official
-            attestations.
-          </p>
-          <dl className="grid gap-3 rounded-sm border border-border bg-card px-3 py-3 text-sm md:grid-cols-3">
-            <div>
-              <dt className="font-medium text-foreground">Profile</dt>
-              <dd className="mt-1 text-muted-foreground">
-                {formatSuggestedValue(report.suggested_metadata.profile_id)}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Certification class</dt>
-              <dd className="mt-1 text-muted-foreground">
-                {report.suggested_metadata.certification_class ?? "Not suggested"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Impact level</dt>
-              <dd className="mt-1 text-muted-foreground">
-                {formatSuggestedValue(report.suggested_metadata.impact_level)}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <section aria-labelledby="intake-attestation-heading" className="space-y-2">
-          <h3 className="text-sm font-medium" id="intake-attestation-heading">
-            Human attestation
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Data origin and sensitivity are operator-provided only. Intake never suggests
-            these values.
-          </p>
-          <dl className="grid gap-3 rounded-sm border border-border bg-card px-3 py-3 text-sm md:grid-cols-2">
-            <div>
-              <dt className="font-medium text-foreground">Data origin</dt>
-              <dd className="mt-2">
-                <Badge variant={attestationVariant(report.human_attestation.data_origin)}>
-                  {attestationLabel(report.human_attestation.data_origin)}
-                </Badge>
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Sensitivity</dt>
-              <dd className="mt-2">
-                <Badge variant={attestationVariant(report.human_attestation.sensitivity)}>
-                  {attestationLabel(report.human_attestation.sensitivity)}
-                </Badge>
-              </dd>
-            </div>
-          </dl>
-        </section>
+        {!intakeCompleted ? (
+          <section aria-labelledby="intake-attestation-heading" className="space-y-2">
+            <h3 className="text-sm font-medium" id="intake-attestation-heading">
+              Human attestation
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Data origin and sensitivity are operator-provided only. Intake never suggests
+              these values.
+            </p>
+            <dl className="grid gap-3 rounded-sm border border-border bg-card px-3 py-3 text-sm md:grid-cols-2">
+              <div>
+                <dt className="font-medium text-foreground">Data origin</dt>
+                <dd className="mt-2">
+                  <Badge variant={attestationVariant(report.human_attestation.data_origin)}>
+                    {attestationLabel(report.human_attestation.data_origin)}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground">Sensitivity</dt>
+                <dd className="mt-2">
+                  <Badge variant={attestationVariant(report.human_attestation.sensitivity)}>
+                    {attestationLabel(report.human_attestation.sensitivity)}
+                  </Badge>
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
 
         <section aria-labelledby="intake-gaps-heading" className="space-y-2">
           <h3 className="text-sm font-medium" id="intake-gaps-heading">
@@ -414,11 +386,11 @@ export function IntakeReadinessPanel({
           </div>
         </section>
 
-        <section aria-labelledby="intake-omitted-heading" className="space-y-2">
-          <h3 className="text-sm font-medium" id="intake-omitted-heading">
-            Omitted chunks
-          </h3>
-          {report.omitted_chunks.length > 0 ? (
+        {report.omitted_chunks.length > 0 ? (
+          <section aria-labelledby="intake-omitted-heading" className="space-y-2">
+            <h3 className="text-sm font-medium" id="intake-omitted-heading">
+              Omitted chunks
+            </h3>
             <ul className="space-y-1 text-sm text-muted-foreground">
               {report.omitted_chunks.slice(0, 8).map((chunk) => (
                 <li key={`${chunk.artifact_id}-${chunk.segment_id}`}>
@@ -430,18 +402,14 @@ export function IntakeReadinessPanel({
                 <li>{report.omitted_chunks.length - 8} additional omitted chunk(s)</li>
               ) : null}
             </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground" role="status">
-              No omitted chunks reported.
-            </p>
-          )}
-        </section>
+          </section>
+        ) : null}
 
-        <section aria-labelledby="intake-map-heading" className="space-y-2">
-          <h3 className="text-sm font-medium" id="intake-map-heading">
-            MAP status
-          </h3>
-          {report.map_steps.length > 0 ? (
+        {report.map_steps.length > 0 ? (
+          <section aria-labelledby="intake-map-heading" className="space-y-2">
+            <h3 className="text-sm font-medium" id="intake-map-heading">
+              MAP status
+            </h3>
             <ul className="space-y-2">
               {report.map_steps.map((step) => (
                 <li
@@ -464,46 +432,46 @@ export function IntakeReadinessPanel({
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground" role="status">
-              No MAP steps recorded yet.
-            </p>
-          )}
-        </section>
+          </section>
+        ) : null}
 
-        <IntakeConflictList
-          conflicts={report.conflicts}
-          disabled={conflictControlsDisabled}
-          onManualEdit={onManualConflictEdit}
-          onSelectCandidate={onSelectConflictCandidate}
-        />
+        {!intakeCompleted ? (
+          <IntakeConflictList
+            conflicts={report.conflicts}
+            disabled={conflictControlsDisabled}
+            onManualEdit={onManualConflictEdit}
+            onSelectCandidate={onSelectConflictCandidate}
+          />
+        ) : null}
 
-        <section aria-labelledby="intake-confirm-heading" className="space-y-2">
-          <h3 className="text-sm font-medium" id="intake-confirm-heading">
-            Confirm blockers
-          </h3>
-          {confirmBlockers.length > 0 ? (
-            <ul className="space-y-2">
-              {confirmBlockers.map((blocker) => (
-                <li
-                  className="rounded-sm border border-l-4 border-l-destructive border-border bg-card px-3 py-2"
-                  key={blocker}
-                >
-                  <p className="font-medium text-foreground">
-                    Resolve before confirming package
-                  </p>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">{blocker}</p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground" role="status">
-              {report.confirmation.allowed
-                ? "No confirmation blockers reported."
-                : "Confirmation is blocked, but no blocker codes were returned."}
-            </p>
-          )}
-        </section>
+        {!intakeCompleted ? (
+          <section aria-labelledby="intake-confirm-heading" className="space-y-2">
+            <h3 className="text-sm font-medium" id="intake-confirm-heading">
+              Confirm blockers
+            </h3>
+            {confirmBlockers.length > 0 ? (
+              <ul className="space-y-2">
+                {confirmBlockers.map((blocker) => (
+                  <li
+                    className="rounded-sm border border-l-4 border-l-destructive border-border bg-card px-3 py-2"
+                    key={blocker}
+                  >
+                    <p className="font-medium text-foreground">
+                      Resolve before confirming package
+                    </p>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">{blocker}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground" role="status">
+                {report.confirmation.allowed
+                  ? "No confirmation blockers reported."
+                  : "Confirmation is blocked, but no blocker codes were returned."}
+              </p>
+            )}
+          </section>
+        ) : null}
       </CardContent>
     </Card>
   );

@@ -189,20 +189,10 @@ def test_default_adapter_reads_complete_reduce_extensions() -> None:
             ],
             "intake_omitted_chunks": [],
             "intake_context_complete": True,
-            "intake_metadata_suggestions": {
-                "profile_id": "fedramp_20x_program",
-                "certification_class": "C",
-                "impact_level": None,
-            },
         }
     )
 
     assert snapshot.context_complete is True
-    assert snapshot.metadata_suggestions == {
-        "profile_id": "fedramp_20x_program",
-        "certification_class": "C",
-        "impact_level": None,
-    }
     assert snapshot.conflicts[0].field == "/system/mission_summary"
     assert [candidate["value"] for candidate in snapshot.conflicts[0].values] == [
         "Alpha",
@@ -232,7 +222,6 @@ def test_default_adapter_missing_extensions_fails_closed() -> None:
         assert snapshot.conflicts == ()
         assert snapshot.extra_gaps == ()
         assert snapshot.omitted_chunk_refs == ()
-        assert snapshot.metadata_suggestions is None
 
 
 @pytest.mark.parametrize(
@@ -267,7 +256,6 @@ def test_default_adapter_missing_extensions_fails_closed() -> None:
                 }
             ]
         },
-        {"intake_metadata_suggestions": []},
     ],
 )
 def test_default_adapter_rejects_malformed_present_extensions(
@@ -337,7 +325,7 @@ def test_default_adapter_dedupes_and_orders_extension_records() -> None:
     ]
 
 
-def test_report_uses_only_reduce_metadata_suggestions() -> None:
+def test_report_always_returns_empty_suggested_metadata() -> None:
     snapshot = _snapshot_from_extensions(
         {
             "intake_metadata_suggestions": {
@@ -354,20 +342,16 @@ def test_report_uses_only_reduce_metadata_suggestions() -> None:
     )
 
     assert payload["suggested_metadata"] == {
-        "profile_id": "fedramp_20x_program",
-        "certification_class": "B",
+        "profile_id": None,
+        "certification_class": None,
         "impact_level": None,
     }
     assert payload["suggestion_sources"] == []
-    assert payload["suggested_metadata"]["profile_id"] != (
-        _context().package_revision.profile_id
-    )
 
 
 @pytest.mark.parametrize(
     "extensions",
     [
-        {"intake_metadata_suggestions": {"data_origin": "synthetic"}},
         {
             "intake_conflicts": [
                 {

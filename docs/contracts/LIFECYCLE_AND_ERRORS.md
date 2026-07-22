@@ -173,16 +173,22 @@ processing. Customer extraction remains blocked while **HS-005** is open.
 
 **Create revision** (`POST /api/v1/systems/{system_id}/package-revisions`):
 
-- Accepts only an optional `parent_revision_id`.
-- Root revisions persist `profile_id`, `data_origin`, and `sensitivity` as
-  null with `effective_data_labels=[]` while pre-ready.
-- Child revisions require a parent in `ready` status and inherit
-  `profile_id`, `certification_class`, and `impact_level` from that parent.
-  `data_origin` and `sensitivity` remain null until explicit human PATCH.
+- Requires `profile_id`, profile-conditional `certification_class` or
+  `impact_level`, and human-only `data_origin` and `sensitivity` before the
+  first upload.
+- Accepts an optional `parent_revision_id`; child revisions require a parent
+  in `ready` status. The caller supplies metadata on create; the portal may
+  pre-fill those fields from the selected parent but does not inherit silently
+  server-side.
+- Persists metadata at create, recomputes `effective_data_labels` when both
+  human labels are present, and returns status `uploading`.
+- Database columns remain nullable for compatibility with migration
+  `20260717_0013_defer_package_revision_metadata.py`; no follow-on migration
+  is required for metadata-first create.
 
 **Metadata PATCH** (`PATCH /api/v1/package-revisions/{id}`):
 
-- Legal only while the revision is `scanning`, `extracting`, or
+- Legal while the revision is `uploading`, `scanning`, `extracting`, or
   `awaiting_confirmation`.
 - Requires current `If-Match`, `Idempotency-Key`, CSRF validation, and owner
   mutation roles.

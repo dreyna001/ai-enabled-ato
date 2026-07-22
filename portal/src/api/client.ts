@@ -397,9 +397,20 @@ export async function listRevisions(
 export function buildCreateRevisionBody(
   input: CreateRevisionInput,
 ): Record<string, string | null> {
-  return {
+  const body: Record<string, string | null> = {
     parent_revision_id: input.parent_revision_id ?? null,
+    profile_id: input.profile_id,
+    data_origin: input.data_origin,
+    sensitivity: input.sensitivity,
   };
+  if (input.profile_id === "fedramp_20x_program") {
+    body.certification_class = input.certification_class ?? null;
+    body.impact_level = null;
+  } else {
+    body.impact_level = input.impact_level ?? null;
+    body.certification_class = null;
+  }
+  return body;
 }
 
 export async function createRevision(

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RevisionMetadataPanel } from "@/components/RevisionMetadataPanel";
-import type { IntakeReport, PackageRevision, SessionInfo } from "@/types";
+import type { PackageRevision, SessionInfo } from "@/types";
 
 const session: SessionInfo = {
   actor_id: "test-user",
@@ -19,49 +19,11 @@ const baseRevision: PackageRevision = {
   status: "awaiting_confirmation",
   package_preparation_status: "in_progress",
   revision_version: 3,
-  profile_id: null,
-  data_origin: null,
-  sensitivity: null,
-  impact_level: null,
+  profile_id: "fisma_agency_security",
+  data_origin: "synthetic",
+  sensitivity: "internal_unclassified",
+  impact_level: "high",
   certification_class: null,
-};
-
-const intakeReport: IntakeReport = {
-  schema_version: "2.0.0",
-  object_type: "intake_report",
-  package_revision_id: revisionId,
-  revision_version: 3,
-  status: "awaiting_confirmation",
-  intake_stage: "awaiting_human_review",
-  files: [],
-  human_attestation: {
-    data_origin: "missing",
-    sensitivity: "missing",
-  },
-  suggested_metadata: {
-    profile_id: "fisma_agency_security",
-    certification_class: null,
-    impact_level: "high",
-  },
-  suggestion_sources: [
-    {
-      field: "profile_id",
-      proposed_value: "fisma_agency_security",
-      source_artifact_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      source_sha256: "d".repeat(64),
-      source_locator: {},
-    },
-  ],
-  gaps: [],
-  conflicts: [],
-  omitted_chunks: [],
-  context_complete: true,
-  map_steps: [],
-  confirmation: {
-    allowed: false,
-    blockers: ["metadata_incomplete"],
-  },
-  generated_at: "2026-07-17T12:00:00Z",
 };
 
 const getIntakeReportMock = vi.fn();
@@ -77,12 +39,10 @@ vi.mock("@/api/client", async () => {
     patchRevisionMetadata: (...args: unknown[]) => patchRevisionMetadataMock(...args),
   };
 });
-
 beforeEach(() => {
   getIntakeReportMock.mockReset();
   getRevisionMock.mockReset();
   patchRevisionMetadataMock.mockReset();
-  getIntakeReportMock.mockResolvedValue(intakeReport);
 });
 
 afterEach(() => {
@@ -91,12 +51,7 @@ afterEach(() => {
 });
 
 describe("RevisionMetadataPanel", () => {
-  it("prefills profile and impact suggestions without human-only fields", async () => {
-    getIntakeReportMock.mockResolvedValue({
-      ...intakeReport,
-      suggestion_sources: [],
-    });
-
+  it("loads saved revision metadata without intake suggestions", () => {
     render(
       <RevisionMetadataPanel
         session={session}
@@ -105,54 +60,44 @@ describe("RevisionMetadataPanel", () => {
       />,
     );
 
-    await screen.findByLabelText("Profile");
     expect(screen.getByLabelText("Profile")).toHaveValue("fisma_agency_security");
     expect(screen.getByLabelText("Impact level")).toHaveValue("high");
-    expect(screen.getByLabelText("Data origin")).toHaveValue("");
-    expect(screen.getByLabelText("Sensitivity")).toHaveValue("");
-    expect(screen.getAllByText("Suggested")).toHaveLength(2);
-    expect(screen.getAllByText("Suggested by intake. Review and save to apply.")).toHaveLength(2);
-    expect(screen.getAllByText("Required human attestation")).toHaveLength(2);
+    expect(screen.getByLabelText("Data origin")).toHaveValue("synthetic");
+    expect(screen.getByLabelText("Sensitivity")).toHaveValue("internal_unclassified");
+    expect(screen.queryByText("Suggested")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Suggested by intake/i)).not.toBeInTheDocument();
+    expect(getIntakeReportMock).not.toHaveBeenCalled();
   });
 
-  it("does not overwrite existing human revision values when intake report refreshes", async () => {
-    const revision = {
-      ...baseRevision,
-      profile_id: "fedramp_rev5_transition" as const,
-      impact_level: "moderate",
-    };
-    getIntakeReportMock.mockResolvedValue({
-      ...intakeReport,
-      suggested_metadata: {
-        profile_id: "fisma_agency_security",
-        certification_class: null,
-        impact_level: "high",
-      },
-    });
-
+  it("allows metadata corrections while uploading", () => {
     render(
       <RevisionMetadataPanel
         session={session}
-        revision={revision}
+        revision={{ ...baseRevision, status: "uploading", revision_version: 1 }}
         onRevisionUpdated={() => undefined}
       />,
     );
 
-    await screen.findByLabelText("Profile");
-    expect(screen.getByLabelText("Profile")).toHaveValue("fedramp_rev5_transition");
-    expect(screen.getByLabelText("Impact level")).toHaveValue("moderate");
+    expect(screen.getByLabelText("Profile")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save metadata" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Impact level"), {
+      target: { value: "moderate" },
+    });
+
+    expect(screen.getByText("Unsaved metadata changes.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save metadata" })).toBeEnabled();
   });
 
-  it("sends minimal PATCH payload with concurrency headers", async () => {
+  it("sends a minimal PATCH payload with the current ETag", async () => {
+    const updatedRevision: PackageRevision = {
+      ...baseRevision,
+      impact_level: "moderate",
+      revision_version: 4,
+    };
+    const onRevisionUpdated = vi.fn();
     patchRevisionMetadataMock.mockResolvedValue({
-      revision: {
-        ...baseRevision,
-        profile_id: "fisma_agency_security",
-        impact_level: "high",
-        data_origin: "synthetic",
-        sensitivity: "internal_unclassified",
-        revision_version: 4,
-      },
+      revision: updatedRevision,
       etag: '"v4"',
     });
 
@@ -160,16 +105,12 @@ describe("RevisionMetadataPanel", () => {
       <RevisionMetadataPanel
         session={session}
         revision={baseRevision}
-        onRevisionUpdated={() => undefined}
+        onRevisionUpdated={onRevisionUpdated}
       />,
     );
 
-    await screen.findByLabelText("Data origin");
-    fireEvent.change(screen.getByLabelText("Data origin"), {
-      target: { value: "synthetic" },
-    });
-    fireEvent.change(screen.getByLabelText("Sensitivity"), {
-      target: { value: "internal_unclassified" },
+    fireEvent.change(screen.getByLabelText("Impact level"), {
+      target: { value: "moderate" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save metadata" }));
 
@@ -178,17 +119,32 @@ describe("RevisionMetadataPanel", () => {
         session,
         revisionId,
         '"v3"',
-        expect.objectContaining({
-          profile_id: "fisma_agency_security",
-          impact_level: "high",
-          data_origin: "synthetic",
-          sensitivity: "internal_unclassified",
-        }),
+        { impact_level: "moderate" },
       );
     });
+    expect(onRevisionUpdated).toHaveBeenCalledWith(updatedRevision, '"v4"');
+    expect(await screen.findByText("Metadata saved.")).toBeInTheDocument();
   });
 
-  it("preserves unsaved edits during a background report refresh", async () => {
+  it("renders a read-only summary when metadata is sealed", () => {
+    render(
+      <RevisionMetadataPanel
+        session={session}
+        revision={{ ...baseRevision, status: "ready" }}
+        onRevisionUpdated={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/Sealed revision metadata is immutable/i)).toBeInTheDocument();
+    expect(screen.getByText("Agency FISMA security")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("Synthetic (demo / lab)")).toBeInTheDocument();
+    expect(screen.getByText("Internal unclassified")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save metadata" })).not.toBeInTheDocument();
+  });
+
+  it("preserves unsaved corrections when the refresh key changes", () => {
     const { rerender } = render(
       <RevisionMetadataPanel
         session={session}
@@ -198,7 +154,6 @@ describe("RevisionMetadataPanel", () => {
       />,
     );
 
-    await screen.findByLabelText("Data origin");
     fireEvent.change(screen.getByLabelText("Data origin"), {
       target: { value: "customer_production" },
     });
@@ -212,21 +167,15 @@ describe("RevisionMetadataPanel", () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(getIntakeReportMock).toHaveBeenCalledTimes(2);
-    });
     expect(screen.getByLabelText("Data origin")).toHaveValue("customer_production");
   });
 
-  it("reloads the current revision and retries with the latest ETag after conflict", async () => {
+  it("reloads current metadata after an ETag conflict and retries with the latest ETag", async () => {
     const { ApiError } = await import("@/api/client");
     const initialRevision: PackageRevision = {
       ...baseRevision,
       revision_version: 1,
-      profile_id: "fisma_agency_security",
       impact_level: "moderate",
-      data_origin: "synthetic",
-      sensitivity: "internal_unclassified",
     };
     const latestRevision: PackageRevision = {
       ...initialRevision,
@@ -261,15 +210,12 @@ describe("RevisionMetadataPanel", () => {
       />,
     );
 
-    await screen.findByLabelText("Impact level");
     fireEvent.change(screen.getByLabelText("Impact level"), {
       target: { value: "high" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save metadata" }));
 
-    const reloadButton = await screen.findByRole("button", {
-      name: "Reload metadata",
-    });
+    expect(await screen.findByRole("button", { name: "Reload metadata" })).toBeEnabled();
     expect(patchRevisionMetadataMock).toHaveBeenNthCalledWith(
       1,
       session,
@@ -278,13 +224,10 @@ describe("RevisionMetadataPanel", () => {
       { impact_level: "high" },
     );
 
-    fireEvent.click(reloadButton);
-    const reloadingButton = await screen.findByRole("button", {
-      name: "Reloading…",
-    });
-    expect(reloadingButton).toBeDisabled();
-    fireEvent.click(reloadingButton);
+    fireEvent.click(screen.getByRole("button", { name: "Reload metadata" }));
+    expect(await screen.findByRole("button", { name: "Reloading…" })).toBeDisabled();
     expect(getRevisionMock).toHaveBeenCalledTimes(1);
+
     await act(async () => {
       resolveReload(latestRevision);
     });
@@ -314,15 +257,12 @@ describe("RevisionMetadataPanel", () => {
     });
   });
 
-  it("keeps unsaved edits and shows a bounded error when reload fails", async () => {
+  it("keeps unsaved corrections and shows a bounded error when reload fails", async () => {
     const { ApiError } = await import("@/api/client");
     const initialRevision: PackageRevision = {
       ...baseRevision,
       revision_version: 1,
-      profile_id: "fisma_agency_security",
       impact_level: "moderate",
-      data_origin: "synthetic",
-      sensitivity: "internal_unclassified",
     };
     patchRevisionMetadataMock.mockRejectedValueOnce(
       new ApiError(409, "Revision state changed", "http", "invalid_state"),
@@ -339,21 +279,16 @@ describe("RevisionMetadataPanel", () => {
       />,
     );
 
-    await screen.findByLabelText("Impact level");
     fireEvent.change(screen.getByLabelText("Impact level"), {
       target: { value: "high" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save metadata" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Reload metadata" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Reload metadata" }));
 
     expect(
       await screen.findByText(/Could not reload current revision metadata/i),
     ).toBeVisible();
     expect(screen.getByLabelText("Impact level")).toHaveValue("high");
-    expect(
-      screen.getByRole("button", { name: "Reload metadata" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Reload metadata" })).toBeEnabled();
   });
 });

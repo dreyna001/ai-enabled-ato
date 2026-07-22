@@ -55,29 +55,30 @@ def evaluate_preflight(context: PreflightContext) -> dict[str, Any]:
         export_blockers.append("package.sealed_content")
 
     document = context.sealed_document or {}
-    assessor_inputs = document.get("assessor_inputs")
-    has_assessor_inputs = isinstance(assessor_inputs, dict) and len(assessor_inputs) > 0
-    _add_check(
-        checks,
-        check_id="assessor.inputs_present",
-        severity="export_blocker",
-        outcome="passed" if has_assessor_inputs else "failed",
-        message="Imported assessor-owned inputs are required for export readiness.",
-    )
-    if not has_assessor_inputs:
-        export_blockers.append("assessor.inputs_present")
+    if context.profile_id != "fisma_agency_security":
+        assessor_inputs = document.get("assessor_inputs")
+        has_assessor_inputs = isinstance(assessor_inputs, dict) and len(assessor_inputs) > 0
+        _add_check(
+            checks,
+            check_id="assessor.inputs_present",
+            severity="export_blocker",
+            outcome="passed" if has_assessor_inputs else "failed",
+            message="Imported assessor-owned inputs are required for export readiness.",
+        )
+        if not has_assessor_inputs:
+            export_blockers.append("assessor.inputs_present")
 
-    privacy = document.get("privacy")
-    privacy_present = isinstance(privacy, dict) and privacy.get("artifacts_present") is True
-    _add_check(
-        checks,
-        check_id="privacy.artifacts_present",
-        severity="export_blocker",
-        outcome="passed" if privacy_present else "failed",
-        message="Required privacy artifacts must be attached before export claims.",
-    )
-    if not privacy_present:
-        export_blockers.append("privacy.artifacts_present")
+        privacy = document.get("privacy")
+        privacy_present = isinstance(privacy, dict) and privacy.get("artifacts_present") is True
+        _add_check(
+            checks,
+            check_id="privacy.artifacts_present",
+            severity="export_blocker",
+            outcome="passed" if privacy_present else "failed",
+            message="Required privacy artifacts must be attached before export claims.",
+        )
+        if not privacy_present:
+            export_blockers.append("privacy.artifacts_present")
 
     profile_section = _profile_section(document=document, profile_id=context.profile_id)
     profile_populated = profile_section is not None and profile_section != {}

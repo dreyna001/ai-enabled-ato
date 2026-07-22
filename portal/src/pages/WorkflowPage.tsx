@@ -9,6 +9,7 @@ import {
   createRevision,
   createSystem,
   finalizeRevision,
+  getIntakeReport,
   getRevision,
   getRun,
   isCancelledRequest,
@@ -85,7 +86,10 @@ import {
   runStatusLabel,
   runStatusVariant,
 } from "@/utils/statusLabels";
-import { shouldRevealRevisionMetadata } from "@/utils/revisionMetadata";
+import {
+  isRevisionMetadataComplete,
+  shouldRevealRevisionMetadata,
+} from "@/utils/revisionMetadata";
 import {
   applyConflictCandidateSelection,
   isMetadataOnlyConflictField,
@@ -119,6 +123,26 @@ function isSystemArchived(system: System): boolean {
 
 function visibleSystems(systems: System[], showArchived: boolean): System[] {
   return showArchived ? systems : systems.filter((system) => !isSystemArchived(system));
+}
+
+function nextWorkflowStep(
+  revision: PackageRevision,
+  activeRun: AnalysisRun | null,
+  runCount: number,
+): string | null {
+  if (revision.status !== "ready") {
+    return null;
+  }
+  if (activeRun?.status === "succeeded") {
+    return "Analysis is complete. Review each matrix result, resolve every disposition, and submit the review.";
+  }
+  if (activeRun?.status === "queued" || activeRun?.status === "running") {
+    return "Analysis is running. Results and review actions will appear here when it completes.";
+  }
+  if (runCount === 0) {
+    return "Package sealing is complete. Start a deterministic analysis run to generate the assessment matrix.";
+  }
+  return "Select a run to review its status and continue the workflow.";
 }
 
 function AlertBanner({
@@ -333,6 +357,44 @@ export function WorkflowPage({
     },
   });
 
+  useEffect(() => {
+    if (!revision || revision.status === "uploading") {
+      setIntakeReport(null);
+      setIntakeReportLoadState({ loading: false, error: "" });
+      return;
+    }
+
+    const controller = new AbortController();
+    setIntakeReportLoadState({ loading: true, error: "" });
+    void getIntakeReport(revision.package_revision_id, { signal: controller.signal })
+      .then((report) => {
+        setIntakeReport(report);
+        setIntakeReportLoadState({ loading: false, error: "" });
+      })
+      .catch((err) => {
+        if (isCancelledRequest(err, controller.signal)) {
+          return;
+        }
+        setIntakeReport(null);
+        setIntakeReportLoadState({
+          loading: false,
+          error: formatProblemError(err),
+        });
+      });
+
+    return () => controller.abort();
+  }, [
+    revision?.package_revision_id,
+    revision?.revision_version,
+    revision?.status,
+    intakeReportRefreshKey,
+  ]);
+
+  const showIntakeReadiness =
+    revision != null &&
+    revision.status !== "uploading" &&
+    shouldRevealRevisionMetadata(revision);
+
   const conflictControlsDisabled =
     revision?.status !== "awaiting_confirmation" ||
     packageDraft.loadState !== "ready" ||
@@ -504,6 +566,21 @@ export function WorkflowPage({
       try {
         const detail = await getRevision(selectedRevisionId, { signal });
         setRevision(detail);
+        setMetadataSaveState((current) =>
+          current.isDirty || current.saving || current.staleConflict
+            ? current
+            : {
+                isDirty: false,
+                saving: false,
+                staleConflict: false,
+                isComplete: isRevisionMetadataComplete(detail),
+              },
+        );
+        setRevisions((current) =>
+          current.map((item) =>
+            item.package_revision_id === detail.package_revision_id ? detail : item,
+          ),
+        );
         const runItems = await listRuns(selectedRevisionId, { signal });
         setRuns(runItems);
         setRevisionState("ready");
@@ -528,6 +605,11 @@ export function WorkflowPage({
       try {
         const run = await getRun(selectedRunId, { signal });
         setActiveRun(run);
+        if (run.status === "succeeded") {
+          setMessage(
+            "Analysis complete. Resolve the matrix dispositions and submit the review.",
+          );
+        }
         setError("");
       } catch (err) {
         if (isCancelledRequest(err, signal)) {
@@ -718,6 +800,9 @@ export function WorkflowPage({
   const canArchiveSelectedSystem =
     Boolean(selectedSystem) && !isSystemArchived(selectedSystem!);
   const showRevisionMetadata = Boolean(revision && shouldRevealRevisionMetadata(revision));
+  const workflowNextStep = revision
+    ? nextWorkflowStep(revision, activeRun, runs.length)
+    : null;
 
   if (systemsState === "error" && systems.length === 0) {
     return <PortalLoadFailure message={error || "Could not load systems."} />;
@@ -887,7 +972,7 @@ export function WorkflowPage({
               <Badge variant={revisionStatusVariant(revision.status)}>
                 {revisionStatusLabel(revision.status)}
               </Badge>
-              <span>Preparation</span>
+              <span>Export preparation</span>
               <Badge variant="muted">
                 {packagePreparationStatusLabel(
                   revision.package_preparation_status,
@@ -897,9 +982,36 @@ export function WorkflowPage({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {workflowNextStep ? (
+              <AlertBanner tone="info">{workflowNextStep}</AlertBanner>
+            ) : null}
+
             {revisionState === "loading" &&
             revision?.package_revision_id !== selectedRevisionId ? (
               <RevisionWorkflowSkeleton />
+            ) : null}
+
+            {showRevisionMetadata ? (
+              <RevisionMetadataPanel
+                session={session}
+                revision={revision}
+                refreshKey={`${revision.revision_version}:${intakeReportRefreshKey}`}
+                onRevisionUpdated={(updated) => {
+                  setRevision(updated);
+                  setRevisions((current) =>
+                    current.map((item) =>
+                      item.package_revision_id === updated.package_revision_id
+                        ? updated
+                        : item,
+                    ),
+                  );
+                  setIntakeReportRefreshKey((value) => value + 1);
+                  if (updated.status === "awaiting_confirmation") {
+                    void packageDraft.reload();
+                  }
+                }}
+                onMetadataStateChange={setMetadataSaveState}
+              />
             ) : null}
 
             {revision.status === "uploading" ? (
@@ -927,35 +1039,18 @@ export function WorkflowPage({
               <IntakeProgressPanel status={revision.status} />
             ) : null}
 
-            {showRevisionMetadata ? (
-              <>
-                <RevisionMetadataPanel
-                  session={session}
-                  revision={revision}
-                  refreshKey={`${revision.revision_version}:${intakeReportRefreshKey}`}
-                  onRevisionUpdated={(updated) => {
-                    setRevision(updated);
-                    setIntakeReportRefreshKey((value) => value + 1);
-                    if (updated.status === "awaiting_confirmation") {
-                      void packageDraft.reload();
-                    }
-                  }}
-                  onMetadataStateChange={setMetadataSaveState}
-                  onIntakeReportChange={setIntakeReport}
-                  onReportLoadStateChange={setIntakeReportLoadState}
-                />
-                <Phase4IntakePanels
-                  intakeReport={intakeReport}
-                  reportLoading={intakeReportLoadState.loading}
-                  reportError={intakeReportLoadState.error}
-                  onRefresh={() => setIntakeReportRefreshKey((value) => value + 1)}
-                  conflictControlsDisabled={conflictControlsDisabled}
-                  conflictStatusMessage={conflictStatusMessage}
-                  conflictActionError={conflictActionError}
-                  onManualConflictEdit={handleManualConflictEdit}
-                  onSelectConflictCandidate={handleSelectConflictCandidate}
-                />
-              </>
+            {showIntakeReadiness ? (
+              <Phase4IntakePanels
+                intakeReport={intakeReport}
+                reportLoading={intakeReportLoadState.loading}
+                reportError={intakeReportLoadState.error}
+                onRefresh={() => setIntakeReportRefreshKey((value) => value + 1)}
+                conflictControlsDisabled={conflictControlsDisabled}
+                conflictStatusMessage={conflictStatusMessage}
+                conflictActionError={conflictActionError}
+                onManualConflictEdit={handleManualConflictEdit}
+                onSelectConflictCandidate={handleSelectConflictCandidate}
+              />
             ) : null}
 
             {revision.status === "invalid" ||

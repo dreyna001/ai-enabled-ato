@@ -34,9 +34,6 @@
       "items": {
         "$ref": "#/$defs/IntakeMapProposal"
       }
-    },
-    "metadata_suggestions": {
-      "$ref": "#/$defs/IntakeMetadataSuggestions"
     }
   },
   "$defs": {
@@ -117,30 +114,6 @@
           ]
         }
       ]
-    },
-    "IntakeMetadataSuggestions": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "profile_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "certification_class": {
-          "enum": [
-            "A",
-            "B",
-            "C"
-          ]
-        },
-        "impact_level": {
-          "enum": [
-            "low",
-            "moderate",
-            "high"
-          ]
-        }
-      }
     }
   }
 }

@@ -1,26 +1,27 @@
 # Release Evidence Index
 
-**Status:** Phase 6 integration and release gate (2026-07-14); upload-first intake **P0–P6** doc reconciliation note (2026-07-17)  
+**Status:** Phase 6 integration and release gate (2026-07-14); upload-first intake **P0–P7** doc reconciliation (2026-07-17); **metadata-first create** doc reconciliation (2026-07-21)  
 **Repository tip:** snapshot at Phase 6 reconciliation; branch name is historical (`cursor/phase-6-integration-and-release-gate-f4f1`)  
-**Alembic head:** `20260717_0013` (`migrations/versions/20260717_0013_defer_package_revision_metadata.py`)
+**Alembic head:** `20260717_0013` (`migrations/versions/20260717_0013_defer_package_revision_metadata.py`) — nullable column compatibility migration retained; metadata-first create does not add a follow-on migration
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
 
 ## Upload-first intake plan (bounded index note)
 
-Implementation plan [`UPLOAD_FIRST_INTAKE_PLAN.md`](UPLOAD_FIRST_INTAKE_PLAN.md) records **P0–P6 complete** and **P7 integration gate pending** (2026-07-17). Relevant automated evidence includes:
+Implementation plan [`UPLOAD_FIRST_INTAKE_PLAN.md`](UPLOAD_FIRST_INTAKE_PLAN.md) records **P0–P7 complete** (2026-07-18). **Metadata-first create** (2026-07-21) superseded the 2026-07-17 path-metadata deferral while retaining upload-before-confirm, MAP/REDUCE, and migration `20260717_0013`. Relevant automated evidence includes:
 
 | Area | Representative paths | Classification |
 | --- | --- | --- |
 | System soft-archive (P0) | [`tests/ato_service/test_systems.py`](../tests/ato_service/test_systems.py), OpenAPI/domain archive fields | PASS (code) |
 | Context packer (P1) | [`tests/ato_service/test_context_budget.py`](../tests/ato_service/test_context_budget.py), runtime schema `CONTEXT_UTILIZATION_TARGET` | PASS (code) |
-| Upload-first metadata deferral (P2) | Migration `20260717_0013`, OpenAPI create/PATCH metadata, portal minimal create | PASS (code) |
+| Metadata-first create + PATCH corrections (2026-07-21) | OpenAPI create/PATCH metadata, `test_package_revision_upload_first.py`, portal `RevisionCreateForm` tests | PASS (code) |
+| Upload-first metadata deferral (P2, historical) | Migration `20260717_0013`; superseded for path metadata by metadata-first create | PASS (code); historical |
 | Intake MAP/REDUCE (P3) | [`src/ato_service/intake_map.py`](../src/ato_service/intake_map.py), [`intake_merge.py`](../src/ato_service/intake_merge.py), intake report contract in [`tests/test_contracts.py`](../tests/test_contracts.py) | PASS (code); pre-attestation MAP may be `policy_blocked` — not production model evidence |
-| Portal reveal UX (P4) | Portal components under `portal/src/components/RevisionMetadataPanel.tsx`, `IntakeReadinessPanel.tsx` | PASS (code) |
+| Portal metadata-first UX (P4, reconciled) | `RevisionCreateForm`, `RevisionMetadataPanel`, `IntakeReadinessPanel`; portal workflow tests | PASS (code) |
 | Single-user RBAC (P5) | [`tests/ato_service/test_ep06_security_matrix.py`](../tests/ato_service/test_ep06_security_matrix.py) (`SINGLE_USER_MODE_ENABLED`, default `false`) | PASS (code) |
-| User docs (P6) | Epics §2, talking track, [`PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md) | Reconciled 2026-07-17 |
+| User docs (P6 + metadata-first) | Epics §2, talking track, [`PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md) | Reconciled 2026-07-21 |
 
-This note does **not** close **P7**, claim full product release, or close any hard stop. Dev mock scanner/routing behavior is not production evidence (**HS-004**, **HS-005** remain open).
+This note does **not** claim full product release or close any hard stop. Dev mock scanner/routing behavior is not production evidence (**HS-004**, **HS-005** remain open).
 
 ## Evidence classification
 

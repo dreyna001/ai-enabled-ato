@@ -18,6 +18,7 @@ from ato_service.intake_map import (
     _invoke_map_model,
     build_map_fact_bundle,
     build_map_model_call_request,
+    build_map_system_prompt,
     compute_map_input_digest,
     intake_map_step_key,
     validate_and_parse_map_response,
@@ -154,7 +155,7 @@ def _extraction_outcome(text: str) -> ExtractionOutcome:
 def _valid_response() -> str:
     return json.dumps(
         {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "facts": [
                 {
                     "fact_key": "package.title",
@@ -166,11 +167,6 @@ def _valid_response() -> str:
                     "confidence": "high",
                 }
             ],
-            "suggestions": {
-                "profile_id": "fisma_agency_security",
-                "impact_level": "moderate",
-                "certification_class": None,
-            },
         },
         sort_keys=True,
     )
@@ -261,6 +257,14 @@ def test_step_key_and_replay_digest_are_deterministic(tmp_path: Path) -> None:
     assert compute_map_input_digest(**digest_args) == compute_map_input_digest(
         **digest_args
     )
+
+
+def test_map_system_prompt_does_not_request_path_metadata() -> None:
+    prompt = build_map_system_prompt()
+
+    assert "suggestions" not in prompt
+    assert "You may suggest" not in prompt
+    assert "Never suggest profile_id, impact_level, or certification_class." in prompt
 
 
 def test_pre_attestation_dev_mock_calls_without_human_labels(

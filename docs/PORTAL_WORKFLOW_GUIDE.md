@@ -31,7 +31,7 @@ assessor systems.
 | Kind | Where | Role |
 |------|--------|------|
 | **Deterministic rules** | Intake parsing, draft validation, seal, deterministic analysis, export assembly | Schema, state machine, digests, control catalogs, hard-stops |
-| **LLM (text model)** | Optional intake MAP (pre-attestation, policy-gated); targeted/full analysis; package chat | Propose field values, path suggestions, or sufficiency judgments from evidence text — never human-only labels |
+| **LLM (text model)** | Optional intake MAP (pre-attestation, policy-gated); targeted/full analysis; package chat | Propose draft field values and sufficiency judgments from evidence text — never path metadata or human-only labels |
 | **Human reviewer** | Draft edit, dispositions, export approval | Official judgment; triggers POA&M candidates and evidence requests |
 
 **WSL demo note:** the **Start Deterministic Run** button creates a
@@ -69,12 +69,12 @@ package chat) may be disabled even if the page loads.
 ```text
 Sign In
   → Create / Select System (optional archive / show archived)
-  → Create Minimal Revision (optional parent only)
+  → Create Revision (profile, class/impact, data origin, sensitivity)
   → Upload Files + Finalize
   → Scanning / Extracting (auto)
   → Intake MAP (bounded LLM; may policy_block pre-attestation)
   → Intake REDUCE (deterministic merge + conflicts)
-  → Revision Metadata (human attestation + editable suggestions)
+  → Revision Metadata (corrections via PATCH while pre-ready)
   → Edit Draft + Resolve Conflicts + Save
   → Confirm Package (seal)
   → Revision Ready
@@ -118,27 +118,29 @@ block some features like chat but often still allows walking the workflow.
 
 ---
 
-### 2. Create revision (upload-first)
+### 2. Create revision (metadata-first)
 
-**Portal:** **Package Revisions** card — **Create revision** form (minimal).
+**Portal:** **Package Revisions** card — **Create revision** form with required path metadata.
 
 #### Create form fields
 
 | Field | Purpose |
 |-------|---------|
-| **Parent Revision (Optional)** | Link a prior `ready` revision for lineage and change analysis |
-| **Create revision** | Creates revision with status `uploading`; no profile or labels at create |
+| **Parent Revision (Optional)** | Link a prior `ready` revision for lineage; portal pre-fills metadata from the selected parent |
+| **Profile** | Authorization path — required before create |
+| **Certification class / Impact level** | Path-specific; required per profile rules |
+| **Data origin** | Human-only attestation — required before create |
+| **Sensitivity** | Human-only attestation — required before create |
+| **Create revision** | Creates revision with status `uploading` and persisted metadata |
 
-Profile, certification class, impact level, data origin, and sensitivity are **hidden at create** and appear on **Revision metadata** after upload finalize begins.
-
-Parent selection inherits profile and locks the profile field when set.
+Metadata remains editable through **Revision metadata** (`PATCH` with ETag) while the revision is `uploading`, `scanning`, `extracting`, or `awaiting_confirmation`.
 
 | | |
 |--|--|
 | **LLM** | None |
-| **Domain** | Opens an upload cycle; path metadata deferred until post-upload PATCH |
-| **Technical** | Parent must be `ready`; optional parent link only on create |
-| **Artifacts** | `PackageRevision` row with status `uploading` and nullable path metadata |
+| **Domain** | Opens an upload cycle with a declared authorization path and human data labels |
+| **Technical** | Parent must be `ready` when linked; create validates profile/class-or-impact boundaries |
+| **Artifacts** | `PackageRevision` row with status `uploading` and persisted path metadata |
 
 ---
 
@@ -193,7 +195,7 @@ Revision status: `uploading` → `scanning` after finalize.
 |--|--|
 | **LLM (optional, pre-attestation)** | **Yes — intake MAP**, one bounded call per covered artifact (packed to `CONTEXT_UTILIZATION_TARGET`, default **0.70**, minus output and instruction reserves). Routing may return `policy_blocked` before human attestation. |
 | **LLM (REDUCE)** | **No** — deterministic merge in application code |
-| **Domain (ATO)** | Parses uploads into draft structure; AI may suggest profile/class/impact only — never `data_origin` or `sensitivity` |
+| **Domain (ATO)** | Parses uploads into draft structure; intake extracts package draft facts only — never path metadata or human-only labels |
 | **Technical** | PDF/DOCX/XLSX/JSON/XML extraction with limits; zip/XML safety; chunk/index; draft JSON schema; provenance; conflict records |
 
 #### Intake pipeline stages
@@ -220,7 +222,7 @@ Revision status: `uploading` → `scanning` after finalize.
 |--------|--------|
 | **When** | After deterministic extraction on clean artifacts |
 | **Input** | Ranked chunk groups packed to context budget |
-| **Output** | Proposed draft field values and optional path metadata suggestions |
+| **Output** | Proposed draft field values with citations; no path metadata suggestions |
 | **Guardrails** | Cannot write assessor inputs, findings, POA&M, `data_origin`, or `sensitivity`; must cite source artifact; routing/policy can block (`policy_blocked`) |
 | **Debug artifacts (if run)** | `revisions/{id}/intake-map/{step_id}/` prompt, fact bundle, response |
 
@@ -237,21 +239,21 @@ The product does **not** generate official signed SSP/SAR/POA&M at intake — on
 
 ---
 
-### 5a. Revision metadata and human attestation (`scanning` → `awaiting_confirmation`)
+### 5a. Revision metadata and human attestation (`uploading` → `awaiting_confirmation`)
 
-**Portal:** **Revision metadata** panel (visible once status is not `uploading`).
+**Portal:** **Revision metadata** panel (visible from create through confirm).
 
 | Field | Purpose |
 |-------|---------|
-| **Profile** | Authorization path — editable; AI suggestion shown only when unset |
-| **Certification class / Impact level** | Path-specific; editable suggestions |
-| **Data origin** | **Human-only** attestation (required before confirm) |
-| **Sensitivity** | **Human-only** attestation (required before confirm) |
-| **Save metadata** | `PATCH` with `If-Match` ETag |
+| **Profile** | Authorization path — set at create; editable via PATCH while pre-ready |
+| **Certification class / Impact level** | Path-specific; set at create; editable via PATCH while pre-ready |
+| **Data origin** | **Human-only** attestation (required at create) |
+| **Sensitivity** | **Human-only** attestation (required at create) |
+| **Save metadata** | `PATCH` with `If-Match` ETag for corrections |
 
 | | |
 |--|--|
-| **LLM** | None on save; MAP may have suggested profile/class/impact only |
+| **LLM** | None; intake does not suggest or autofill path metadata |
 | **Domain** | Routing and confirm gates require complete human attestation |
 | **Technical** | Stale metadata returns 412/409; backend intake-report `confirmation.allowed` is source of truth |
 
@@ -259,7 +261,7 @@ The product does **not** generate official signed SSP/SAR/POA&M at intake — on
 
 ### 5b. Intake readiness and conflicts (`awaiting_confirmation`)
 
-**Portal:** **Intake readiness** panel — inventory, suggested path, gaps, MAP step status, conflicts.
+**Portal:** **Intake readiness** panel — inventory, declared path metadata, gaps, MAP step status, conflicts.
 
 | Conflict type | Resolution |
 |---------------|------------|
@@ -586,7 +588,7 @@ export outputs remain **draft** artifacts.
 |-------|-----------|------------|
 | Upload / scan / finalize | 0 | — |
 | Extract (deterministic) | 0 | Format parsers |
-| Intake MAP (optional, pre-attestation) | 0–N (per artifact; policy may block) | Map extracted text → draft fields and path suggestions |
+| Intake MAP (optional, pre-attestation) | 0–N (per artifact; policy may block) | Map extracted text → draft package facts |
 | Intake REDUCE | 0 | Deterministic merge |
 | Revision metadata save | 0 | Human attestation |
 | Draft edit / seal | 0 | — |
@@ -653,10 +655,10 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 
 | Status | What you see |
 |--------|--------------|
-| `uploading` | Package upload panel |
+| `uploading` | Revision metadata panel + package upload panel |
 | `scanning` / `extracting` | Intake progress panel |
 | `invalid` / `quarantined` / `archived` | Terminal intake panel |
-| `awaiting_confirmation` | Package editor |
+| `awaiting_confirmation` | Revision metadata, intake readiness, package editor |
 | `ready` | Preflight, assistant, analysis, review, export panels |
 
 ---
@@ -665,11 +667,11 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 
 1. **Sign in** at `/login`
 2. **Create System** → select it
-3. **Create revision** (optional parent only) — no profile or labels yet
+3. **Create revision** — set profile, class or impact, **data origin**, **sensitivity** (optional parent pre-fills metadata)
 4. **Upload** evidence → **Finalize upload**
 5. Wait for **scanning / extracting / intake MAP+REDUCE**
-6. Set **Revision metadata** (profile, class or impact, **data origin**, **sensitivity**) → **Save metadata**
-7. Review **Intake readiness** → resolve **conflicts** in editor or metadata
+6. Correct **Revision metadata** if needed → **Save metadata**
+7. Review **Intake readiness** → resolve **conflicts** in editor
 8. **Edit draft** → fix validation → **Save Draft**
 9. **Confirm Package** → status **Ready**
 10. Check **Preflight** (analysis eligible = yes)
@@ -713,7 +715,7 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 | Area | Path |
 |------|------|
 | Portal workflow page | `portal/src/pages/WorkflowPage.tsx` |
-| Revision create (minimal) | `portal/src/components/RevisionCreateForm.tsx` |
+| Revision create (metadata-first) | `portal/src/components/RevisionCreateForm.tsx` |
 | Revision metadata | `portal/src/components/RevisionMetadataPanel.tsx` |
 | Intake readiness / conflicts | `portal/src/components/IntakeReadinessPanel.tsx`, `IntakeConflictList.tsx` |
 | Package editor | `portal/src/components/PackageEditor.tsx` |

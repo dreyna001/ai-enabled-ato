@@ -73,8 +73,8 @@ if TYPE_CHECKING:
         IntakeRevisionSnapshot,
     )
 
-PROMPT_VERSION = "1.0.0"
-RESPONSE_SCHEMA_VERSION = "1.0.0"
+PROMPT_VERSION = "1.1.0"
+RESPONSE_SCHEMA_VERSION = "1.1.0"
 SCHEMA_ID = "https://ato.local/schemas/intake-map-response.schema.json"
 FACT_BUNDLE_SCHEMA_ID = "https://ato.local/schemas/intake-map-fact-bundle.schema.json"
 MAX_FACTS = 64
@@ -92,10 +92,6 @@ PROHIBITED_FACT_KEY_PREFIXES: tuple[str, ...] = (
     "official",
     "status",
     "routing",
-)
-
-PROHIBITED_SUGGESTION_KEYS: frozenset[str] = frozenset(
-    {"data_origin", "sensitivity", "effective_data_labels"}
 )
 
 MapValidationOutcome = Literal[
@@ -147,16 +143,8 @@ class ParsedMapFact:
 
 
 @dataclass(frozen=True, slots=True)
-class ParsedMapSuggestions:
-    profile_id: str | None
-    impact_level: str | None
-    certification_class: str | None
-
-
-@dataclass(frozen=True, slots=True)
 class ParsedMapResponse:
     facts: tuple[ParsedMapFact, ...]
-    suggestions: ParsedMapSuggestions
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,12 +316,12 @@ Rules:
 - Separate direct_evidence from inference. Use value_kind=unknown when unsupported.
 - Never output human-only routing/classification labels, assessor-owned conclusions,
   findings, POA&M, or official status.
-- You may suggest profile_id, impact_level, or certification_class only under suggestions.
+- Never suggest profile_id, impact_level, or certification_class.
 - Cite source_artifact_id, segment_index, and chunk_ids for every fact.
 
 Response shape:
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "facts": [
     {
       "fact_key": "package.title",
@@ -344,12 +332,7 @@ Response shape:
       "chunk_ids": ["artifact_uuid:1"],
       "confidence": "high"
     }
-  ],
-  "suggestions": {
-    "profile_id": null,
-    "impact_level": null,
-    "certification_class": null
-  }
+  ]
 }
 """
 
@@ -390,7 +373,7 @@ def _response_validator() -> Draft202012Validator:
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "additionalProperties": False,
-        "required": ["schema_version", "facts", "suggestions"],
+        "required": ["schema_version", "facts"],
         "properties": {
             "schema_version": {"const": RESPONSE_SCHEMA_VERSION},
             "facts": {
@@ -423,16 +406,6 @@ def _response_validator() -> Draft202012Validator:
                         },
                         "confidence": {"enum": ["low", "medium", "high"]},
                     },
-                },
-            },
-            "suggestions": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["profile_id", "impact_level", "certification_class"],
-                "properties": {
-                    "profile_id": {"type": ["string", "null"], "maxLength": 64},
-                    "impact_level": {"type": ["string", "null"], "maxLength": 32},
-                    "certification_class": {"type": ["string", "null"], "maxLength": 64},
                 },
             },
         },
@@ -487,16 +460,6 @@ def validate_and_parse_map_response(
             detail="unsupported schema_version",
             repairable=True,
         )
-
-    suggestions_raw = payload.get("suggestions")
-    assert isinstance(suggestions_raw, dict)
-    for key in suggestions_raw:
-        if key in PROHIBITED_SUGGESTION_KEYS:
-            raise MapResponseValidationError(
-                failure_kind="prohibited_field",
-                detail=f"prohibited suggestion key: {key}",
-                repairable=False,
-            )
 
     segment_lookup = {
         segment.segment_index: segment for segment in included_segments
@@ -562,24 +525,7 @@ def validate_and_parse_map_response(
             )
         )
 
-    suggestions = ParsedMapSuggestions(
-        profile_id=(
-            str(suggestions_raw["profile_id"])
-            if suggestions_raw.get("profile_id") is not None
-            else None
-        ),
-        impact_level=(
-            str(suggestions_raw["impact_level"])
-            if suggestions_raw.get("impact_level") is not None
-            else None
-        ),
-        certification_class=(
-            str(suggestions_raw["certification_class"])
-            if suggestions_raw.get("certification_class") is not None
-            else None
-        ),
-    )
-    return ParsedMapResponse(facts=tuple(facts), suggestions=suggestions)
+    return ParsedMapResponse(facts=tuple(facts))
 
 
 def compute_map_input_digest(

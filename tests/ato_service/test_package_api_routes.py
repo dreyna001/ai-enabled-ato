@@ -382,6 +382,81 @@ def test_create_package_revision_requires_nullable_fields_in_request_body(
     _assert_problem(response, status=422, error_code="request_schema_invalid")
 
 
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {
+            "profile_id": "fisma_agency_security",
+            "certification_class": None,
+            "impact_level": None,
+        },
+        {
+            "profile_id": "fisma_agency_security",
+            "certification_class": "B",
+            "impact_level": "moderate",
+        },
+        {
+            "profile_id": "fedramp_20x",
+            "certification_class": None,
+            "impact_level": None,
+        },
+        {
+            "profile_id": "fedramp_20x",
+            "certification_class": "B",
+            "impact_level": "moderate",
+        },
+    ],
+)
+def test_create_package_revision_rejects_profile_incompatible_metadata(
+    client: TestClient,
+    mutation_headers: dict[str, str],
+    metadata: dict[str, str | None],
+) -> None:
+    response = client.post(
+        f"/api/v1/systems/{SYSTEM_ID}/package-revisions",
+        headers=mutation_headers,
+        json={
+            "parent_revision_id": None,
+            "data_origin": "synthetic",
+            "sensitivity": "internal_unclassified",
+            **metadata,
+        },
+    )
+    _assert_problem(response, status=422, error_code="request_schema_invalid")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("profile_id", "unsupported_profile"),
+        ("impact_level", "critical"),
+        ("data_origin", "guessed"),
+        ("sensitivity", "unknown"),
+    ],
+)
+def test_create_package_revision_rejects_unsupported_metadata_enums(
+    client: TestClient,
+    mutation_headers: dict[str, str],
+    field: str,
+    value: str,
+) -> None:
+    payload = {
+        "parent_revision_id": None,
+        "profile_id": "fisma_agency_security",
+        "certification_class": None,
+        "impact_level": "moderate",
+        "data_origin": "synthetic",
+        "sensitivity": "internal_unclassified",
+    }
+    payload[field] = value
+    response = client.post(
+        f"/api/v1/systems/{SYSTEM_ID}/package-revisions",
+        headers=mutation_headers,
+        json=payload,
+    )
+    _assert_problem(response, status=422, error_code="request_schema_invalid")
+
+
 def test_create_system_requires_csrf_and_origin(
     unauthenticated_app: FastAPI,
     mutation_headers: dict[str, str],
@@ -524,15 +599,25 @@ def test_create_package_revision_returns_etag(
         response = client.post(
             f"/api/v1/systems/{SYSTEM_ID}/package-revisions",
             headers=mutation_headers,
-            json={"parent_revision_id": None},
+            json={
+                "parent_revision_id": None,
+                "profile_id": "fisma_agency_security",
+                "certification_class": None,
+                "impact_level": "moderate",
+                "data_origin": "synthetic",
+                "sensitivity": "internal_unclassified",
+            },
         )
 
     assert response.status_code == 201
     assert response.json() == PACKAGE_REVISION_PAYLOAD
     assert response.headers["ETag"] == '"v1"'
-    assert create_package_revision.await_args.kwargs[
-        "request"
-    ].parent_revision_id is None
+    request = create_package_revision.await_args.kwargs["request"]
+    assert request.parent_revision_id is None
+    assert request.profile_id == "fisma_agency_security"
+    assert request.impact_level == "moderate"
+    assert request.data_origin == "synthetic"
+    assert request.sensitivity == "internal_unclassified"
 
 
 def test_list_package_revisions_returns_items_and_next_cursor(client: TestClient) -> None:

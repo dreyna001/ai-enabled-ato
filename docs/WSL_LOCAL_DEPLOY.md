@@ -96,6 +96,20 @@ sudo systemctl start ato-synthetic-intake-worker.service
 journalctl -u ato-synthetic-intake-worker -n 50 --no-pager
 ```
 
+## Reset local data (empty database and storage)
+
+To wipe all systems, revisions, jobs, and uploaded package bytes while keeping
+the WSL install, credentials, and runtime config:
+
+```bash
+cd /mnt/c/Users/dreyn/OneDrive/Desktop/Cursor/ai-enabled-ato
+sudo bash scripts/wsl-local-reset.sh
+```
+
+This stops services, drops and recreates the local PostgreSQL database, clears
+`/var/ato-packages`, reruns migrations, and restarts the API. Hard refresh the
+portal browser tab afterward so stale client session state is cleared.
+
 ## Re-run after WSL restart
 
 Bind mounts do not persist across WSL restarts. Re-bind and restart:
@@ -123,17 +137,18 @@ sudo systemctl restart ato-api.service ato-analyzer-worker.service
 
 If portal auth and text-model settings were enabled, you can instead rerun `sudo bash scripts/wsl-portal-enable.sh` (or `--bedrock`) to refresh package bytes, migrations, WSL units, and storage bind in one step.
 
-Verify the upload-first create contract:
+Verify the metadata-first create contract:
 
 ```bash
 curl -s http://127.0.0.1:8001/openapi.json | python3 -c "
 import sys, json
-props = json.load(sys.stdin)['components']['schemas']['CreatePackageRevisionRequest']['properties']
-print(list(props.keys()))
+schema = json.load(sys.stdin)['components']['schemas']['CreatePackageRevisionRequest']
+print(sorted(schema['properties'].keys()))
+print(schema.get('required', []))
 "
 ```
 
-Expect `['parent_revision_id']` only.
+Expect properties `certification_class`, `data_origin`, `impact_level`, `parent_revision_id`, `profile_id`, `sensitivity` and required fields including `profile_id`, `data_origin`, and `sensitivity`.
 
 ## Options
 

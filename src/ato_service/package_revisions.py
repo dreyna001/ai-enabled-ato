@@ -81,6 +81,7 @@ _RESOURCE_NOT_FOUND_MESSAGE = "requested resource was not found"
 
 PATCHABLE_METADATA_STATUSES = frozenset(
     {
+        PackageRevisionStatus.UPLOADING.value,
         PackageRevisionStatus.SCANNING.value,
         PackageRevisionStatus.EXTRACTING.value,
         PackageRevisionStatus.AWAITING_CONFIRMATION.value,
@@ -210,9 +211,14 @@ class PackageRevisionStorageError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class CreatePackageRevisionInput:
-    """Validated create payload for a new upload-first package revision."""
+    """Validated create payload with required operator-owned revision metadata."""
 
     parent_revision_id: uuid.UUID | None
+    profile_id: str
+    certification_class: str | None
+    impact_level: str | None
+    data_origin: str
+    sensitivity: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,9 +417,66 @@ def validate_profile_boundaries(
 def validate_create_input(
     *,
     parent_revision_id: uuid.UUID | None,
+    profile_id: str | None,
+    certification_class: str | None,
+    impact_level: str | None,
+    data_origin: str | None,
+    sensitivity: str | None,
 ) -> CreatePackageRevisionInput:
-    """Validate upload-first create inputs before any database mutation."""
-    return CreatePackageRevisionInput(parent_revision_id=parent_revision_id)
+    """Validate required create-time metadata before any database mutation."""
+    if profile_id is None:
+        raise PackageRevisionValidationError("profile_id is required")
+    profile_id = _require_enum_value(
+        profile_id,
+        field_name="profile_id",
+        allowed=ev.PROFILE_ID_VALUES,
+    )
+    if data_origin is None:
+        raise PackageRevisionValidationError("data_origin is required")
+    data_origin = _require_enum_value(
+        data_origin,
+        field_name="data_origin",
+        allowed=ev.DATA_ORIGIN_VALUES,
+    )
+    if sensitivity is None:
+        raise PackageRevisionValidationError("sensitivity is required")
+    sensitivity = _require_enum_value(
+        sensitivity,
+        field_name="sensitivity",
+        allowed=ev.SENSITIVITY_VALUES,
+    )
+    try:
+        require_unclassified_sensitivity(sensitivity)
+    except ClassifiedAuthorizationInputError as exc:
+        raise PackageRevisionValidationError(
+            "classified sensitivity is outside product scope",
+            error_code=exc.error_code,
+        ) from exc
+    if certification_class is not None:
+        certification_class = _require_enum_value(
+            certification_class,
+            field_name="certification_class",
+            allowed=ev.CERTIFICATION_CLASS_VALUES,
+        )
+    if impact_level is not None:
+        impact_level = _require_enum_value(
+            impact_level,
+            field_name="impact_level",
+            allowed=ev.IMPACT_LEVEL_VALUES,
+        )
+    validate_profile_boundaries(
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+    )
+    return CreatePackageRevisionInput(
+        parent_revision_id=parent_revision_id,
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+        data_origin=data_origin,
+        sensitivity=sensitivity,
+    )
 
 
 _PATCH_METADATA_FIELDS = frozenset(
@@ -594,6 +657,11 @@ def create_request_digest(
                 if request.parent_revision_id is None
                 else format_uuid(request.parent_revision_id)
             ),
+            "profile_id": request.profile_id,
+            "certification_class": request.certification_class,
+            "impact_level": request.impact_level,
+            "data_origin": request.data_origin,
+            "sensitivity": request.sensitivity,
         }
     )
 
@@ -850,12 +918,17 @@ async def create_package_revision(
     hmac_key: bytes,
     now: datetime,
 ) -> PackageRevisionMutationResult:
-    """Create an upload-first package revision without committing the caller transaction."""
+    """Create a metadata-complete uploading revision without committing."""
     from ato_service.db.models import PackageRevision
 
     validated_now = _require_aware_utc(now, field_name="now")
     validated_request = validate_create_input(
         parent_revision_id=request.parent_revision_id,
+        profile_id=request.profile_id,
+        certification_class=request.certification_class,
+        impact_level=request.impact_level,
+        data_origin=request.data_origin,
+        sensitivity=request.sensitivity,
     )
     if not authority_manifest_id:
         raise PackageRevisionValidationError("authority_manifest_id is required")
@@ -888,11 +961,6 @@ async def create_package_revision(
         return _mutation_result_from_replay(replay)
 
     parent_revision_id = validated_request.parent_revision_id
-    profile_id: str | None = None
-    certification_class: str | None = None
-    impact_level: str | None = None
-    data_origin: str | None = None
-    sensitivity: str | None = None
     if parent_revision_id is not None:
         parent_result = await session.execute(
             _load_parent_revision_statement(parent_revision_id)
@@ -905,9 +973,16 @@ async def create_package_revision(
                 parent_revision_id=parent_revision_id,
                 parent_status=parent_revision.status,
             )
-        profile_id = parent_revision.profile_id
-        certification_class = parent_revision.certification_class
-        impact_level = parent_revision.impact_level
+
+    profile_id = validated_request.profile_id
+    certification_class = validated_request.certification_class
+    impact_level = validated_request.impact_level
+    data_origin = validated_request.data_origin
+    sensitivity = validated_request.sensitivity
+    effective_data_labels = _compute_effective_data_labels(
+        data_origin=data_origin,
+        sensitivity=sensitivity,
+    )
 
     package_revision_id = uuid.uuid4()
     package_revision = PackageRevision(
@@ -919,7 +994,7 @@ async def create_package_revision(
         impact_level=impact_level,
         data_origin=data_origin,
         sensitivity=sensitivity,
-        effective_data_labels=[],
+        effective_data_labels=effective_data_labels,
         authority_manifest_id=authority_manifest_id,
         content_manifest_sha256=None,
         revision_version=1,
@@ -940,7 +1015,12 @@ async def create_package_revision(
         object_id=format_uuid(package_revision_id),
         outcome="succeeded",
         reason_code=None,
-        metadata={"revision_version": package_revision.revision_version},
+        metadata={
+            "revision_version": package_revision.revision_version,
+            "profile_id": profile_id,
+            "data_origin": data_origin,
+            "sensitivity": sensitivity,
+        },
         occurred_at=validated_now,
     )
     await record_idempotency_outcome(
@@ -1057,7 +1137,7 @@ async def patch_package_revision_metadata(
         reason_code=None,
         metadata={
             "revision_version": package_revision.revision_version,
-            "provided_fields": sorted(patch.provided_fields),
+            "provided_fields": ",".join(sorted(patch.provided_fields)),
         },
         occurred_at=validated_now,
     )

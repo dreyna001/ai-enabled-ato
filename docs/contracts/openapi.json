@@ -2292,6 +2292,14 @@
       "CreatePackageRevisionRequest": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "parent_revision_id",
+          "profile_id",
+          "certification_class",
+          "impact_level",
+          "data_origin",
+          "sensitivity"
+        ],
         "properties": {
           "parent_revision_id": {
             "anyOf": [
@@ -2302,9 +2310,97 @@
                 "type": "null"
               }
             ]
+          },
+          "profile_id": {
+            "$ref": "./domain.schema.json#/$defs/ProfileId"
+          },
+          "certification_class": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "B",
+              "C",
+              null
+            ]
+          },
+          "impact_level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              null
+            ]
+          },
+          "data_origin": {
+            "$ref": "./domain.schema.json#/$defs/DataOrigin"
+          },
+          "sensitivity": {
+            "$ref": "./domain.schema.json#/$defs/Sensitivity"
           }
         },
-        "$comment": "Upload-first create accepts only an optional parent revision link. Profile, class/impact, and human-only data labels are deferred until PATCH /package-revisions/{id}."
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "profile_id": {
+                  "const": "fedramp_20x_program"
+                }
+              },
+              "required": [
+                "profile_id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "certification_class": {
+                  "enum": [
+                    "B",
+                    "C"
+                  ]
+                },
+                "impact_level": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "profile_id": {
+                  "enum": [
+                    "fedramp_rev5_transition",
+                    "fisma_agency_security"
+                  ]
+                }
+              },
+              "required": [
+                "profile_id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "certification_class": {
+                  "type": "null"
+                },
+                "impact_level": {
+                  "enum": [
+                    "low",
+                    "moderate",
+                    "high"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "$comment": "Metadata-first create requires profile, profile-conditional class or impact, and human-only data_origin/sensitivity before upload. PATCH /package-revisions/{id} remains available for corrections through awaiting_confirmation."
       },
       "PatchPackageRevisionMetadataRequest": {
         "type": "object",

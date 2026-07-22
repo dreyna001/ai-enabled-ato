@@ -22,7 +22,6 @@ from ato_service.intake_map import (
     IntakeMapStepResult as MapOrchestrationStepResult,
     ParsedMapFact,
     ParsedMapResponse,
-    ParsedMapSuggestions,
 )
 from ato_service.normalize_proposal.constants import PROHIBITED_TARGET_PREFIXES
 
@@ -111,7 +110,6 @@ def _map_step(
     step_key: str = "intake_map_000",
     context_complete: bool = True,
     proposals: list[dict[str, Any]] | None = None,
-    metadata_suggestions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": "1.0.0",
@@ -119,7 +117,6 @@ def _map_step(
         "step_key": step_key,
         "context_complete": context_complete,
         "proposals": proposals or [_proposal()],
-        "metadata_suggestions": metadata_suggestions or {},
     }
 
 
@@ -244,14 +241,6 @@ def test_merge_rejects_prohibited_prefix() -> None:
         assert exc_info.value.error_code == "intake_merge_invalid_input"
 
 
-def test_merge_rejects_human_only_metadata_suggestions() -> None:
-    with pytest.raises(IntakeMergeError) as exc_info:
-        validate_intake_map_step_result(
-            _map_step(metadata_suggestions={"data_origin": "owner_attested"})
-        )
-    assert exc_info.value.error_code == "intake_merge_invalid_input"
-
-
 def test_merge_rejects_unsupported_schema_version() -> None:
     payload = _map_step()
     payload["schema_version"] = "9.9.9"
@@ -334,26 +323,27 @@ def test_merge_context_complete_requires_all_steps() -> None:
     assert any(gap.reason == "map_step_context_incomplete" for gap in result.gaps)
 
 
-def test_merge_metadata_suggestion_conflict() -> None:
+def test_merge_ignores_metadata_suggestions_in_step_payload() -> None:
+    payload = _map_step()
+    payload["metadata_suggestions"] = {"impact_level": "high"}
+    with pytest.raises(IntakeMergeError) as exc_info:
+        validate_intake_map_step_result(payload)
+    assert exc_info.value.error_code == "intake_merge_invalid_input"
+
+
+def test_merge_does_not_emit_metadata_suggestions() -> None:
     result = reduce_intake_map_results(
         profile_id="fisma_agency_security",
         base_document=_empty_fisma_document(),
         base_field_provenance={},
-        map_step_results=[
-            _map_step(metadata_suggestions={"impact_level": "moderate"}),
-            _map_step(
-                step_id=STEP_ID_B,
-                step_key="intake_map_001",
-                proposals=[],
-                metadata_suggestions={"impact_level": "high"},
-            ),
-        ],
+        map_step_results=[_map_step(), _map_step(step_id=STEP_ID_B, step_key="intake_map_001")],
         system_display_name="Demo System",
     )
 
-    assert "impact_level" not in result.metadata_suggestions
-    assert any(
-        conflict.target_pointer == "/_intake_metadata/impact_level"
+    assert result.metadata_suggestions == {}
+    assert result.document["extensions"]["intake_metadata_suggestions"] == {}
+    assert not any(
+        conflict.target_pointer.startswith("/_intake_metadata/")
         for conflict in result.conflicts
     )
 
@@ -398,11 +388,6 @@ def test_adapter_binds_trusted_provenance_and_rejects_unmapped_facts() -> None:
                     chunk_ids=(CHUNK_ID,),
                     confidence="low",
                 ),
-            ),
-            suggestions=ParsedMapSuggestions(
-                profile_id="fisma_agency_security",
-                impact_level="moderate",
-                certification_class=None,
             ),
         ),
     )

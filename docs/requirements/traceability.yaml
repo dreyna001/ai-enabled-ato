@@ -1431,7 +1431,7 @@
     {
       "requirement_id": "P1-017",
       "spec_section": "13.1, 31",
-      "requirement_text": "Upload-first package revisions allow minimal create (optional title and parent link only), defer profile and human-only data_origin/sensitivity until authenticated PATCH /package-revisions/{id}, require parent revisions to be ready before child create, and fail closed on confirm and model routing with revision_metadata_incomplete until metadata is complete.",
+      "requirement_text": "Metadata-first package revisions require profile, profile-conditional class or impact, and human-only data_origin/sensitivity at POST /systems/{system_id}/package-revisions before upload; authenticated PATCH /package-revisions/{id} corrects metadata while uploading through awaiting_confirmation; parent revisions must be ready before child create; confirm and model routing fail closed with revision_metadata_incomplete when metadata is incomplete. Nullable DB columns from migration 20260717_0013 remain for compatibility without a follow-on migration.",
       "epic": "EP-02-package-foundation",
       "implementation_files": [
         "migrations/versions/20260717_0013_defer_package_revision_metadata.py",
@@ -1449,20 +1449,24 @@
         "src/ato_service/intake_work.py"
       ],
       "test_ids": [
+        "tests/ato_service/test_package_revision_upload_first.py::test_validate_create_input_requires_profile_id",
+        "tests/ato_service/test_package_revision_upload_first.py::test_create_request_digest_includes_metadata",
         "tests/ato_service/test_package_revision_upload_first.py::test_validate_patch_metadata_requires_at_least_one_field",
         "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_updates_revision_and_increments_version",
+        "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_allows_uploading_state",
         "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_requires_if_match",
         "tests/ato_service/test_package_revision_upload_first.py::test_patch_metadata_rejects_stale_etag",
         "tests/ato_service/test_package_revision_upload_first.py::test_create_child_requires_ready_parent",
+        "tests/ato_service/test_package_revision_upload_first.py::test_create_child_uses_caller_metadata_not_parent",
         "tests/ato_service/test_package_revision_upload_first.py::test_revision_metadata_ready_for_model_requires_human_labels",
-        "tests/ato_service/test_package_revisions.py::test_validate_create_input_accepts_minimal_root_payload",
+        "tests/ato_service/test_package_revisions.py::test_validate_create_input_accepts_complete_root_payload",
+        "tests/ato_service/test_package_revisions.py::test_validate_create_input_rejects_missing_data_origin",
         "tests/ato_service/test_package_revisions.py::test_create_persists_uploading_revision_and_records_outcome",
         "tests/ato_service/test_package_revisions.py::test_confirm_rejects_incomplete_metadata_before_draft_lookup",
-        "tests/ato_service/test_draft_builder.py::test_builds_null_profile_shell_for_upload_first_revision",
         "tests/ato_service/test_package_api_routes.py::test_create_package_revision_requires_nullable_fields_in_request_body",
         "tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration"
       ],
-      "verification_type": "Upload-first create/PATCH/confirm metadata contract with nullable pre-ready DB columns, optimistic-concurrency metadata PATCH, parent-ready child create gate, draft shell sync, normalization skip while labels incomplete, and Alembic head 20260717_0013",
+      "verification_type": "Metadata-first create/PATCH/confirm contract with nullable pre-ready DB columns (Alembic head 20260717_0013), optimistic-concurrency metadata PATCH through uploading, parent-ready child create gate, and confirm/model fail-closed on incomplete metadata",
       "status": "implemented"
     },
     {
@@ -1510,7 +1514,8 @@
         "tests/ato_service/test_intake_merge.py::test_merge_writes_single_proposal_with_provenance",
         "tests/ato_service/test_intake_merge.py::test_merge_emits_conflict_for_same_pointer_different_values",
         "tests/ato_service/test_intake_merge.py::test_merge_rejects_prohibited_prefix",
-        "tests/ato_service/test_intake_merge.py::test_merge_rejects_human_only_metadata_suggestions",
+        "tests/ato_service/test_intake_merge.py::test_merge_ignores_metadata_suggestions_in_step_payload",
+        "tests/ato_service/test_intake_merge.py::test_merge_does_not_emit_metadata_suggestions",
         "tests/ato_service/test_intake_merge.py::test_merge_rejects_missing_citation_anchor",
         "tests/ato_service/test_intake_merge.py::test_merge_replay_is_idempotent",
         "tests/ato_service/test_intake_merge.py::test_merge_context_complete_requires_all_steps",
@@ -1523,7 +1528,7 @@
     {
       "requirement_id": "P1-020",
       "spec_section": "31",
-      "requirement_text": "GET /package-revisions/{id}/intake-report returns a deterministic inventory of intake stage, files, suggested metadata, human attestation gaps, conflicts, omitted chunks, context completeness, and fail-closed confirmation blockers without mutating revision state.",
+      "requirement_text": "GET /package-revisions/{id}/intake-report returns a deterministic inventory of intake stage, files, declared path metadata, empty path-metadata suggestions, human attestation gaps, conflicts, omitted chunks, context completeness, and fail-closed confirmation blockers without mutating revision state.",
       "epic": "EP-02-package-foundation",
       "implementation_files": [
         "src/ato_service/intake_readiness.py",
@@ -1534,6 +1539,8 @@
       ],
       "test_ids": [
         "tests/ato_service/test_intake_readiness.py::test_default_adapter_reads_complete_reduce_extensions",
+        "tests/ato_service/test_intake_readiness.py::test_report_always_returns_empty_suggested_metadata",
+        "tests/ato_service/test_intake_readiness.py::test_build_intake_report_does_not_treat_draft_values_as_suggestions",
         "tests/ato_service/test_intake_readiness.py::test_default_adapter_missing_extensions_fails_closed",
         "tests/ato_service/test_intake_readiness.py::test_build_intake_report_fails_closed_on_draft_before_awaiting_confirmation",
         "tests/ato_service/test_intake_readiness.py::test_incomplete_context_is_gap_not_confirmation_blocker",
@@ -1548,7 +1555,7 @@
     {
       "requirement_id": "P1-021",
       "spec_section": "31",
-      "requirement_text": "Portal post-upload workflow reveals editable metadata and package draft after intake, surfaces intake-report conflicts and readiness, keeps data_origin and sensitivity human-only, enforces ETag/stale conflict recovery on metadata PATCH, and fail-closes Confirm until metadata, draft, and readiness blockers are cleared.",
+      "requirement_text": "Portal metadata-first workflow collects path metadata at revision create, keeps data_origin and sensitivity human-only, shows revision metadata from create through confirm, surfaces intake-report conflicts and readiness without path-metadata suggestions, enforces ETag/stale conflict recovery on metadata PATCH, and fail-closes Confirm until metadata, draft, and readiness blockers are cleared.",
       "epic": "EP-06-review-portal",
       "implementation_files": [
         "portal/src/pages/WorkflowPage.tsx",
@@ -1561,13 +1568,14 @@
         "portal/src/utils/draftValidation.ts"
       ],
       "test_ids": [
+        "portal/src/components/RevisionCreateForm.test.tsx",
         "portal/src/pages/WorkflowPage.test.tsx",
-        "portal/src/components/RevisionMetadataPanel.test.tsx",
+        "portal/src/utils/revisionMetadata.test.ts",
+        "portal/src/components/IntakeReadinessPanel.test.tsx",
         "portal/src/api/client.test.ts",
-        "portal/src/api/responseSchemas.test.ts",
         "portal/src/utils/draftValidation.test.ts"
       ],
-      "verification_type": "Upload-first portal reveal, human-only origin/sensitivity controls, intake-report-driven conflict resolution, metadata PATCH concurrency recovery, and confirm readiness gating with Vitest coverage; live browser OIDC drills remain partial under HS-003",
+      "verification_type": "Metadata-first portal create, human-only origin/sensitivity controls, intake-report-driven conflict resolution without path-metadata suggestions, metadata PATCH concurrency recovery, and confirm readiness gating with Vitest coverage; live browser OIDC drills remain partial under HS-003",
       "status": "implemented"
     },
     {

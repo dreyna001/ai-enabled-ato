@@ -1,9 +1,4 @@
-import type {
-  DataOrigin,
-  PackageRevision,
-  ProfileId,
-  Sensitivity,
-} from "@/types";
+import type { DataOrigin, ProfileId, Sensitivity } from "@/types";
 
 export const PROFILE_OPTIONS: Array<{ id: ProfileId; label: string }> = [
   { id: "fisma_agency_security", label: "Agency FISMA security" },
@@ -35,54 +30,3 @@ export const IMPACT_LEVEL_OPTIONS = [
   { id: "moderate", label: "Moderate" },
   { id: "high", label: "High" },
 ] as const;
-
-export type RevisionProfileFields = {
-  certification_class?: "B" | "C" | null;
-  impact_level?: "low" | "moderate" | "high" | null;
-};
-
-function isCertificationClass(value: unknown): value is "B" | "C" {
-  return value === "B" || value === "C";
-}
-
-function isImpactLevel(value: unknown): value is "low" | "moderate" | "high" {
-  return value === "low" || value === "moderate" || value === "high";
-}
-
-export function profileFieldsForRevision(
-  profileId: ProfileId,
-  source?: { certification_class?: unknown; impact_level?: unknown } | null,
-): RevisionProfileFields {
-  if (profileId === "fedramp_20x_program") {
-    return {
-      certification_class: isCertificationClass(source?.certification_class)
-        ? source.certification_class
-        : "B",
-      impact_level: null,
-    };
-  }
-  return {
-    certification_class: null,
-    impact_level: isImpactLevel(source?.impact_level) ? source.impact_level : "moderate",
-  };
-}
-
-export function metadataDefaultsFromParent(
-  parentRevision?: PackageRevision | null,
-): {
-  profile_id: ProfileId;
-  data_origin: DataOrigin;
-  sensitivity: Sensitivity;
-} & RevisionProfileFields {
-  const dataOrigin: DataOrigin =
-    parentRevision?.data_origin === "customer_production"
-      ? "customer_production"
-      : "synthetic";
-  const profileId = (parentRevision?.profile_id as ProfileId) ?? "fisma_agency_security";
-  return {
-    profile_id: profileId,
-    ...profileFieldsForRevision(profileId, parentRevision),
-    data_origin: dataOrigin,
-    sensitivity: (parentRevision?.sensitivity as Sensitivity) ?? "internal_unclassified",
-  };
-}

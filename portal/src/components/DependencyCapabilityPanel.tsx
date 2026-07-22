@@ -88,5 +88,5 @@ export function assistantReadinessWarning(
   if (!readiness.loaded || readiness.error || !readiness.degraded) {
     return null;
   }
-  return "API readiness is degraded (for example authority review or reconciliation). Search remains available; citation-backed chat still requires a succeeded analysis run.";
+  return "Production readiness is degraded. This package workflow and search remain available; citation-backed answers require a succeeded analysis run.";
 }

@@ -5,6 +5,8 @@
 **Normative contracts:** [`ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md), [`docs/contracts/LIFECYCLE_AND_ERRORS.md`](contracts/LIFECYCLE_AND_ERRORS.md)  
 **Related:** [`ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md`](../ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md), [`ATO_PORTAL_DEMO_TALKING_TRACK.md`](../ATO_PORTAL_DEMO_TALKING_TRACK.md)
 
+**Metadata-first reconciliation (2026-07-21):** Portal and API now require profile, profile-conditional class or impact, and human-only `data_origin`/`sensitivity` **at revision create** before upload. Metadata remains editable via authenticated `PATCH` through `awaiting_confirmation`. Intake MAP/REDUCE still extracts package draft facts but **no longer suggests or autofills path metadata**. Migration `20260717_0013` (nullable DB columns) remains the Alembic head; no follow-on migration was added. Decisions **D1**, **D2** (path suggestions), and **D4** (hide until upload) below describe the **2026-07-17 upload-first deferral slice** and are **superseded for path metadata** by metadata-first create; upload-before-confirm, MAP/REDUCE, human-only labels, and single-user mode remain in force.
+
 **Subagent policy:** All exploration and implementation phases below assign **Composer 2.5** subagents (`model: composer-2.5-fast`) per [`.cursor/rules/composer-subagents-for-plans.mdc`](../.cursor/rules/composer-subagents-for-plans.mdc). Parent agent merges, runs contract tests, and gates integration.
 
 **Rules and skills:** Before and during each phase, actively load and apply our Cursor **rules** and **skills** (see [§0](#0-rules-and-skills-leverage-all-phases)). Prefer aligning implementation with them over preserving interim patterns that conflict — including refactoring approach, test style, LLM boundaries, and doc layout when a rule or skill prescribes something better.
@@ -61,22 +63,24 @@ When a subagent deliverable diverges from an applicable rule, **fix the delivera
 
 The system owner creates a **System** — no ATO work has happened in the product yet. They create a **revision**, **upload whatever they have** (nothing → partial pile → near-complete package), and **agents read the documents**. Extracted and inferred fields appear for **human edit**. The owner confirms when satisfied; **Confirm Package** seals that snapshot for analysis and export.
 
-**Not the story:** pick FedRAMP vs FISMA and impact level correctly before anyone uploads.
+**Not the story:** rely on intake to guess FedRAMP vs FISMA and impact level after upload — operators declare path metadata at create.
 
 ---
 
 ## 2. Locked decisions
 
-| ID | Decision |
-| --- | --- |
-| **D1** | **Upload first.** Documents upload before path/metadata fields are shown. After intake map runs, fields populate and remain **human-editable** through draft. |
-| **D2** | **Suggest, never auto-lock.** AI may propose profile, class/impact, and package facts. All appear in editable UI; human confirms or corrects. |
-| **D3** | **`data_origin` and `sensitivity` are human-only.** AI must **never** write these. Not inferable from docs reliably; routing/policy attestation. Optional: AI **mismatch warning** only (e.g. CUI marking in doc vs selected sensitivity). |
-| **D4** | **Hide until upload.** Profile, certification class, impact level, and related path fields are **not shown** until at least one artifact is uploaded and finalize/intake has started. Then visible and editable. |
-| **D5** | **~70% context utilization per LLM call** plus existing output and instruction reserves (spec §17.1). Configurable in runtime JSON. |
-| **D6** | **No LangChain.** Orchestration = Postgres jobs, worker leases, immutable step artifacts, deterministic merge in application code. |
-| **D7** | **Single user role for now.** One operator can upload, edit, review, and approve export. Relax `self_approval_denied` for `dev_local` / single-user profile; document production re-enable path. |
-| **D8** | **System soft-archive only.** `archived_at` on System; no hard delete. Default list hides archived. |
+Historical P0–P7 decisions as originally locked. **Superseded for path metadata** where noted in the metadata-first reconciliation banner above.
+
+| ID | Decision | Status |
+| --- | --- | --- |
+| **D1** | **Upload first.** Documents upload before confirm; path metadata was deferred until post-upload PATCH in the 2026-07-17 slice. | **Superseded for path metadata** — create now requires profile/class-or-impact and human labels before upload; upload-before-confirm unchanged. |
+| **D2** | **Suggest, never auto-lock.** AI may propose package draft facts. Path metadata suggestions were editable in portal through 2026-07-17. | **Superseded for path metadata** — intake no longer suggests profile/class/impact; draft fact suggestions remain editable. |
+| **D3** | **`data_origin` and `sensitivity` are human-only.** AI must **never** write these. Optional mismatch warning only. | **In force** |
+| **D4** | **Hide until upload.** Profile, class, impact, and related path fields were hidden at create until upload began in the 2026-07-17 slice. | **Superseded** — path metadata is collected at create and editable via PATCH while pre-ready. |
+| **D5** | **~70% context utilization per LLM call** plus existing output and instruction reserves (spec §17.1). Configurable in runtime JSON. | **In force** |
+| **D6** | **No LangChain.** Orchestration = Postgres jobs, worker leases, immutable step artifacts, deterministic merge in application code. | **In force** |
+| **D7** | **Single user role for now.** One operator can upload, edit, review, and approve export. Relax `self_approval_denied` for `dev_local` / single-user profile; document production re-enable path. | **In force** |
+| **D8** | **System soft-archive only.** `archived_at` on System; no hard delete. Default list hides archived. | **In force** |
 
 **Editable vs sealed (unchanged contract):**
 
@@ -89,12 +93,12 @@ The system owner creates a **System** — no ATO work has happened in the produc
 
 ```text
 Create System
-  → Create Revision (minimal: optional title only; no profile/origin/sensitivity yet)
+  → Create Revision (profile, class/impact, data origin, sensitivity; optional parent pre-fill)
   → Upload source artifacts + Finalize
   → Intake: scan → extract → chunk/index
   → Intake MAP: bounded LLM passes (pack chunks to ~70% budget per call)
   → Intake REDUCE: merge into draft + provenance + conflict list
-  → Portal reveals metadata + Package Editor (pre-filled, all editable)
+  → Portal: Package Editor (pre-filled draft facts, all editable) + metadata PATCH corrections
   → Human edits → Confirm Package → ready
   → Preflight → Analysis → Review → Export (single user may approve)
 ```
@@ -112,7 +116,7 @@ Create System
 | **Chunk / index** | Spec §13.5 (6k + 500 overlap); `package_search_index` | **Reuse** |
 | **MAP jobs** | New: per document or chunk-group LLM calls | **New** worker steps; reuse `normalize_proposal` patterns (schemas, routing, limits) |
 | **REDUCE / merge** | Merge into `PackageRevisionDraft` + `field_provenance` | **Extend** `draft_builder` / new `intake_merge.py`; delete dead `FactProposal` portal path if unused |
-| **Readiness report** | Inventory + gaps + suggested path | **New** API + portal panel |
+| **Readiness report** | Inventory + gaps + declared path metadata | **New** API + portal panel |
 | **Context packer** | Rank chunks → fill to `CONTEXT_UTILIZATION_TARGET` − reserves | **New** shared module; **reuse** in matrix, chat, intake |
 
 ### 4.2 MAP call pattern (every LLM step)
@@ -143,8 +147,7 @@ Retrieve relevant chunks for this task
 | --- | --- |
 | Package title, boundary, mission, contacts | Yes |
 | Control implementation statements | Yes (with citations) |
-| Profile suggestion | Yes — **editable** |
-| Certification class / impact level suggestion | Yes — **editable** |
+| Profile / certification class / impact level | **Never from intake** — operator at create; PATCH for corrections |
 | `data_origin`, `sensitivity` | **Never** |
 | Assessor-owned / official conclusions | **Never** |
 
@@ -160,11 +163,11 @@ Retrieve relevant chunks for this task
 
 ## 5. Portal UX changes
 
-| Area | Change |
-| --- | --- |
-| **Create revision** | Minimal form; hide profile, class/impact, origin, sensitivity |
-| **After upload + intake** | Reveal metadata section + Package Editor tabs |
-| **Readiness panel** | Files received, suggested path, gaps, conflicts |
+| Area | Change (2026-07-17) | Metadata-first note (2026-07-21) |
+| --- | --- | --- |
+| **Create revision** | Minimal form; hide profile, class/impact, origin, sensitivity | **Superseded** — full metadata at create |
+| **After upload + intake** | Reveal metadata section + Package Editor tabs | Metadata panel visible from create; intake fills draft facts only |
+| **Readiness panel** | Files received, suggested path, gaps, conflicts | Declared path metadata + gaps; empty `suggested_metadata` |
 | **Conflicts** | Side-by-side values + sources; user picks or edits |
 | **System list** | Archive action; hide archived by default |
 | **Review / export** | Same user may submit and approve (D7) |
@@ -175,12 +178,13 @@ Retrieve relevant chunks for this task
 
 | Change | Notes |
 | --- | --- |
-| Relax revision create validation | Profile/origin/sensitivity optional or deferred until post-upload PATCH |
-| Post-upload metadata update route | Set profile/class/impact/origin/sensitivity before confirm |
+| Metadata-first revision create (2026-07-21) | Require profile/class-or-impact and human labels at create; PATCH for corrections through `awaiting_confirmation` |
+| Upload-first revision create deferral (2026-07-17, superseded for path metadata) | Minimal create + post-upload PATCH — implemented in P2 before metadata-first reconciliation |
+| Post-upload metadata update route | `PATCH /package-revisions/{id}` — still used for corrections |
 | `POST /systems/{id}/archive` | Soft-archive (D8) |
 | `GET /systems` | Exclude archived by default |
 | Intake job types + status on revision | `uploading` → … → `awaiting_confirmation` |
-| Readiness / intake-report endpoint | Inventory + suggestions + conflicts |
+| Readiness / intake-report endpoint | Inventory + gaps + conflicts; `suggested_metadata` always empty for path fields |
 | OpenAPI + domain schema + lifecycle doc | Same PR family |
 | `traceability.yaml` | New requirements |
 | Relax self-approval | Config-gated single-user mode |
@@ -189,8 +193,9 @@ Retrieve relevant chunks for this task
 **Delete / retire when replaced:**
 
 - Deprecated OpenAPI `FactProposal` accept/reject as default portal path (already deprecated).
-- Portal create-revision profile-first UX.
-- Demo copy implying metadata before upload.
+- Portal create-revision profile-first UX (pre-2026-07-17).
+- Portal minimal create + post-upload metadata reveal (2026-07-17 slice; superseded 2026-07-21).
+- Demo copy implying metadata is chosen only after upload.
 
 ---
 
@@ -202,9 +207,9 @@ Retrieve relevant chunks for this task
 | --- | --- | --- | --- |
 | **P0** | D8 soft-archive | **Complete** | `systems.py` archive route; portal **Show archived**; `tests/ato_service/test_systems.py`; contract tests |
 | **P1** | D5 context cap | **Complete** | `context_budget.py`; `CONTEXT_UTILIZATION_TARGET` in runtime schema/examples; `tests/ato_service/test_context_budget.py`; matrix/chat packer wiring |
-| **P2** | D1, D4 defer metadata | **Complete** | Migration `20260717_0013`; upload-first create in API/portal; metadata PATCH; portal minimal `RevisionCreateForm` |
-| **P3** | D6 MAP/REDUCE | **Complete** | `intake_map.py`, `intake_merge.py`; intake report OpenAPI/domain schema; intake worker tests |
-| **P4** | D2, D3, D4 UX | **Complete** | `RevisionMetadataPanel`, `IntakeReadinessPanel`, conflict UI; portal workflow tests |
+| **P2** | D1, D4 defer metadata | **Complete (historical)** | Migration `20260717_0013`; upload-first deferral API/portal — **superseded for path metadata by metadata-first create (2026-07-21)** |
+| **P3** | D6 MAP/REDUCE | **Complete** | `intake_map.py`, `intake_merge.py`; intake report OpenAPI/domain schema; intake worker tests; path metadata suggestions removed in metadata-first reconciliation |
+| **P4** | D2, D3, D4 UX | **Complete (reconciled)** | `RevisionMetadataPanel`, `IntakeReadinessPanel`, conflict UI; metadata-first create form; portal workflow tests |
 | **P5** | D7 single-user RBAC | **Complete** | `SINGLE_USER_MODE_ENABLED` (default `false`); `tests/ato_service/test_ep06_security_matrix.py` |
 | **P6** | Docs / talking track | **Complete** | This reconciliation pass; epics §2; talking track; `PORTAL_WORKFLOW_GUIDE`; bounded release index note |
 | **P7** | Integration gate | **Complete (local)** | Backend: 1,839 passed, 1 skipped, 20 deselected; portal: 107 passed and production build succeeded. Live/customer validation remains governed by hard stops. |
@@ -237,9 +242,9 @@ Retrieve relevant chunks for this task
 
 ---
 
-### Phase 2 — Revision create deferral + hidden fields (D1, D4)
+### Phase 2 — Revision create deferral + hidden fields (D1, D4) — historical
 
-**Scope:** API allows minimal revision create; portal upload-first; defer profile validation until pre-confirm.
+**Scope (2026-07-17):** API allowed minimal revision create; portal upload-first; deferred profile validation until pre-confirm. **Superseded 2026-07-21** by metadata-first create requiring path metadata before upload while retaining nullable DB columns from migration `20260717_0013`.
 
 | Subagent | Type | Model | Owns |
 | --- | --- | --- | --- |
@@ -328,8 +333,9 @@ Retrieve relevant chunks for this task
 
 | Rewrite / remove | Reason |
 | --- | --- |
-| Create-revision-first profile validation | Conflicts with D1/D4 |
+| Create-revision-first profile validation | Conflicts with early upload-first deferral; replaced by metadata-first create |
 | Default portal FactProposal cards | Deprecated; editor is default |
+| Intake path-metadata suggestions | Removed in metadata-first reconciliation |
 | Self-approval denial when single-user flag set | D7 |
 | Narrow 2-call normalize as **only** intake intelligence | Replace with MAP/REDUCE pipeline |
 
@@ -350,8 +356,8 @@ Retrieve relevant chunks for this task
 
 ## 10. Success criteria
 
-1. Owner can create revision and upload **without** choosing profile first.
-2. After intake, metadata and draft fields appear **pre-filled and editable**.
+1. Owner can create revision with required path metadata and upload evidence.
+2. After intake, draft package facts appear **pre-filled and editable**; path metadata is not intake-suggested.
 3. Origin/sensitivity are **never** AI-written.
 4. Large uploads run **multiple bounded LLM calls** with persisted merge and citations.
 5. Conflicts surface in UI; user resolves before confirm.

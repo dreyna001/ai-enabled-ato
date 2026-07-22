@@ -178,12 +178,15 @@ def _one_or_none_result(value: object) -> MagicMock:
     return result
 
 
-def _minimal_create_input(*, parent_revision_id: uuid.UUID | None = None) -> CreatePackageRevisionInput:
-    return CreatePackageRevisionInput(parent_revision_id=parent_revision_id)
-
-
-def _fisma_create_input() -> CreatePackageRevisionInput:
-    return _minimal_create_input()
+def _fisma_create_input(*, parent_revision_id: uuid.UUID | None = None) -> CreatePackageRevisionInput:
+    return CreatePackageRevisionInput(
+        parent_revision_id=parent_revision_id,
+        profile_id="fisma_agency_security",
+        certification_class=None,
+        impact_level="moderate",
+        data_origin="synthetic",
+        sensitivity="internal_unclassified",
+    )
 
 
 def _system(*, owner_group: str = "owners", viewer_groups: list[str] | None = None) -> _SystemRow:
@@ -288,9 +291,44 @@ def test_validate_profile_boundaries_rejects_invalid_combinations(
         )
 
 
-def test_validate_create_input_accepts_minimal_root_payload() -> None:
-    request = validate_create_input(parent_revision_id=None)
+def test_validate_create_input_accepts_complete_root_payload() -> None:
+    request = validate_create_input(
+        parent_revision_id=None,
+        profile_id="fisma_agency_security",
+        certification_class=None,
+        impact_level="moderate",
+        data_origin="synthetic",
+        sensitivity="internal_unclassified",
+    )
     assert request.parent_revision_id is None
+    assert request.profile_id == "fisma_agency_security"
+    assert request.data_origin == "synthetic"
+    assert request.sensitivity == "internal_unclassified"
+
+
+def test_validate_create_input_rejects_missing_data_origin() -> None:
+    with pytest.raises(PackageRevisionValidationError, match="data_origin is required"):
+        validate_create_input(
+            parent_revision_id=None,
+            profile_id="fisma_agency_security",
+            certification_class=None,
+            impact_level="moderate",
+            data_origin=None,
+            sensitivity="internal_unclassified",
+        )
+
+
+def test_validate_create_input_rejects_classified_sensitivity() -> None:
+    with pytest.raises(PackageRevisionValidationError) as exc_info:
+        validate_create_input(
+            parent_revision_id=None,
+            profile_id="fisma_agency_security",
+            certification_class=None,
+            impact_level="moderate",
+            data_origin="synthetic",
+            sensitivity="classified",
+        )
+    assert exc_info.value.error_code == "classified_data_unsupported"
 
 
 def test_validate_patch_metadata_rejects_classified_sensitivity() -> None:
@@ -309,6 +347,22 @@ def test_create_request_digest_is_stable() -> None:
     second = create_request_digest(system_id=SYSTEM_ID, request=request)
     assert first == second
     assert len(first) == 64
+
+
+def test_create_request_digest_changes_when_metadata_changes() -> None:
+    base = create_request_digest(system_id=SYSTEM_ID, request=_fisma_create_input())
+    changed = create_request_digest(
+        system_id=SYSTEM_ID,
+        request=CreatePackageRevisionInput(
+            parent_revision_id=None,
+            profile_id="fisma_agency_security",
+            certification_class=None,
+            impact_level="high",
+            data_origin="synthetic",
+            sensitivity="internal_unclassified",
+        ),
+    )
+    assert base != changed
 
 
 def test_confirm_request_digest_includes_if_match() -> None:
@@ -428,12 +482,16 @@ def test_create_persists_uploading_revision_and_records_outcome(
     assert created.status == "uploading"
     assert created.content_manifest_sha256 is None
     assert created.revision_version == 1
-    assert created.profile_id is None
-    assert created.data_origin is None
-    assert created.sensitivity is None
-    assert created.effective_data_labels == []
+    assert created.profile_id == "fisma_agency_security"
+    assert created.impact_level == "moderate"
+    assert created.data_origin == "synthetic"
+    assert created.sensitivity == "internal_unclassified"
+    assert created.effective_data_labels == ["internal_unclassified", "synthetic"]
     assert created.authority_manifest_id == "authority.v2"
-    mock_audit.assert_called_once()
+    audit_metadata = mock_audit.await_args.kwargs["metadata"]
+    assert audit_metadata["profile_id"] == "fisma_agency_security"
+    assert audit_metadata["data_origin"] == "synthetic"
+    assert audit_metadata["sensitivity"] == "internal_unclassified"
     mock_record.assert_called_once()
 
 
@@ -461,7 +519,7 @@ def test_create_rejects_viewer_mutation_before_add(mock_load: AsyncMock) -> None
 @patch("ato_service.package_revisions.load_idempotency_replay", new_callable=AsyncMock)
 def test_create_rejects_missing_parent_without_mutation(mock_load: AsyncMock) -> None:
     mock_load.return_value = None
-    request = CreatePackageRevisionInput(parent_revision_id=PARENT_ID)
+    request = _fisma_create_input(parent_revision_id=PARENT_ID)
     session = _RecordingSession(
         [
             _scalar_result(_system()),

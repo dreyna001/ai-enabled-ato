@@ -1,6 +1,6 @@
 # ATO Evidence Analysis Portal Functionality and Epics
 
-**Status:** User-facing workflow and delivery map (Phase 6A upload-first reconciliation 2026-07-17)  
+**Status:** User-facing workflow and delivery map (Phase 6 metadata-first reconciliation 2026-07-21)  
 **Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)  
 **Release evidence:** [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md)
 
@@ -32,19 +32,19 @@ This document describes what users do and receive. It does not override technica
 - Tailor agency controls
 - Create a DoD, IC, privacy, classified, or FedRAMP Agency Certification workflow
 
-## 2. Create a package revision and upload evidence (upload-first)
+## 2. Create a package revision and upload evidence (metadata-first)
 
 ### User provides
 
-- Optional parent revision (must already be `ready` when linked)
-- Optional parent link only; no profile, certification class, impact level, data origin, sensitivity, or title fields at create
+- Authorization path metadata at create: profile, certification class or impact level (as applicable), **data origin**, and **sensitivity**
+- Optional parent revision (must already be `ready` when linked; portal pre-fills metadata from the parent)
 - One or more supported source files after the revision exists
 
 ### Product does
 
 1. Authorizes the system and package action.
-2. Creates a minimal PackageRevision under the selected System with status `uploading`.
-3. Accepts uploads and finalization without requiring path metadata first.
+2. Validates and persists path metadata on create, then creates a PackageRevision under the selected System with status `uploading`.
+3. Accepts metadata corrections via authenticated `PATCH` while the revision is pre-ready (`uploading` through `awaiting_confirmation`).
 4. Streams files into generated temporary paths.
 5. Enforces total, per-file, file-count, type, and archive limits.
 6. Runs malware scanning before extraction (production requires an approved scanner; dev/demo may use a substitute — not production evidence).
@@ -63,7 +63,8 @@ This document describes what users do and receive. It does not override technica
 
 ### Product does not
 
-- Require profile, class, impact, data origin, or sensitivity before the first upload
+- Defer profile, class, impact, data origin, or sensitivity until after upload
+- Let intake suggest or autofill path metadata
 - Fetch URLs embedded in documents
 - Execute scans, macros, formulas, scripts, or package content
 - Silently truncate over-limit content
@@ -74,8 +75,7 @@ This document describes what users do and receive. It does not override technica
 
 ### User provides
 
-- Authorization path metadata after upload and intake begin: profile, certification class or impact level (as applicable)
-- Required human attestation for **data origin** and **sensitivity** (never AI-written)
+- Corrections to path metadata while the revision is pre-ready (optional)
 - Edits to pre-filled draft fields and conflict resolutions in the Package Editor
 - Explicit **Confirm Package** when satisfied
 
@@ -84,10 +84,10 @@ This document describes what users do and receive. It does not override technica
 1. Runs deterministic parsers for known formats.
 2. Runs bounded intake **MAP** passes (one structured model call per covered artifact or chunk group, packed to the configured context utilization cap — default 70% minus output and instruction reserves).
 3. Runs deterministic intake **REDUCE** merge into `PackageRevisionDraft`, `field_provenance`, gap list, and conflict records.
-4. Surfaces an intake readiness report: files received, suggested path metadata, gaps, MAP step status (including `policy_blocked`), and conflicts.
-5. Reveals editable metadata and Package Editor tabs after upload finalize; AI may **suggest** profile, class, and impact level but never auto-locks them.
-6. Requires the operator to select **data origin** and **sensitivity** manually; backend readiness remains the source of truth for confirm eligibility.
-7. Resolves draft-field conflicts through existing ETag draft save; metadata-only conflicts resolve through metadata PATCH with ETag.
+4. Surfaces an intake readiness report: files received, declared path metadata, gaps, MAP step status (including `policy_blocked`), and conflicts — with empty path-metadata suggestions.
+5. Pre-fills editable Package Editor tabs from intake; path metadata comes from create/PATCH only.
+6. Keeps **data origin** and **sensitivity** human-only; backend readiness remains the source of truth for confirm eligibility.
+7. Resolves draft-field conflicts through existing ETag draft save.
 8. On confirmation, seals the current `awaiting_confirmation` PackageRevision as immutable `ready`; it does not create another revision.
 9. Creates a child PackageRevision with the ready revision as its parent for any later source, canonical fact, profile, label, or link change.
 
@@ -101,7 +101,7 @@ This document describes what users do and receive. It does not override technica
 ### Product does not
 
 - Write `data_origin` or `sensitivity` from model output
-- Auto-lock AI suggestions for profile, class, or impact
+- Suggest or autofill profile, class, or impact from intake
 - Treat model output as authoritative without human edit and confirm
 - Modify the source upload
 - Change a ready package revision instead of creating a child revision

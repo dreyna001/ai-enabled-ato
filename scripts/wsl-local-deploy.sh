@@ -95,12 +95,24 @@ require_root() {
 }
 
 require_systemd() {
+    local state=""
     if ! command -v systemctl >/dev/null 2>&1; then
         err "systemctl not found; enable systemd in /etc/wsl.conf ([boot] systemd=true) and restart WSL"
     fi
-    if ! systemctl is-system-running --wait >/dev/null 2>&1; then
-        err "systemd is not running; enable it in /etc/wsl.conf and restart WSL"
-    fi
+    state="$(systemctl is-system-running 2>/dev/null || true)"
+    case "$state" in
+        running|degraded)
+            return 0
+            ;;
+        initializing|starting)
+            systemctl is-system-running --wait >/dev/null 2>&1 || true
+            state="$(systemctl is-system-running 2>/dev/null || true)"
+            case "$state" in
+                running|degraded) return 0 ;;
+            esac
+            ;;
+    esac
+    err "systemd is not running (state: ${state:-unknown}); enable it in /etc/wsl.conf and restart WSL"
 }
 
 install_os_packages() {

@@ -31,7 +31,7 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 | **Plans** | |
 | [`docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md`](docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md) | Master plan — components, phases, delivered-status reconciliation |
 | [`docs/PACKAGE_EDITOR_PLAN.md`](docs/PACKAGE_EDITOR_PLAN.md) | Component A — intake, extraction, draft editor, sealed confirm |
-| [`docs/UPLOAD_FIRST_INTAKE_PLAN.md`](docs/UPLOAD_FIRST_INTAKE_PLAN.md) | Upload-first intake, MAP/REDUCE orchestration, single-user mode (approved 2026-07-17) |
+| [`docs/UPLOAD_FIRST_INTAKE_PLAN.md`](docs/UPLOAD_FIRST_INTAKE_PLAN.md) | Upload-first intake, MAP/REDUCE orchestration, single-user mode; metadata-first create reconciled 2026-07-21 |
 | [`docs/THIRD_PARTY_HARDENING_PLAN.md`](docs/THIRD_PARTY_HARDENING_PLAN.md) | OIDC and ClamAV production adapters; optional dependency hardening |
 | **Operator / release** | |
 | [`docs/CUSTOMER_ONBOARDING.md`](docs/CUSTOMER_ONBOARDING.md) | Customer operator onboarding checklist for on-prem installs |
@@ -45,7 +45,7 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 
 - **Normative target:** FedRAMP 20x Program Class C package preparation plus security-only agency FISMA, one on-prem installation per customer enterprise
 - **P-1 / P0 gates:** Recorded in [`docs/P1_GATE_RECORD.md`](docs/P1_GATE_RECORD.md) and [`docs/P0_GATE_RECORD.md`](docs/P0_GATE_RECORD.md); Phase 6 documentation reconciliation recorded in [`docs/P6_GATE_RECORD.md`](docs/P6_GATE_RECORD.md)
-- **Alembic head:** `20260717_0013` (defer package revision metadata migration)
+- **Alembic head:** `20260717_0013` (nullable package revision metadata columns; metadata-first create uses persisted values without a new migration)
 - **Delivered stack (code-complete, contract-tested):** `ato_service` API with OIDC-backed server sessions; React/Vite portal; `ato-intake-worker` and `ato-analyzer-worker` long-running workers; full `/api/v1` surface (systems, package revisions, draft editor, intake, deterministic and model-assisted analysis runs, review dispositions, export approval/download, package search and bounded chat); `ato-operator` preflight, migration verify, qualification check, validation drills, audit verify, and search-index rebuild; deployment assets for API, portal nginx, intake/analyzer workers; sealed qualification corpus under `data/qualification/`
 - **dev_local substitutes:** synthetic JSON intake path, HS-005 integrity-only malware substitute, and fake scanner/model/IdP boundaries in workflow integration tests — not production customer extraction or live IdP deployment
 - **Not claimed:** production release, live RHEL install/upgrade/rollback drills, customer IdP verification (**HS-003**), production malware scanning (**HS-005**), real customer model calls (**HS-004**), AI qualification (**HS-006**), qualified authority review (**HS-001**), or backup-target verification (**HS-008**)

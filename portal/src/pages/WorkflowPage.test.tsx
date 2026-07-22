@@ -36,10 +36,10 @@ const uploadingRevision: PackageRevision = {
   status: "uploading",
   package_preparation_status: "in_progress",
   revision_version: 1,
-  profile_id: null,
-  data_origin: null,
-  sensitivity: null,
-  impact_level: null,
+  profile_id: "fisma_agency_security",
+  data_origin: "synthetic",
+  sensitivity: "internal_unclassified",
+  impact_level: "moderate",
   certification_class: null,
 };
 
@@ -52,13 +52,13 @@ const intakeReport: IntakeReport = {
   intake_stage: "awaiting_human_review",
   files: [],
   human_attestation: {
-    data_origin: "missing",
-    sensitivity: "missing",
+    data_origin: "present",
+    sensitivity: "present",
   },
   suggested_metadata: {
-    profile_id: "fisma_agency_security",
+    profile_id: null,
     certification_class: null,
-    impact_level: "moderate",
+    impact_level: null,
   },
   suggestion_sources: [],
   gaps: [],
@@ -67,8 +67,8 @@ const intakeReport: IntakeReport = {
   context_complete: true,
   map_steps: [],
   confirmation: {
-    allowed: false,
-    blockers: ["metadata_incomplete"],
+    allowed: true,
+    blockers: [],
   },
   generated_at: "2026-07-17T12:00:00Z",
 };
@@ -344,18 +344,36 @@ describe("WorkflowPage system archive UI", () => {
   });
 });
 
-describe("WorkflowPage upload-first metadata reveal", () => {
-  it("does not render revision metadata while uploading", async () => {
+describe("WorkflowPage metadata-first workflow", () => {
+  it("renders revision metadata while uploading before the upload panel", async () => {
     renderWorkflow(
       `/workflow/systems/${activeSystem.system_id}/revisions/${revisionId}`,
     );
 
     await screen.findByText("Revision Workflow");
-    expect(screen.queryByText("Revision metadata")).not.toBeInTheDocument();
+    expect(screen.getByText("Revision metadata")).toBeInTheDocument();
     expect(getIntakeReportMock).not.toHaveBeenCalled();
   });
 
-  it("reveals metadata after finalize and keeps confirm blocked until metadata is saved", async () => {
+  it("updates the revision list label from the current revision detail", async () => {
+    listRevisionsMock.mockResolvedValue([uploadingRevision]);
+    getRevisionMock.mockResolvedValue(awaitingRevision);
+
+    renderWorkflow(
+      `/workflow/systems/${activeSystem.system_id}/revisions/${revisionId}`,
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: /cccccccc.*Awaiting Confirmation/i,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /cccccccc.*Uploading/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("enables confirm when create-time metadata and intake readiness are complete", async () => {
     getRevisionMock.mockResolvedValue(awaitingRevision);
     listRevisionsMock.mockResolvedValue([awaitingRevision]);
     getRevisionDraftMock.mockResolvedValue({
@@ -378,14 +396,13 @@ describe("WorkflowPage upload-first metadata reveal", () => {
     );
 
     await screen.findByText("Revision metadata");
-    expect(getIntakeReportMock).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(getIntakeReportMock).toHaveBeenCalled();
+    });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Confirm Package" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Confirm Package" })).toBeEnabled();
     });
-    expect(
-      screen.getByText(/Confirm is blocked until revision metadata and intake readiness checks pass/i),
-    ).toBeVisible();
   });
 });
 

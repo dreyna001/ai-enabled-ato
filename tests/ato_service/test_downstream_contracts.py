@@ -63,7 +63,7 @@ def _minimal_document(*, assessor: bool = False, privacy: bool = False) -> dict:
     }
 
 
-def test_preflight_blocks_export_without_assessor_and_privacy() -> None:
+def test_preflight_fisma_export_eligible_without_assessor_or_privacy_execution() -> None:
     result = evaluate_preflight(
         PreflightContext(
             package_revision_id=uuid.uuid4(),
@@ -76,19 +76,63 @@ def test_preflight_blocks_export_without_assessor_and_privacy() -> None:
             evaluated_at=NOW,
         )
     )
+    check_ids = {check["check_id"] for check in result["deterministic_checks"]}
+    assert result["analysis_eligible"] is True
+    assert result["export_eligible"] is True
+    assert "assessor.inputs_present" not in check_ids
+    assert "privacy.artifacts_present" not in check_ids
+    assert "assessor.inputs_present" not in result["export_blockers"]
+    assert "privacy.artifacts_present" not in result["export_blockers"]
+
+
+def test_preflight_fedramp_blocks_export_without_assessor_and_privacy() -> None:
+    document = _minimal_document()
+    document["package"]["profile_id"] = "fedramp_20x_program"
+    document["fedramp_20x"] = {
+        "cpo": {},
+        "sdr": {},
+        "ocr": {},
+        "scg": {},
+        "ksi_methods": [],
+        "metric_history": [],
+        "independent_assessment": {},
+    }
+    result = evaluate_preflight(
+        PreflightContext(
+            package_revision_id=uuid.uuid4(),
+            profile_id="fedramp_20x_program",
+            status="ready",
+            sealed_document=document,
+            authority_manifest_id="ato-authorities-2026-07-10-draft",
+            authority_manifest_sha256="a" * 64,
+            project_root=ROOT,
+            evaluated_at=NOW,
+        )
+    )
     assert result["analysis_eligible"] is True
     assert result["export_eligible"] is False
     assert "assessor.inputs_present" in result["export_blockers"]
     assert "privacy.artifacts_present" in result["export_blockers"]
 
 
-def test_preflight_export_eligible_when_requirements_present() -> None:
+def test_preflight_fedramp_export_eligible_when_requirements_present() -> None:
+    document = _minimal_document(assessor=True, privacy=True)
+    document["package"]["profile_id"] = "fedramp_20x_program"
+    document["fedramp_20x"] = {
+        "cpo": {},
+        "sdr": {},
+        "ocr": {},
+        "scg": {},
+        "ksi_methods": [],
+        "metric_history": [],
+        "independent_assessment": {},
+    }
     result = evaluate_preflight(
         PreflightContext(
             package_revision_id=uuid.uuid4(),
-            profile_id="fisma_agency_security",
+            profile_id="fedramp_20x_program",
             status="ready",
-            sealed_document=_minimal_document(assessor=True, privacy=True),
+            sealed_document=document,
             authority_manifest_id="ato-authorities-2026-07-10-draft",
             authority_manifest_sha256="a" * 64,
             project_root=ROOT,

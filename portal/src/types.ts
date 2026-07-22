@@ -33,6 +33,11 @@ export type Sensitivity =
 
 export type CreateRevisionInput = {
   parent_revision_id?: string | null;
+  profile_id: ProfileId;
+  data_origin: DataOrigin;
+  sensitivity: Sensitivity;
+  certification_class?: "B" | "C" | null;
+  impact_level?: "low" | "moderate" | "high" | null;
 };
 
 export type PackageRevision = {

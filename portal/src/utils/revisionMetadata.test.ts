@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { IntakeReportSuggestedMetadata, PackageRevision } from "@/types";
+import type { PackageRevision } from "@/types";
 import {
-  applySuggestedMetadata,
+  buildCreateRevisionInput,
   buildMetadataPatchPayload,
   metadataValuesFromRevision,
   normalizeMetadataFormForProfile,
@@ -28,36 +28,65 @@ function makeRevision(overrides: Partial<PackageRevision> = {}): PackageRevision
   };
 }
 
-const suggestions: IntakeReportSuggestedMetadata = {
-  profile_id: "fisma_agency_security",
-  certification_class: null,
-  impact_level: "high",
-};
-
 describe("revisionMetadata helpers", () => {
-  it("hides metadata while uploading and reveals after finalize", () => {
-    expect(shouldRevealRevisionMetadata(makeRevision({ status: "uploading" }))).toBe(false);
+  it("reveals metadata during upload and later intake stages", () => {
+    expect(shouldRevealRevisionMetadata(makeRevision({ status: "uploading" }))).toBe(true);
     expect(shouldRevealRevisionMetadata(makeRevision({ status: "scanning" }))).toBe(true);
   });
 
-  it("prefills suggestions only when revision values are null", () => {
-    const prefilled = applySuggestedMetadata(makeRevision(), suggestions);
-    expect(prefilled.profile_id).toBe("fisma_agency_security");
-    expect(prefilled.impact_level).toBe("high");
-    expect(prefilled.data_origin).toBe("");
-    expect(prefilled.sensitivity).toBe("");
-  });
-
-  it("leaves the dependent field blank for a profile-only suggestion", () => {
-    const prefilled = applySuggestedMetadata(makeRevision(), {
-      profile_id: "fisma_agency_security",
-      certification_class: null,
+  it("builds create input with profile-specific fields", () => {
+    expect(
+      buildCreateRevisionInput(
+        {
+          profile_id: "fedramp_20x_program",
+          certification_class: "B",
+          impact_level: "",
+          data_origin: "synthetic",
+          sensitivity: "internal_unclassified",
+        },
+        null,
+      ),
+    ).toEqual({
+      parent_revision_id: null,
+      profile_id: "fedramp_20x_program",
+      certification_class: "B",
       impact_level: null,
+      data_origin: "synthetic",
+      sensitivity: "internal_unclassified",
     });
 
-    expect(prefilled.profile_id).toBe("fisma_agency_security");
-    expect(prefilled.impact_level).toBe("");
-    expect(validateMetadataForm(prefilled)).toContain("Select an impact level.");
+    expect(
+      buildCreateRevisionInput(
+        {
+          profile_id: "fisma_agency_security",
+          certification_class: "",
+          impact_level: "high",
+          data_origin: "customer_production",
+          sensitivity: "cui",
+        },
+        "parent-id",
+      ),
+    ).toEqual({
+      parent_revision_id: "parent-id",
+      profile_id: "fisma_agency_security",
+      certification_class: null,
+      impact_level: "high",
+      data_origin: "customer_production",
+      sensitivity: "cui",
+    });
+  });
+
+  it("leaves the dependent field blank for a profile-only form state", () => {
+    const incomplete = normalizeMetadataFormForProfile({
+      profile_id: "fisma_agency_security",
+      certification_class: "",
+      impact_level: "",
+      data_origin: "synthetic",
+      sensitivity: "internal_unclassified",
+    });
+
+    expect(incomplete.impact_level).toBe("");
+    expect(validateMetadataForm(incomplete)).toContain("Select an impact level.");
   });
 
   it("clears incompatible profile fields without inserting defaults", () => {
@@ -84,26 +113,6 @@ describe("revisionMetadata helpers", () => {
     expect(validateMetadataForm(switchedToFisma)).toContain(
       "Select an impact level.",
     );
-  });
-
-  it("does not overwrite existing human revision values on refresh", () => {
-    const revision = makeRevision({
-      profile_id: "fedramp_rev5_transition",
-      impact_level: "moderate",
-    });
-    const refreshed = applySuggestedMetadata(revision, {
-      profile_id: "fisma_agency_security",
-      certification_class: null,
-      impact_level: "high",
-    });
-    expect(refreshed.profile_id).toBe("fedramp_rev5_transition");
-    expect(refreshed.impact_level).toBe("moderate");
-  });
-
-  it("never prefill human-only data origin or sensitivity from suggestions", () => {
-    const prefilled = applySuggestedMetadata(makeRevision(), suggestions);
-    expect(prefilled.data_origin).toBe("");
-    expect(prefilled.sensitivity).toBe("");
   });
 
   it("builds a minimal metadata patch payload", () => {
