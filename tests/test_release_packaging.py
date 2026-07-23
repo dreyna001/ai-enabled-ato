@@ -47,7 +47,8 @@ def _write_minimal_release_tree(
         "docs/contracts/fixtures",
         "docs/release",
         "docs/requirements",
-        "reference/authorities/fedramp",
+        "reference/authorities",
+        "reference/profiles",
         "deployment/systemd",
         "deployment/nginx",
         "deployment/config",
@@ -75,8 +76,13 @@ def _write_minimal_release_tree(
         dirs_exist_ok=True,
     )
     shutil.copytree(
-        ROOT / "reference" / "authorities" / "fedramp",
-        root / "reference" / "authorities" / "fedramp",
+        ROOT / "reference" / "authorities",
+        root / "reference" / "authorities",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        ROOT / "reference" / "profiles",
+        root / "reference" / "profiles",
         dirs_exist_ok=True,
     )
     shutil.copytree(
@@ -116,6 +122,8 @@ def _write_minimal_release_tree(
         "scripts/prestage_airgap_deps.sh",
         "scripts/build_release.sh",
         "scripts/verify_release.sh",
+        "scripts/compile_analysis_profiles.py",
+        "scripts/compile_fisma_analysis_profile.py",
     ):
         destination = root / relative_file
         destination.parent.mkdir(parents=True, exist_ok=True)

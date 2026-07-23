@@ -498,6 +498,10 @@
       "$ref": "#/$defs/fileReferenceWithDigest",
       "$comment": "Optional customer agency template pack path and digest when HS-002 inputs are supplied."
     },
+    "FISMA_ANALYSIS_PROFILE_FILE_REFERENCE": {
+      "$ref": "#/$defs/fileReferenceWithDigest",
+      "$comment": "Optional customer-specific compiled and qualified FISMA analysis profile selected for agency_fisma runs."
+    },
     "PROCESS_CAPABILITIES": {
       "$ref": "#/$defs/processCapabilities"
     }

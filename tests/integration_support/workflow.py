@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import uuid
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
 
-from ato_service.analysis_profile import expected_assessment_item_ids, load_pinned_profile
+from ato_service.analysis_profile import expected_assessment_item_ids, load_runtime_profile
+from ato_service.fisma_control_inventory import load_fisma_control_inventory
+from ato_service.fisma_profile import compile_fisma_agency_security_profile
 from ato_service.analysis_runs import StartRunInput, start_run
 from ato_service.auth_context import AuthorizationDeniedError
 from ato_service.concurrency import format_package_revision_etag
@@ -65,6 +70,49 @@ from tests.integration_support.factories import (
 )
 from tests.integration_support.postgres import AUTHORITY_MANIFEST_ID, PostgresIntegrationHarness
 
+FISMA_INVENTORY_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "contracts"
+    / "fixtures"
+    / "fisma-control-inventory.valid.example.json"
+)
+FISMA_MANIFEST_PATH = (
+    Path(__file__).resolve().parents[2] / "docs" / "contracts" / "authority-manifest.json"
+)
+FISMA_PROFILE_GENERATED_AT = datetime(2026, 7, 10, 22, 33, 12, tzinfo=timezone.utc)
+
+
+def ensure_fisma_runtime_profile(harness: PostgresIntegrationHarness) -> None:
+    """Compile one digest-pinned FISMA profile into the harness dev_local config."""
+    if harness.config.document.get("FISMA_ANALYSIS_PROFILE_FILE_REFERENCE") is not None:
+        return
+
+    inventory = load_fisma_control_inventory(path=FISMA_INVENTORY_PATH)
+    profile = compile_fisma_agency_security_profile(
+        inventory=inventory,
+        manifest_path=FISMA_MANIFEST_PATH,
+        project_root=harness.project_root,
+        generated_at=FISMA_PROFILE_GENERATED_AT,
+    )
+    profile_bytes = json.dumps(profile).encode("utf-8")
+    digest = hashlib.sha256(profile_bytes).hexdigest()
+    profile_file = harness.tmp_path / "fisma-analysis-profile.json"
+    profile_file.write_bytes(profile_bytes)
+    harness.config.document["FISMA_ANALYSIS_PROFILE_FILE_REFERENCE"] = {
+        "path": str(profile_file),
+        "expected_sha256": digest,
+    }
+
+
+def _prepare_profile_runtime(
+    harness: PostgresIntegrationHarness,
+    *,
+    profile_id: str,
+) -> None:
+    if profile_id == "fisma_agency_security":
+        ensure_fisma_runtime_profile(harness)
+
 
 @dataclass(slots=True)
 class WorkflowArtifacts:
@@ -87,6 +135,7 @@ async def run_profile_workflow(
     impact_level: str | None,
 ) -> WorkflowArtifacts:
     """Execute the bounded synthetic workflow through exact ZIP/hash download."""
+    _prepare_profile_runtime(harness, profile_id=profile_id)
     session = harness.session
     revision_input = profile_revision_input(
         profile_id=profile_id,
@@ -220,7 +269,13 @@ async def run_profile_workflow(
         config=harness.config,
     ) is not None
 
-    profile = load_pinned_profile(profile_id=profile_id, project_root=harness.project_root)
+    profile = load_runtime_profile(
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+        project_root=harness.project_root,
+        config=harness.config,
+    )
     expected_ids = expected_assessment_item_ids(profile)
     row_ids = list(
         (
@@ -442,6 +497,7 @@ async def seed_ready_revision(
     id_suffix: str,
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Create a ready package revision for recovery-focused tests."""
+    _prepare_profile_runtime(harness, profile_id=profile_id)
     system_result = await create_system(
         harness.session,
         principal=OWNER,
@@ -528,6 +584,7 @@ async def seed_pre_confirm(
     id_suffix: str,
 ) -> uuid.UUID:
     """Create a synthetic revision stopped at awaiting_confirmation."""
+    _prepare_profile_runtime(harness, profile_id=profile_id)
     system_result = await create_system(
         harness.session,
         principal=OWNER,

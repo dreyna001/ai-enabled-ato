@@ -54,6 +54,7 @@ from ato_service.package_search import (
     SearchIndexNotReadyError,
     search_revision_content,
 )
+from ato_service.analysis_profile import AnalysisProfileError, load_runtime_profile
 from ato_service.preflight import PreflightContext, evaluate_preflight
 from ato_service.review_revisions import (
     ReviewRevisionNotFoundError,
@@ -142,6 +143,13 @@ def _export_error_response(exc: ExportValidationError) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": exc.error_code, "error_code": exc.error_code})
 
 
+def _reconciliation_required_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"error": "reconciliation_required", "error_code": "reconciliation_required"},
+    )
+
+
 def build_extended_router() -> APIRouter:
     router = APIRouter()
 
@@ -175,18 +183,31 @@ def build_extended_router() -> APIRouter:
             )
         )
         sealed = sealed_result.scalar_one_or_none()
-        return evaluate_preflight(
-            PreflightContext(
-                package_revision_id=id,
+        try:
+            analysis_profile = load_runtime_profile(
                 profile_id=revision.profile_id,
-                status=revision.status,
-                sealed_document=sealed.document if sealed is not None else None,
-                authority_manifest_id=revision.authority_manifest_id,
-                authority_manifest_sha256=revision.content_manifest_sha256 or ("0" * 64),
+                certification_class=revision.certification_class,
+                impact_level=revision.impact_level,
                 project_root=runtime_state.snapshot.project_root,
-                evaluated_at=_utc_now(),
+                config=runtime_state.config,
             )
-        )
+        except AnalysisProfileError:
+            return _reconciliation_required_response()
+        try:
+            return evaluate_preflight(
+                PreflightContext(
+                    package_revision_id=id,
+                    profile_id=revision.profile_id,
+                    status=revision.status,
+                    sealed_document=sealed.document if sealed is not None else None,
+                    authority_manifest_id=revision.authority_manifest_id,
+                    authority_manifest_sha256=revision.content_manifest_sha256 or ("0" * 64),
+                    analysis_profile=analysis_profile,
+                    evaluated_at=_utc_now(),
+                )
+            )
+        except ValueError:
+            return _reconciliation_required_response()
 
     @router.get("/package-revisions/{id}/delta", tags=["Packages"])
     async def get_package_revision_delta(

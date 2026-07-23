@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "inventory_id": "agency-moderate-inventory-example",
+  "authority_manifest_id": "ato-authorities-2026-07-10-draft",
+  "impact_level": "moderate",
+  "status": "draft",
+  "approved_at": null,
+  "approved_by": null,
+  "source_reference": "Example agency security baseline workbook reference for contract tests only; not a production customer inventory.",
+  "control_ids": [
+    "AC-1",
+    "AC-2",
+    "IA-5"
+  ]
+}

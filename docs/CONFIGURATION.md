@@ -76,11 +76,78 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | `OIDC_GROUPS_CLAIM` / `OIDC_GROUP_ROLE_MAPPING` | **Identity mapping** | Required when `IDENTITY_PROVIDER_MODE=oidc`. Claim name defaults to `groups`. Role mapping overrides default RBAC group names at startup. |
 | `SINGLE_USER_MODE_ENABLED` | **Single-operator dev/demo mode** | Optional boolean, default `false`. When `true`, configured owner/reviewer IdP groups also satisfy approver roles and the same principal may approve or reject their own export submission after normal object and role checks. Does not bypass authentication, tenant isolation, CSRF, ETag, idempotency, payload-hash binding, approval expiry, or audit. Production and onprem examples must set `false` unless a dedicated documented single-user profile is approved. |
 | `INTERNAL_EGRESS_ALLOWLIST` | **Outbound allowlist** | Required for `onprem_production`. Closed host/port list for IdP, model endpoints, and backup targets. Operator preflight verifies configured endpoints match entries exactly. |
-| `AUTHORITY_MANIFEST_FILE_REFERENCE` / `FISMA_TEMPLATE_PACK_FILE_REFERENCE` | **Pinned file references** | Optional absolute path plus `expected_sha256` digest. Operator preflight verifies bytes when configured; HS-001/HS-002 govern qualified review separately. |
+| `AUTHORITY_MANIFEST_FILE_REFERENCE` / `FISMA_TEMPLATE_PACK_FILE_REFERENCE` | **Pinned file references** | Optional absolute path plus `expected_sha256` digest. Operator preflight verifies bytes when configured; **HS-001**/**HS-002** govern qualified review separately. |
+| `FISMA_ANALYSIS_PROFILE_FILE_REFERENCE` | **Customer FISMA analysis profile** | Required for production `fisma_agency_security` runs. Absolute `path` plus `expected_sha256` for a profile compiled by `scripts/compile_fisma_analysis_profile.py`. No bundled or synthetic runtime fallback. |
 | `BACKUP_TARGET_DECLARATION` | **Backup destination contract** | Required when `BACKUP_OFF_HOST_ENABLED=true`. Declares protocol, host, port, and export path; does not perform backup I/O. |
 | `BACKUP_*`, `AUDIT_*` backup fields | **Recovery contract** | Declarations document intended recovery posture; they do not enable backup jobs, WAL archiving, or restore automation in this slice. |
 
 Text-model endpoints are required for `onprem_production` schema validity. Model-assisted analysis, package chat, and routing policy are implemented with deterministic tests; real customer model calls remain blocked by **HS-004** until customer policy is verified.
+
+## Analysis profiles and authority compilation
+
+Deterministic analysis profiles are compiled offline from the digest-verified authority manifest. Runtime never fetches authority bytes or hand-edits generated rule content.
+
+### Bundled FedRAMP profiles
+
+After updating vendored authority bytes and `docs/contracts/authority-manifest.json`, regenerate and verify bundled draft profiles:
+
+```text
+python scripts/compile_analysis_profiles.py
+python scripts/compile_analysis_profiles.py --check
+```
+
+After qualified SME review closes **HS-001** and the authority manifest is approved, regenerate bundled profiles as qualified and verify with matching `--qualification-status`:
+
+```text
+python scripts/compile_analysis_profiles.py --qualification-status qualified
+python scripts/compile_analysis_profiles.py --qualification-status qualified --check
+```
+
+The current repository manifest remains `draft`; these qualified commands fail until manifest approval is recorded.
+
+Committed outputs under `reference/profiles/`:
+
+| File | Runtime selection | Items |
+| --- | --- | --- |
+| `fedramp-20x-program-class-c.json` | `fedramp_20x_program` + Class `C` | 201 |
+| `fedramp-rev5-transition-low.json` | `fedramp_rev5_transition` + impact `low` | 149 |
+| `fedramp-rev5-transition-moderate.json` | `fedramp_rev5_transition` + impact `moderate` | 287 |
+| `fedramp-rev5-transition-high.json` | `fedramp_rev5_transition` + impact `high` | 370 |
+
+Runtime selects the bundled file from `profile_id`, `certification_class`, and `impact_level` on the package revision. Each profile passes schema and semantic validation against the verified manifest. All bundled profiles currently emit `qualification_status: draft` (**HS-001** open).
+
+### Customer FISMA profile
+
+`fisma_agency_security` requires a customer control inventory (`docs/contracts/fisma-control-inventory.schema.json`) and an explicit compiled profile reference in runtime JSON:
+
+```text
+python scripts/compile_fisma_analysis_profile.py --inventory /path/to/inventory.json --output /path/to/fisma-profile.json
+python scripts/compile_fisma_analysis_profile.py --inventory /path/to/inventory.json --output /path/to/fisma-profile.json --check
+```
+
+After qualified SME review and authority manifest approval, compile with approved inventory and matching qualification status, then verify with the same flags:
+
+```text
+python scripts/compile_fisma_analysis_profile.py --inventory /path/to/inventory-approved.json --output /path/to/fisma-profile.json --require-approved-inventory --qualification-status qualified
+python scripts/compile_fisma_analysis_profile.py --inventory /path/to/inventory-approved.json --output /path/to/fisma-profile.json --require-approved-inventory --qualification-status qualified --check
+```
+
+`--qualification-status qualified` implies `--require-approved-inventory`, requires verified authority manifest `status: approved`, and asserts completed human review without claiming automatic regulatory approval. The current repository manifest remains `draft`; qualified compiles fail until **HS-001** authority approval is recorded.
+
+The compiler prints a `FISMA_ANALYSIS_PROFILE_FILE_REFERENCE` snippet (`path` + `expected_sha256`) for draft or qualified output. Add that object to production runtime JSON. **HS-002** remains open for customer-ready export until approved customer inventory/template inputs exist.
+
+### Production profile gates
+
+When `runtime_profile=onprem_production`, profile load fails unless:
+
+- the selected profile has `qualification_status: qualified`; and
+- the authority manifest has `status: approved`.
+
+With the current draft manifest and draft compiled profiles, production analysis paths fail closed until qualified review closes **HS-001**. FISMA additionally requires the explicit `FISMA_ANALYSIS_PROFILE_FILE_REFERENCE` and remains blocked by **HS-002** where customer inventory or template parity inputs are missing.
+
+### Cadence limitation
+
+Compiled profiles currently emit `cadence_rules: []`. Freshness and reporting cadence requirements appear as assessment items, but deterministic cadence validation is not yet implemented. Do not claim cadence gating or automated cadence checks in operator messaging until an authority-bound evaluator ships.
 
 ## Secrets
 
@@ -135,11 +202,13 @@ alias in `dev_local`.
 ## Deterministic analyzer worker
 
 `ato-analyzer-worker` is the long-running worker for the implemented
-`deterministic_only` analysis path. It is gated to `runtime_profile=dev_local`,
-confirmed `data_origin=synthetic` revisions, and the pinned synthetic FISMA
-profile. It continuously recovers expired leases, claims durable jobs, writes
-the exact assessment matrix and artifact manifest, and keeps
-`llm_call_count=0`.
+`deterministic_only` analysis path. It is gated to `runtime_profile=dev_local`
+and confirmed `data_origin=synthetic` revisions. At run time it loads the same
+runtime-selected compiled analysis profile as admission (via `load_runtime_profile`)
+and reconciles the profile digest and `authority_manifest_id` against the run
+binding before writing matrix output. It continuously recovers expired leases,
+claims durable jobs, writes the exact assessment matrix and artifact manifest,
+and keeps `llm_call_count=0`.
 
 It consumes the same validated runtime JSON, database DSN, storage path, and
 audit HMAC credential as intake. No model credential is loaded.

@@ -1042,3 +1042,99 @@ def test_resolve_text_model_context_budget_uses_runtime_defaults(tmp_path: Path)
 
     assert budget.utilization_target == 0.70
     assert budget.input_budget_tokens == 5120
+
+
+_VALID_FISMA_ANALYSIS_PROFILE_REFERENCE = {
+    "path": "/opt/ato-analyzer/reference/profiles/customer-fisma-profile.json",
+    "expected_sha256": "a" * 64,
+}
+
+
+def test_fisma_analysis_profile_file_reference_accepts_valid_reference(
+    tmp_path: Path,
+) -> None:
+    config = load_runtime_config_from_dict(
+        _minimal_dev_document(
+            FISMA_ANALYSIS_PROFILE_FILE_REFERENCE=_VALID_FISMA_ANALYSIS_PROFILE_REFERENCE
+        ),
+        base_dir=tmp_path,
+    )
+
+    assert (
+        config.document["FISMA_ANALYSIS_PROFILE_FILE_REFERENCE"]
+        == _VALID_FISMA_ANALYSIS_PROFILE_REFERENCE
+    )
+
+
+def test_fisma_analysis_profile_file_reference_rejects_missing_digest(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="expected_sha256"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                FISMA_ANALYSIS_PROFILE_FILE_REFERENCE={
+                    "path": _VALID_FISMA_ANALYSIS_PROFILE_REFERENCE["path"],
+                }
+            ),
+            base_dir=tmp_path,
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_digest",
+    (
+        "not-a-sha256-digest",
+        "A" * 64,
+        "a" * 63,
+        "a" * 65,
+    ),
+)
+def test_fisma_analysis_profile_file_reference_rejects_invalid_digest(
+    tmp_path: Path,
+    invalid_digest: str,
+) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="expected_sha256"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                FISMA_ANALYSIS_PROFILE_FILE_REFERENCE={
+                    "path": _VALID_FISMA_ANALYSIS_PROFILE_REFERENCE["path"],
+                    "expected_sha256": invalid_digest,
+                }
+            ),
+            base_dir=tmp_path,
+        )
+
+
+def test_fisma_analysis_profile_file_reference_rejects_relative_path(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        RuntimeConfigValidationError,
+        match=r"FISMA_ANALYSIS_PROFILE_FILE_REFERENCE\.path",
+    ):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                FISMA_ANALYSIS_PROFILE_FILE_REFERENCE={
+                    "path": "reference/profiles/customer-fisma-profile.json",
+                    "expected_sha256": _VALID_FISMA_ANALYSIS_PROFILE_REFERENCE[
+                        "expected_sha256"
+                    ],
+                }
+            ),
+            base_dir=tmp_path,
+        )
+
+
+def test_fisma_analysis_profile_file_reference_rejects_extra_properties(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="Additional properties"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                FISMA_ANALYSIS_PROFILE_FILE_REFERENCE={
+                    **_VALID_FISMA_ANALYSIS_PROFILE_REFERENCE,
+                    "unexpected_field": True,
+                }
+            ),
+            base_dir=tmp_path,
+        )

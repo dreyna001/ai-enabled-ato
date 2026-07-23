@@ -16,7 +16,7 @@ from ato_service.analysis_profile import (
     analysis_profile_sha256,
     assessment_item_type_for_id,
     expected_assessment_item_ids,
-    load_pinned_profile,
+    load_runtime_profile,
 )
 from ato_service.artifact_manifests import (
     ArtifactManifestCommitError,
@@ -156,6 +156,7 @@ async def process_next_deterministic_analysis(
     analysis_run: AnalysisRun,
     storage_root: Path,
     project_root: Path,
+    config: RuntimeConfig,
     hmac_key: bytes,
     now: datetime,
 ) -> DeterministicAnalysisResult:
@@ -181,10 +182,22 @@ async def process_next_deterministic_analysis(
             error_code="illegal_state_transition",
         )
 
-    profile = load_pinned_profile(
+    profile = load_runtime_profile(
         profile_id=package_revision.profile_id,
+        certification_class=package_revision.certification_class,
+        impact_level=package_revision.impact_level,
         project_root=project_root,
+        config=config,
     )
+    profile_manifest_id = profile.get("authority_manifest_id")
+    if (
+        not isinstance(profile_manifest_id, str)
+        or profile_manifest_id != analysis_run.authority_manifest_id
+    ):
+        raise DeterministicAnalysisProcessingError(
+            "analysis profile authority_manifest_id does not match run binding",
+            error_code="reconciliation_required",
+        )
     if analysis_profile_sha256(profile) != analysis_run.analysis_profile_sha256:
         raise DeterministicAnalysisProcessingError(
             "analysis run profile digest does not match pinned profile",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import gzip
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+import sys
 import tarfile
 import tomllib
 from typing import Any
@@ -23,10 +25,12 @@ from jsonschema.exceptions import SchemaError, ValidationError
 
 from ato_operator.release_allowlist import (
     ALLOWLIST_ID,
+    BUNDLED_PROFILE_DIRECTORY,
     EXECUTABLE_SCRIPT_PREFIXES,
     FORBIDDEN_PATH_SEGMENTS,
     FORBIDDEN_SECRET_PATTERNS,
     ReleaseBuildOptions,
+    bundled_profile_relative_paths,
     collect_allowlisted_files,
     is_allowlisted_relative_path,
     is_excluded_relative_path,
@@ -41,8 +45,17 @@ _CHECKSUMS_RELATIVE = f"{_RELEASE_PREFIX}checksums.sha256"
 _SBOM_RELATIVE = f"{_RELEASE_PREFIX}sbom.json"
 _ONPREM_CONFIG_RELATIVE = "deployment/config/runtime-config.onprem.example.json"
 _RUNTIME_CONFIG_SCHEMA_RELATIVE = "docs/contracts/runtime-config.schema.json"
+_ANALYSIS_PROFILE_SCHEMA_RELATIVE = "docs/contracts/analysis-profile.schema.json"
+_AUTHORITY_MANIFEST_RELATIVE = "docs/contracts/authority-manifest.json"
 _PACKAGE_MANIFEST_SCHEMA_RELATIVE = "docs/contracts/release-package-manifest.schema.json"
 _BUILDER_ID = "ato-operator release-packaging"
+MAX_TAR_MEMBER_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+MAX_TAR_AGGREGATE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+_BUNDLED_PROFILE_DRAFT_WARNING = (
+    "bundled analysis profiles have qualification_status=draft; "
+    "HS-001 authority review remains open and profiles must not be "
+    "represented as qualified"
+)
 
 
 class ReleasePackagingError(ValueError):
@@ -284,9 +297,208 @@ def _write_deterministic_gzip_tar(
     archive_path.write_bytes(compressed)
 
 
+def _load_compile_analysis_profiles_module(project_root: Path):
+    script_path = (project_root / "scripts" / "compile_analysis_profiles.py").resolve()
+    if not script_path.is_file():
+        raise ReleasePackagingError(
+            "missing profile compiler script: scripts/compile_analysis_profiles.py"
+        )
+    module_name = "ato_operator_release_compile_analysis_profiles"
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    if spec is None or spec.loader is None:
+        raise ReleasePackagingError(
+            "failed to load scripts/compile_analysis_profiles.py for release build"
+        )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _read_committed_bundled_profile_qualification_status(
+    project_root: Path,
+) -> str:
+    """Return the uniform qualification_status across committed bundled profiles."""
+    statuses: set[str] = set()
+    for relative_path in bundled_profile_relative_paths():
+        profile_path = project_root / relative_path
+        if not profile_path.is_file():
+            raise ReleasePackagingError(
+                f"missing bundled analysis profile: {relative_path}"
+            )
+        try:
+            document = json.loads(profile_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ReleasePackagingError(
+                f"unable to read bundled analysis profile {relative_path}: {exc}"
+            ) from exc
+        if not isinstance(document, dict):
+            raise ReleasePackagingError(
+                f"bundled analysis profile must be a JSON object: {relative_path}"
+            )
+        qualification_status = document.get("qualification_status")
+        if not isinstance(qualification_status, str):
+            raise ReleasePackagingError(
+                f"bundled analysis profile {relative_path} is missing qualification_status"
+            )
+        statuses.add(qualification_status)
+
+    if len(statuses) != 1:
+        raise ReleasePackagingError(
+            "bundled analysis profiles have mixed qualification_status values: "
+            f"{sorted(statuses)!r}"
+        )
+
+    uniform_status = next(iter(statuses))
+    if uniform_status not in {"draft", "qualified"}:
+        raise ReleasePackagingError(
+            "bundled analysis profiles must have uniform qualification_status "
+            f"draft or qualified, got {uniform_status!r}"
+        )
+    return uniform_status
+
+
+def _verify_approved_authority_manifest_for_qualified_build(project_root: Path) -> None:
+    manifest_path = project_root / _AUTHORITY_MANIFEST_RELATIVE
+    if not manifest_path.is_file():
+        raise ReleasePackagingError(
+            f"missing authority manifest: {_AUTHORITY_MANIFEST_RELATIVE}"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ReleasePackagingError(f"invalid JSON in authority manifest: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ReleasePackagingError("authority manifest must be a JSON object")
+    if manifest.get("status") != "approved":
+        raise ReleasePackagingError(
+            "qualified bundled analysis profiles require an approved authority manifest; "
+            f"embedded manifest status is {manifest.get('status')!r}"
+        )
+
+
+def _verify_committed_bundled_profiles(project_root: Path) -> None:
+    """Fail closed when bundled profile artifacts are missing or drifted."""
+    root = project_root.resolve()
+    qualification_status = _read_committed_bundled_profile_qualification_status(root)
+    if qualification_status == "qualified":
+        _verify_approved_authority_manifest_for_qualified_build(root)
+    compiler = _load_compile_analysis_profiles_module(root)
+    compile_error_type = getattr(compiler, "CompileAnalysisProfilesError", RuntimeError)
+    try:
+        compiler.compile_and_write_profiles(
+            manifest_path=compiler.default_manifest_path(project_root=root),
+            project_root=root,
+            output_dir=compiler.default_output_dir(project_root=root),
+            check_only=True,
+            qualification_status=qualification_status,
+        )
+    except compile_error_type as exc:
+        raise ReleasePackagingError(
+            "bundled analysis profile artifacts failed deterministic check; "
+            f"regenerate with scripts/compile_analysis_profiles.py "
+            f"--qualification-status {qualification_status}: {exc}"
+        ) from exc
+
+
+def _validate_bundled_analysis_profiles(
+    members: dict[str, bytes],
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    schema_payload = members.get(_ANALYSIS_PROFILE_SCHEMA_RELATIVE)
+    validator: Draft202012Validator | None = None
+    if schema_payload is None:
+        errors.append(
+            f"missing analysis profile schema: {_ANALYSIS_PROFILE_SCHEMA_RELATIVE}"
+        )
+    else:
+        try:
+            schema = json.loads(schema_payload.decode("utf-8"))
+            Draft202012Validator.check_schema(schema)
+            validator = Draft202012Validator(schema, format_checker=_FORMAT_CHECKER)
+        except (json.JSONDecodeError, SchemaError, UnicodeDecodeError) as exc:
+            errors.append(f"analysis profile schema validation failed: {exc}")
+
+    found_profiles = 0
+    qualification_statuses: list[str] = []
+    for relative_path in bundled_profile_relative_paths():
+        payload = members.get(relative_path)
+        if payload is None:
+            errors.append(f"missing bundled analysis profile: {relative_path}")
+            continue
+        found_profiles += 1
+        try:
+            document = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            errors.append(f"invalid JSON in bundled analysis profile {relative_path}: {exc}")
+            continue
+        if not isinstance(document, dict):
+            errors.append(f"bundled analysis profile must be a JSON object: {relative_path}")
+            continue
+        if validator is not None:
+            validation_error = next(validator.iter_errors(document), None)
+            if validation_error is not None:
+                errors.append(
+                    f"bundled analysis profile {relative_path}: "
+                    f"{_format_schema_error(validation_error)}"
+                )
+        qualification_status = document.get("qualification_status")
+        if not isinstance(qualification_status, str):
+            errors.append(
+                f"bundled analysis profile {relative_path} is missing qualification_status"
+            )
+            continue
+        qualification_statuses.append(qualification_status)
+
+    if not found_profiles:
+        return errors, warnings
+
+    unique_statuses = set(qualification_statuses)
+    if len(unique_statuses) != 1:
+        errors.append(
+            "bundled analysis profiles have mixed qualification_status values: "
+            f"{sorted(unique_statuses)!r}"
+        )
+        return errors, warnings
+
+    uniform_status = next(iter(unique_statuses))
+    if uniform_status not in {"draft", "qualified"}:
+        errors.append(
+            "bundled analysis profiles must have uniform qualification_status "
+            f"draft or qualified, got {uniform_status!r}"
+        )
+        return errors, warnings
+
+    if uniform_status == "draft":
+        warnings.append(_BUNDLED_PROFILE_DRAFT_WARNING)
+        return errors, warnings
+
+    manifest_payload = members.get(_AUTHORITY_MANIFEST_RELATIVE)
+    if manifest_payload is None:
+        errors.append(f"missing authority manifest: {_AUTHORITY_MANIFEST_RELATIVE}")
+        return errors, warnings
+    try:
+        manifest = json.loads(manifest_payload.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        errors.append(f"invalid JSON in authority manifest: {exc}")
+        return errors, warnings
+    if not isinstance(manifest, dict):
+        errors.append("authority manifest must be a JSON object")
+        return errors, warnings
+    if manifest.get("status") != "approved":
+        errors.append(
+            "qualified bundled analysis profiles require an approved authority manifest; "
+            f"embedded manifest status is {manifest.get('status')!r}"
+        )
+
+    return errors, warnings
+
+
 def build_release_archive(options: ReleaseBuildOptions) -> ReleaseBuildReport:
     """Build a deterministic allowlisted release archive."""
     root = options.project_root.resolve()
+    _verify_committed_bundled_profiles(root)
     package_version = _read_package_version(root)
     migration_head = _resolve_migration_head(root)
     source_files = collect_allowlisted_files(
@@ -358,11 +570,71 @@ def build_release_archive(options: ReleaseBuildOptions) -> ReleaseBuildReport:
 
 
 def _validate_archive_path(archive_path: Path) -> None:
-    resolved = archive_path.resolve()
+    expanded = archive_path.expanduser()
+    if expanded.is_symlink():
+        raise ReleasePackagingError(f"archive must not be a symlink: {expanded}")
+    resolved = expanded.resolve()
     if not resolved.is_file():
         raise ReleasePackagingError(f"archive does not exist: {resolved}")
-    if resolved.is_symlink():
-        raise ReleasePackagingError(f"archive must be a regular file: {resolved}")
+
+
+def _read_bounded_tar_member(
+    tar: tarfile.TarFile,
+    member: tarfile.TarInfo,
+    *,
+    aggregate_uncompressed_bytes: int,
+    max_member_bytes: int | None = None,
+    max_aggregate_bytes: int | None = None,
+) -> tuple[bytes | None, list[str], int]:
+    """Read one tar member without extraction, enforcing declared and aggregate caps."""
+    member_limit = (
+        max_member_bytes
+        if max_member_bytes is not None
+        else MAX_TAR_MEMBER_UNCOMPRESSED_BYTES
+    )
+    aggregate_limit = (
+        max_aggregate_bytes
+        if max_aggregate_bytes is not None
+        else MAX_TAR_AGGREGATE_UNCOMPRESSED_BYTES
+    )
+    errors: list[str] = []
+    declared_size = member.size
+    if declared_size < 0:
+        errors.append(f"invalid negative archive member size: {member.name}")
+        return None, errors, aggregate_uncompressed_bytes
+    if declared_size > member_limit:
+        errors.append(
+            "archive member exceeds uncompressed size limit "
+            f"({member_limit} bytes): {member.name} "
+            f"({declared_size} bytes declared)"
+        )
+        return None, errors, aggregate_uncompressed_bytes
+    if aggregate_uncompressed_bytes + declared_size > aggregate_limit:
+        errors.append(
+            "archive aggregate uncompressed size exceeds limit "
+            f"({aggregate_limit} bytes) at member {member.name}"
+        )
+        return None, errors, aggregate_uncompressed_bytes
+
+    extracted = tar.extractfile(member)
+    if extracted is None:
+        errors.append(f"unable to read archive member: {member.name}")
+        return None, errors, aggregate_uncompressed_bytes
+
+    payload = extracted.read(declared_size + 1)
+    if len(payload) > declared_size:
+        errors.append(
+            f"archive member exceeds declared size during read: {member.name}"
+        )
+        return None, errors, aggregate_uncompressed_bytes
+    if len(payload) != declared_size:
+        errors.append(
+            f"archive member size mismatch for {member.name}: "
+            f"declared {declared_size} bytes, read {len(payload)} bytes"
+        )
+        return None, errors, aggregate_uncompressed_bytes
+
+    return payload, errors, aggregate_uncompressed_bytes + len(payload)
 
 
 def _iter_safe_tar_members(tar: tarfile.TarFile) -> tuple[list[tarfile.TarInfo], list[str]]:
@@ -496,6 +768,7 @@ def verify_release_archive(
     errors.extend(signature_errors)
 
     members: dict[str, bytes] = {}
+    aggregate_uncompressed_bytes = 0
     with tarfile.open(archive_path, mode="r:gz") as tar:
         tar_members, member_errors = _iter_safe_tar_members(tar)
         errors.extend(member_errors)
@@ -511,11 +784,14 @@ def verify_release_archive(
             ):
                 errors.append(f"path is outside release allowlist: {member.name}")
 
-            extracted = tar.extractfile(member)
-            if extracted is None:
-                errors.append(f"unable to read archive member: {member.name}")
+            payload, read_errors, aggregate_uncompressed_bytes = _read_bounded_tar_member(
+                tar,
+                member,
+                aggregate_uncompressed_bytes=aggregate_uncompressed_bytes,
+            )
+            errors.extend(read_errors)
+            if payload is None:
                 continue
-            payload = extracted.read()
             members[member.name] = payload
             errors.extend(_scan_text_for_secrets(member.name, payload))
 
@@ -531,6 +807,9 @@ def verify_release_archive(
     manifest, manifest_errors = _validate_package_manifest_schema(members)
     errors.extend(manifest_errors)
     errors.extend(_validate_onprem_config_example(members))
+    profile_errors, profile_warnings = _validate_bundled_analysis_profiles(members)
+    errors.extend(profile_errors)
+    warnings.extend(profile_warnings)
 
     checksum_map: dict[str, str] = {}
     if _CHECKSUMS_RELATIVE in members:
@@ -623,6 +902,8 @@ def reject_unsafe_staging_path(path: Path, *, staging_root: Path) -> None:
 
 
 __all__ = [
+    "MAX_TAR_AGGREGATE_UNCOMPRESSED_BYTES",
+    "MAX_TAR_MEMBER_UNCOMPRESSED_BYTES",
     "ReleaseBuildReport",
     "ReleaseBuildOptions",
     "ReleasePackagingError",

@@ -12,14 +12,14 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ato_service.analysis_profile import expected_assessment_item_ids, load_pinned_fisma_synthetic_profile
+from ato_service.analysis_profile import expected_assessment_item_ids
 from ato_service.analysis_runs import StartRunInput, start_run
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.db.models import AnalysisRun, Job, MatrixRow, PackageRevision, RunStep, System
 from ato_service.db.session import create_async_engine_from_url
 from ato_service.deterministic_analyzer_worker import process_next_deterministic_analysis_job
 from ato_service.matrix_coverage import require_exact_matrix_coverage
-from ato_service.runtime_config import load_runtime_config_from_dict
+from tests.ato_service.test_analysis_profile import fisma_runtime_config, write_digest_pinned_fisma_profile
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,16 +34,13 @@ def test_deterministic_analysis_run_completes_with_exact_matrix(tmp_path: Path) 
         now = datetime.now(timezone.utc)
         system_id = uuid.uuid4()
         revision_id = uuid.uuid4()
-        config = load_runtime_config_from_dict(
-            {
-                "schema_version": "1.0.0",
-                "runtime_profile": "dev_local",
-                "STORAGE_DATA_PATH": str(tmp_path / "storage"),
-            },
-            base_dir=tmp_path,
-        )
-        profile = load_pinned_fisma_synthetic_profile(project_root=ROOT)
+        profile_file, digest, profile, impact_level = write_digest_pinned_fisma_profile(tmp_path)
         expected_ids = expected_assessment_item_ids(profile)
+        config = fisma_runtime_config(
+            tmp_path,
+            profile_path=profile_file,
+            expected_sha256=digest,
+        )
         engine = create_async_engine_from_url(url)
         try:
             async with engine.connect() as connection:
@@ -69,7 +66,7 @@ def test_deterministic_analysis_run_completes_with_exact_matrix(tmp_path: Path) 
                             parent_revision_id=None,
                             profile_id="fisma_agency_security",
                             certification_class=None,
-                            impact_level="moderate",
+                            impact_level=impact_level,
                             data_origin="synthetic",
                             sensitivity="internal_unclassified",
                             effective_data_labels=[

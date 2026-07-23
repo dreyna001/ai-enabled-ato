@@ -17,9 +17,19 @@ ALLOWLIST_DIRECTORIES: tuple[str, ...] = (
     "docs/release",
     "docs/requirements",
     "reference/authorities",
+    "reference/profiles",
     "deployment/systemd",
     "deployment/nginx",
     "data/qualification",
+)
+
+# Deterministic bundled draft analysis profiles shipped in every customer release.
+BUNDLED_PROFILE_DIRECTORY = "reference/profiles"
+BUNDLED_PROFILE_FILENAMES: tuple[str, ...] = (
+    "fedramp-20x-program-class-c.json",
+    "fedramp-rev5-transition-low.json",
+    "fedramp-rev5-transition-moderate.json",
+    "fedramp-rev5-transition-high.json",
 )
 
 # Individual files included when present.
@@ -46,6 +56,8 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     "scripts/prestage_airgap_deps.sh",
     "scripts/build_release.sh",
     "scripts/verify_release.sh",
+    "scripts/compile_analysis_profiles.py",
+    "scripts/compile_fisma_analysis_profile.py",
 )
 
 CONDITIONAL_PORTAL_DIST = "portal/dist"
@@ -171,6 +183,37 @@ def is_allowlisted_relative_path(relative_path: str) -> bool:
     return False
 
 
+def bundled_profile_relative_paths() -> tuple[str, ...]:
+    return tuple(
+        f"{BUNDLED_PROFILE_DIRECTORY}/{filename}"
+        for filename in BUNDLED_PROFILE_FILENAMES
+    )
+
+
+def _reject_symlink(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"symlink not allowed in release source tree: {path}")
+
+
+def _require_real_directory(path: Path, *, missing_message: str) -> None:
+    _reject_symlink(path)
+    if not path.is_dir():
+        raise FileNotFoundError(missing_message)
+
+
+def _iter_regular_files_under(directory: Path) -> list[Path]:
+    """Return sorted regular files under directory without following symlinks."""
+    _reject_symlink(directory)
+    collected: list[Path] = []
+    for entry in sorted(directory.iterdir(), key=lambda item: item.name):
+        _reject_symlink(entry)
+        if entry.is_dir():
+            collected.extend(_iter_regular_files_under(entry))
+        elif entry.is_file():
+            collected.append(entry)
+    return collected
+
+
 def collect_allowlisted_files(
     project_root: Path,
     *,
@@ -182,10 +225,9 @@ def collect_allowlisted_files(
     selected: list[Path] = []
 
     def maybe_add(path: Path) -> None:
+        _reject_symlink(path)
         if not path.is_file():
             return
-        if path.is_symlink():
-            raise ValueError(f"symlink not allowed in release source tree: {path}")
         relative = _normalize_relative(str(path.relative_to(root)))
         if is_excluded_relative_path(relative):
             return
@@ -198,32 +240,35 @@ def collect_allowlisted_files(
 
     for relative_directory in ALLOWLIST_DIRECTORIES:
         directory = root / relative_directory
-        if not directory.is_dir():
-            raise FileNotFoundError(f"missing required release directory: {relative_directory}")
-        for path in sorted(directory.rglob("*")):
-            if path.is_file():
-                maybe_add(path)
+        _require_real_directory(
+            directory,
+            missing_message=f"missing required release directory: {relative_directory}",
+        )
+        for path in _iter_regular_files_under(directory):
+            maybe_add(path)
 
     if require_portal_dist:
         portal_dist = root / CONDITIONAL_PORTAL_DIST
-        if not portal_dist.is_dir():
-            raise FileNotFoundError(
+        _require_real_directory(
+            portal_dist,
+            missing_message=(
                 "portal/dist is required; build portal assets before packaging "
                 "(cd portal && npm ci && npm run build)"
-            )
-        for path in sorted(portal_dist.rglob("*")):
-            if path.is_file():
-                maybe_add(path)
+            ),
+        )
+        for path in _iter_regular_files_under(portal_dist):
+            maybe_add(path)
 
     if require_airgap:
         airgap_root = root / CONDITIONAL_AIRGAP_ROOT
-        if not airgap_root.is_dir():
-            raise FileNotFoundError(
+        _require_real_directory(
+            airgap_root,
+            missing_message=(
                 "dist/airgap is required; run scripts/prestage_airgap_deps.sh on a connected host"
-            )
-        for path in sorted(airgap_root.rglob("*")):
-            if path.is_file():
-                maybe_add(path)
+            ),
+        )
+        for path in _iter_regular_files_under(airgap_root):
+            maybe_add(path)
 
     # De-duplicate while preserving deterministic order.
     seen: set[str] = set()
@@ -241,6 +286,8 @@ __all__ = [
     "ALLOWLIST_DIRECTORIES",
     "ALLOWLIST_FILES",
     "ALLOWLIST_ID",
+    "BUNDLED_PROFILE_DIRECTORY",
+    "BUNDLED_PROFILE_FILENAMES",
     "CONDITIONAL_AIRGAP_ROOT",
     "CONDITIONAL_PORTAL_DIST",
     "DEFAULT_SOURCE_DATE_EPOCH",
@@ -248,6 +295,7 @@ __all__ = [
     "FORBIDDEN_PATH_SEGMENTS",
     "FORBIDDEN_SECRET_PATTERNS",
     "ReleaseBuildOptions",
+    "bundled_profile_relative_paths",
     "collect_allowlisted_files",
     "is_allowlisted_relative_path",
     "is_excluded_relative_path",

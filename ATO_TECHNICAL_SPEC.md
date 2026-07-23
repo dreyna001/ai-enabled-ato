@@ -142,6 +142,53 @@ Official artifact validation has two independent gates:
 
 Passing JSON Schema alone MUST NOT be reported as a complete package.
 
+### 5.3 Deterministic analysis profiles
+
+Analysis profiles are compiled offline from the pinned authority manifest. Runtime MUST NOT fetch authority content, hand-edit generated rule catalogs, or substitute model training knowledge for authority bytes.
+
+**Bundled FedRAMP profiles.** After digest-verifying `docs/contracts/authority-manifest.json` against vendored bytes under `reference/authorities/`, run:
+
+```text
+python scripts/compile_analysis_profiles.py
+python scripts/compile_analysis_profiles.py --check
+```
+
+The offline compiler emits four bundled draft artifacts under `reference/profiles/`:
+
+| Output file | Runtime selection | Assessment items |
+| --- | --- | --- |
+| `fedramp-20x-program-class-c.json` | `profile_id=fedramp_20x_program`, `certification_class=C`, `impact_level=null` | 201 |
+| `fedramp-rev5-transition-low.json` | `profile_id=fedramp_rev5_transition`, `certification_class=null`, `impact_level=low` | 149 |
+| `fedramp-rev5-transition-moderate.json` | same with `impact_level=moderate` | 287 |
+| `fedramp-rev5-transition-high.json` | same with `impact_level=high` | 370 |
+
+Each artifact passes JSON Schema validation (`docs/contracts/analysis-profile.schema.json`) and semantic validation against the verified manifest (authority pointer resolution, sorted deterministic arrays, manifest binding, and digest checks). Bundled profiles always emit `qualification_status: draft` until qualified under **HS-001**.
+
+**Customer FISMA profile.** `fisma_agency_security` has no bundled profile. The customer supplies a schema-valid control inventory (`docs/contracts/fisma-control-inventory.schema.json`). Operators compile one profile with:
+
+```text
+python scripts/compile_fisma_analysis_profile.py --inventory <inventory.json> --output <profile.json>
+python scripts/compile_fisma_analysis_profile.py --inventory <inventory.json> --output <profile.json> --check
+```
+
+Production runtime MUST declare explicit `FISMA_ANALYSIS_PROFILE_FILE_REFERENCE` (`path` plus `expected_sha256`) in validated runtime JSON. There is no synthetic runtime fallback for customer FISMA analysis.
+
+**Production gates.** When `runtime_profile=onprem_production`, profile load requires `qualification_status: qualified` on the selected profile and `status: approved` on the authority manifest. The current repository manifest and compiled profiles remain `draft` while **HS-001** is open. FISMA production work additionally remains blocked by **HS-002** until the customer supplies and approves the applicable inventory and, where required, agency template or field-mapping inputs.
+
+**Air-gapped authority update.** To refresh authority bytes on an isolated host:
+
+1. Obtain official vendor source bytes out of band; do not infer rule text from models or hand-edit generated assessment items.
+2. Replace vendored files under `reference/authorities/` and update `docs/contracts/authority-manifest.json` digests, metadata, and `review_status`.
+3. Review applicability changes with qualified SMEs.
+4. Regenerate profiles: `python scripts/compile_analysis_profiles.py` (and customer FISMA compiles as applicable).
+5. Verify committed output: `python scripts/compile_analysis_profiles.py --check` plus targeted pytest for profile compilers.
+6. Run applicable live-model evaluation when AI behavior depends on the changed catalog.
+7. After SME qualification, set manifest and profile approval fields and package the release with updated digests and release notes.
+
+**Cadence limitation (current).** Compiled profiles emit `cadence_rules: []` because package date fields and the cadence evaluator are not yet authority-bound. Freshness and reporting cadence requirements still appear as assessment items where applicable, but the product MUST NOT claim deterministic cadence gating or automated cadence validation until a reviewed authority-bound evaluator ships.
+
+**Model boundary.** Deterministic rule selection and the exact assessment-item inventory MUST complete before any model-assisted evidence analysis. LLM steps evaluate supplied evidence against items already selected by the pinned profile; they MUST NOT select, tailor, or invent applicability rules.
+
 ## 6. FedRAMP 20x Program contract
 
 ### 6.1 Product claim
@@ -174,15 +221,7 @@ Missing required material MAY still be analyzed, but MUST appear as an export-re
 
 ### 6.4 20x cadence
 
-For the initial authority snapshot:
-
-- Initial application package freshness is checked against the current seven-day rule.
-- Class C independent assessment freshness is checked against the current three-month rule.
-- Class C package maintenance is checked against the current two-week rule.
-- OCR reporting is checked against the current three-month rule.
-- Required KSI metric history is checked against the current rule.
-
-These values MUST come from the authority catalog so a future reviewed update does not require prompt changes.
+The pinned authority catalog defines freshness and reporting cadence requirements. Applicable rules appear as assessment items in the compiled Class C profile. **Current limitation:** `cadence_rules` in compiled profiles remain empty because package date fields and the cadence evaluator are not yet bound to authority date semantics (Section 5.3). The product MUST NOT report deterministic cadence validation or cadence-gated readiness until that evaluator is reviewed and shipped. When implemented, cadence thresholds MUST come from the authority catalog so a future reviewed update does not require prompt changes.
 
 ### 6.5 Auxiliary analysis
 
@@ -210,11 +249,12 @@ The customer supplies:
 
 - Agency name and system identifier.
 - FIPS 199 impact level: `low`, `moderate`, or `high`.
-- The authoritative tailored control list, organization-defined parameters, overlays, and inheritance decisions.
+- A schema-valid FISMA control inventory (`docs/contracts/fisma-control-inventory.schema.json`) listing the authoritative tailored control IDs, bound to the pinned `authority_manifest_id`.
+- Organization-defined parameters, overlays, and inheritance decisions reflected in that inventory and supporting artifacts.
 - Agency SSP, assessment, POA&M, and readiness templates or field maps.
 - Agency freshness and approval policy.
 
-The product MUST NOT select the official baseline, tailor controls, decide inheritance, or claim agency field parity without a qualified template pack.
+Operators compile the runtime analysis profile with `scripts/compile_fisma_analysis_profile.py` and pin `FISMA_ANALYSIS_PROFILE_FILE_REFERENCE` in runtime JSON. The product MUST NOT select the official baseline, synthesize a runtime control list, tailor controls, decide inheritance, or claim agency field parity without customer-approved inventory and, where applicable, a qualified template pack (**HS-002**).
 
 Core security outputs:
 
@@ -845,9 +885,10 @@ ready PackageRevision
   -> create run and immutable staging directory
   -> evaluate routing policy
   -> load pinned authority and analysis profile
-  -> deterministic checks and assessment-item inventory
+  -> deterministic rule selection and exact assessment-item inventory from the compiled profile
+  -> deterministic checks against pinned applicability (no model call for inventory construction)
   -> deterministic evidence chunk selection
-  -> bounded structured model calls
+  -> bounded structured model calls (evidence analysis only; never rule selection)
   -> schema validation; one repair attempt where allowed
   -> citation, completeness, and status-ceiling validation
   -> deterministic rollups and semantic readiness checks
@@ -1514,7 +1555,7 @@ Open hard stops are recorded in `docs/requirements/hard-stops.yaml`. HS-001 bloc
 | P-1 | Spec, internal JSON Schemas, authority manifest, OpenAPI, threat model, AI eval spec, operations/config contracts | `EP-00-contracts` complete; recorded in `docs/P1_GATE_RECORD.md` |
 | P0 | `ato_service` safety foundation, validated runtime config, API-only deployment-contract baseline, and regressions | Deterministic foundation, runtime/deployment contract, policy/replay/crash/completeness tests pass |
 | P1 | Postgres state, jobs, PackageRevision, provenance, immutable storage | One canonical FISMA package completes end to end |
-| P2 | FedRAMP 20x Program Class C profile | Official Class C synthetic package validates and exposes missing obligations |
+| P2 | FedRAMP 20x Program Class C profile | Offline compiler produces draft Class C profile (201 items); synthetic package validates against official schema and exposes missing obligations; qualified profile review remains **HS-001** |
 | P3 | Secure multi-file intake | PDF/DOCX/XLSX/OSCAL/scanner/diagram fixtures and malicious cases pass |
 | P4 | Draft artifact generation | FedRAMP and FISMA paired outputs pass schema and provenance checks |
 | P5 | Portal, OIDC, review, approval, ZIP export | Browser and API authorization/concurrency/replay tests pass |
@@ -1553,9 +1594,9 @@ Minimum release-level requirements:
 | --- | --- | --- |
 | R-001 | Draft-only and no authorization decision | Reports, portal, refusal tests |
 | R-002 | Single customer per installation | Architecture/schema review |
-| R-003 | 20x Program Class C official package contract | Official schema + semantic E2E |
-| R-004 | Security-only FISMA boundary | Fixture and disclosure test |
-| R-005 | DoD/IC/classified rejection | Negative tests |
+| R-003 | 20x Program Class C official package contract | Offline authority compiler, bundled draft profile (201 items), schema + semantic validation; export artifact generators; **HS-001** blocks qualification |
+| R-004 | Security-only FISMA boundary | Customer control inventory contract, offline FISMA compiler, explicit runtime profile reference, privacy disclosure; **HS-002** blocks customer-ready export |
+| R-005 | DoD/IC/classified rejection | Negative tests at package metadata and bundled profile selection boundaries |
 | R-006 | Policy before every model call | Routing-order tests |
 | R-007 | Immutable package revisions and runs | Replay/mutation tests |
 | R-008 | Field-level provenance | Proposal/confirmation tests |

@@ -22,10 +22,20 @@ from ato_service.sufficiency_matrix.profile_catalog import assessment_items_for_
 from ato_service.sufficiency_matrix.tokens import estimate_tokens_from_object
 
 ROOT = Path(__file__).resolve().parents[2]
+FEDRAMP_CLASS_C = "C"
+ASSESSMENT_ITEM_ACK = "AFC-CSO-ACK"
+ASSESSMENT_ITEM_CRA = "AFC-CSO-CRA"
 SOURCE_A = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 SOURCE_B = uuid.UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
 STATEMENT_A = "Alpha access control policy covers privileged users."
-STATEMENT_B = "Beta logging policy retains audit records for review."
+
+
+def _load_fedramp_class_c_profile() -> dict[str, Any]:
+    return load_pinned_profile(
+        profile_id="fedramp_20x_program",
+        certification_class=FEDRAMP_CLASS_C,
+        project_root=ROOT,
+    )
 
 
 def _source_sha256(pointer: str, text: str) -> str:
@@ -43,7 +53,11 @@ def _sealed(*, statements: tuple[tuple[str, str, uuid.UUID], ...]) -> SealedPack
             "source_sha256": _source_sha256(pointer, statement),
         }
     document = {
-        "package": {"profile_id": "fedramp_20x_program", "title": "Demo"},
+        "package": {
+            "profile_id": "fedramp_20x_program",
+            "certification_class": FEDRAMP_CLASS_C,
+            "title": "Demo",
+        },
         "security_controls": controls,
         "evidence": {},
     }
@@ -59,12 +73,12 @@ def _sealed(*, statements: tuple[tuple[str, str, uuid.UUID], ...]) -> SealedPack
 
 
 def test_fact_bundle_includes_all_sources_when_budget_allows() -> None:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
-    sealed = _sealed(statements=(("FR-1", STATEMENT_A, SOURCE_A),))
+    profile = _load_fedramp_class_c_profile()
+    sealed = _sealed(statements=((ASSESSMENT_ITEM_ACK, STATEMENT_A, SOURCE_A),))
 
     bundle = build_fact_bundle(
         profile=profile,
-        assessment_item_ids=("FR-1",),
+        assessment_item_ids=(ASSESSMENT_ITEM_ACK,),
         sealed=sealed,
         input_budget_tokens=8192,
     )
@@ -75,17 +89,17 @@ def test_fact_bundle_includes_all_sources_when_budget_allows() -> None:
 
 
 def test_fact_bundle_omits_sources_in_rank_order_when_budget_tight() -> None:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _load_fedramp_class_c_profile()
     sealed = _sealed(
         statements=(
-            ("FR-1", STATEMENT_A, SOURCE_A),
-            ("FR-2", "x" * 12_000, SOURCE_B),
+            (ASSESSMENT_ITEM_ACK, STATEMENT_A, SOURCE_A),
+            (ASSESSMENT_ITEM_CRA, "x" * 12_000, SOURCE_B),
         )
     )
 
     bundle = build_fact_bundle(
         profile=profile,
-        assessment_item_ids=("FR-1",),
+        assessment_item_ids=(ASSESSMENT_ITEM_ACK,),
         sealed=sealed,
         input_budget_tokens=500,
     )
@@ -99,27 +113,25 @@ def test_fact_bundle_omits_sources_in_rank_order_when_budget_tight() -> None:
 
 
 def test_minimum_bundle_context_limit_exceeded() -> None:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
-    sealed = _sealed(statements=(("FR-1", STATEMENT_A, SOURCE_A),))
+    profile = _load_fedramp_class_c_profile()
+    sealed = _sealed(statements=((ASSESSMENT_ITEM_ACK, STATEMENT_A, SOURCE_A),))
 
     with pytest.raises(ContextLimitExceededError, match="minimum sufficiency_matrix"):
         build_fact_bundle(
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(ASSESSMENT_ITEM_ACK,),
             sealed=sealed,
             input_budget_tokens=128,
         )
 
 
 def test_fixed_metadata_context_limit_exceeded() -> None:
-    profile = copy.deepcopy(
-        load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
-    )
+    profile = copy.deepcopy(_load_fedramp_class_c_profile())
     for item in profile["assessment_items"]:
-        if isinstance(item, dict) and item.get("assessment_item_id") == "FR-1":
+        if isinstance(item, dict) and item.get("assessment_item_id") == ASSESSMENT_ITEM_ACK:
             item["requirement_text"] = "x" * 5000
-    sealed = _sealed(statements=(("FR-1", STATEMENT_A, SOURCE_A),))
-    assessment_item_ids = ("FR-1",)
+    sealed = _sealed(statements=((ASSESSMENT_ITEM_ACK, STATEMENT_A, SOURCE_A),))
+    assessment_item_ids = (ASSESSMENT_ITEM_ACK,)
     assessment_items = assessment_items_for_prompt(
         profile=profile,
         assessment_item_ids=assessment_item_ids,

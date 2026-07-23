@@ -29,7 +29,7 @@ def _config(tmp_path: Path) -> Any:
         {
             "schema_version": "1.0.0",
             "runtime_profile": "dev_local",
-            "STORAGE_DATA_PATH": str(tmp_path / "storage"),
+            "STORAGE_DATA_PATH": "/tmp/ato-deterministic-analyzer-worker/storage",
         },
         base_dir=tmp_path,
     )

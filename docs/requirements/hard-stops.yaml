@@ -11,7 +11,7 @@
         "ATO_TECHNICAL_SPEC.md",
         "docs/contracts/authority-manifest.json"
       ],
-      "notes": "The manifest is draft, approval fields are null, and every source review_status is pending. Vendored, digest-verified authority bytes do not constitute qualified human review."
+      "notes": "Manifest status is draft, approval fields are null, and every source review_status is pending. Bundled profiles under reference/profiles/ and customer FISMA compiles are digest-verified draft artifacts (qualification_status draft). Vendored, digest-verified authority bytes and offline compilation do not constitute qualified human review or production qualification."
     },
     {
       "hard_stop_id": "HS-002",
@@ -20,9 +20,10 @@
       "status": "open",
       "owner": "customer agency template owner (unassigned)",
       "evidence_paths": [
-        "ATO_TECHNICAL_SPEC.md"
+        "ATO_TECHNICAL_SPEC.md",
+        "docs/contracts/fisma-control-inventory.schema.json"
       ],
-      "notes": "No customer-specific template pack or field mapping is evidenced in the repository. Official standard schemas do not establish parity with an agency-specific rendering."
+      "notes": "Repository publishes fisma-control-inventory.schema.json and scripts/compile_fisma_analysis_profile.py, but no customer-approved inventory, agency template pack, or field mapping is evidenced. Production FISMA requires explicit FISMA_ANALYSIS_PROFILE_FILE_REFERENCE; there is no synthetic runtime fallback. Official standard schemas do not establish parity with an agency-specific rendering."
     },
     {
       "hard_stop_id": "HS-003",

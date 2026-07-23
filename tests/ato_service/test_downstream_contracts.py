@@ -8,6 +8,13 @@ from pathlib import Path
 
 import json
 
+import pytest
+
+from ato_service.analysis_profile import (
+    analysis_profile_sha256,
+    load_pinned_fisma_synthetic_profile,
+    load_pinned_profile,
+)
 from ato_service.export_readiness import (
     evaluate_export_readiness,
     portal_export_blocker_codes,
@@ -19,6 +26,8 @@ from ato_service.revision_delta import compute_revision_delta
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 7, 15, 12, 0, 0, tzinfo=timezone.utc)
+RUNTIME_AUTHORITY_MANIFEST_ID = "ato-authorities-2026-07-10-draft"
+FISMA_SYNTHETIC_AUTHORITY_MANIFEST_ID = "authority.v2"
 
 
 def _minimal_document(*, assessor: bool = False, privacy: bool = False) -> dict:
@@ -63,22 +72,54 @@ def _minimal_document(*, assessor: bool = False, privacy: bool = False) -> dict:
     }
 
 
+def _fisma_analysis_profile() -> dict:
+    return load_pinned_fisma_synthetic_profile(project_root=ROOT)
+
+
+def _fedramp_analysis_profile() -> dict:
+    return load_pinned_profile(
+        profile_id="fedramp_20x_program",
+        project_root=ROOT,
+        certification_class="C",
+        impact_level=None,
+    )
+
+
+def _preflight_context(
+    *,
+    profile_id: str,
+    analysis_profile: dict,
+    sealed_document: dict | None,
+    status: str = "ready",
+    authority_manifest_id: str = RUNTIME_AUTHORITY_MANIFEST_ID,
+) -> PreflightContext:
+    return PreflightContext(
+        package_revision_id=uuid.uuid4(),
+        profile_id=profile_id,
+        status=status,
+        sealed_document=sealed_document,
+        authority_manifest_id=authority_manifest_id,
+        authority_manifest_sha256="a" * 64,
+        analysis_profile=analysis_profile,
+        evaluated_at=NOW,
+    )
+
+
 def test_preflight_fisma_export_eligible_without_assessor_or_privacy_execution() -> None:
+    profile = _fisma_analysis_profile()
     result = evaluate_preflight(
-        PreflightContext(
-            package_revision_id=uuid.uuid4(),
+        _preflight_context(
             profile_id="fisma_agency_security",
-            status="ready",
+            analysis_profile=profile,
             sealed_document=_minimal_document(),
-            authority_manifest_id="ato-authorities-2026-07-10-draft",
-            authority_manifest_sha256="a" * 64,
-            project_root=ROOT,
-            evaluated_at=NOW,
+            authority_manifest_id=FISMA_SYNTHETIC_AUTHORITY_MANIFEST_ID,
         )
     )
     check_ids = {check["check_id"] for check in result["deterministic_checks"]}
     assert result["analysis_eligible"] is True
     assert result["export_eligible"] is True
+    assert result["profile_fingerprint"]["sha256"] == analysis_profile_sha256(profile)
+    assert result["profile_fingerprint"]["profile_id"] == "fisma_agency_security"
     assert "assessor.inputs_present" not in check_ids
     assert "privacy.artifacts_present" not in check_ids
     assert "assessor.inputs_present" not in result["export_blockers"]
@@ -97,20 +138,18 @@ def test_preflight_fedramp_blocks_export_without_assessor_and_privacy() -> None:
         "metric_history": [],
         "independent_assessment": {},
     }
+    profile = _fedramp_analysis_profile()
     result = evaluate_preflight(
-        PreflightContext(
-            package_revision_id=uuid.uuid4(),
+        _preflight_context(
             profile_id="fedramp_20x_program",
-            status="ready",
+            analysis_profile=profile,
             sealed_document=document,
-            authority_manifest_id="ato-authorities-2026-07-10-draft",
-            authority_manifest_sha256="a" * 64,
-            project_root=ROOT,
-            evaluated_at=NOW,
+            authority_manifest_id=str(profile["authority_manifest_id"]),
         )
     )
     assert result["analysis_eligible"] is True
     assert result["export_eligible"] is False
+    assert result["profile_fingerprint"]["sha256"] == analysis_profile_sha256(profile)
     assert "assessor.inputs_present" in result["export_blockers"]
     assert "privacy.artifacts_present" in result["export_blockers"]
 
@@ -127,19 +166,43 @@ def test_preflight_fedramp_export_eligible_when_requirements_present() -> None:
         "metric_history": [],
         "independent_assessment": {},
     }
+    profile = _fedramp_analysis_profile()
     result = evaluate_preflight(
-        PreflightContext(
-            package_revision_id=uuid.uuid4(),
+        _preflight_context(
             profile_id="fedramp_20x_program",
-            status="ready",
+            analysis_profile=profile,
             sealed_document=document,
-            authority_manifest_id="ato-authorities-2026-07-10-draft",
-            authority_manifest_sha256="a" * 64,
-            project_root=ROOT,
-            evaluated_at=NOW,
+            authority_manifest_id=str(profile["authority_manifest_id"]),
         )
     )
     assert result["export_eligible"] is True
+    assert result["profile_fingerprint"]["sha256"] == analysis_profile_sha256(profile)
+
+
+def test_preflight_rejects_profile_id_mismatch() -> None:
+    profile = _fisma_analysis_profile()
+    with pytest.raises(ValueError, match="profile_id does not match"):
+        evaluate_preflight(
+            _preflight_context(
+                profile_id="fedramp_20x_program",
+                analysis_profile=profile,
+                sealed_document=_minimal_document(),
+                authority_manifest_id=FISMA_SYNTHETIC_AUTHORITY_MANIFEST_ID,
+            )
+        )
+
+
+def test_preflight_rejects_authority_manifest_id_mismatch() -> None:
+    profile = _fisma_analysis_profile()
+    with pytest.raises(ValueError, match="authority_manifest_id does not match"):
+        evaluate_preflight(
+            _preflight_context(
+                profile_id="fisma_agency_security",
+                analysis_profile=profile,
+                sealed_document=_minimal_document(),
+                authority_manifest_id="wrong.manifest",
+            )
+        )
 
 
 def test_export_readiness_reports_missing_assessor_inputs_for_fedramp() -> None:

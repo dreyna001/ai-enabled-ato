@@ -7,8 +7,9 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `domain.schema.json` | Internal object, enum, and state shapes | Published P-1 contract |
 | `package-draft-document.schema.json` | Canonical editable/sealed package document for all profiles | Published Component A Diff 1 contract |
 | `analysis-profile.schema.json` | Deterministic authority/applicability catalog | Published P-1 contract |
+| `fisma-control-inventory.schema.json` | Customer FISMA tailored control inventory | Published authority-to-profile contract |
 | `authority-manifest.schema.json` | Pinned source metadata and digest rules | Published P-1 contract |
-| `authority-manifest.json` | Exact source pins used for qualification | Bytes verified; HS-001 review remains open |
+| `authority-manifest.json` | Exact source pins used for qualification | Bytes verified; **HS-001** review remains open |
 | `content-manifest.schema.json` | Immutable package source inventory | Published P-1 contract |
 | `artifact-manifest.schema.json` | Durable run-output inventory | Published P-1 contract |
 | `export-manifest.schema.json` | Hash-bound approved ZIP inventory | Published P-1 contract |
@@ -45,6 +46,9 @@ policy (**HS-004**) before customer-data claims.
 - A contract change requires matching specification, traceability, fixture, migration, and test updates.
 - Runtime/deployment values and behavior form one contract across code, schema/examples, systemd/nginx, install/smoke scripts, operator docs, and deployment-contract tests; change these surfaces together.
 - Production release is blocked while `authority-manifest.json` has `status=draft` or any source has a null digest.
+- Compiled analysis profiles under `reference/profiles/` are generated artifacts. Regenerate with `python scripts/compile_analysis_profiles.py` and verify with `--check`. Never hand-edit generated assessment items or rule text.
+- Customer FISMA profiles are compiled with `python scripts/compile_fisma_analysis_profile.py` from a schema-valid control inventory and pinned in runtime JSON through `FISMA_ANALYSIS_PROFILE_FILE_REFERENCE`.
+- Compiled profiles currently emit empty `cadence_rules`; cadence requirements appear as assessment items only until an authority-bound cadence evaluator ships.
 
 ## Validation
 
@@ -55,6 +59,7 @@ contract suite:
 python -m pip install -e ".[dev]"
 python -m pytest tests/test_contracts.py
 python -m pytest tests/test_deployment_contract.py
+python scripts/compile_analysis_profiles.py --check
 ```
 
 The development extra includes unpinned `jsonschema[format]`. It supplies Draft
@@ -64,7 +69,7 @@ OpenAPI-linked contracts without adding a runtime dependency.
 Contract fixtures live in `docs/contracts/fixtures` and use
 `<contract>.<outcome>.<case>.json`. Covered contracts are `domain`,
 `package-draft-document`, `extracted-segment`, `normalize-proposal-response`,
-`normalize-proposal-fact-bundle`, `sufficiency-matrix-response`, `analysis-profile`, `content-manifest`,
+`normalize-proposal-fact-bundle`, `sufficiency-matrix-response`, `analysis-profile`, `fisma-control-inventory`, `content-manifest`,
 `artifact-manifest`, `export-manifest`, `preflight`, `runtime-config`, and
 `fisma-template-pack`, `qualification-manifest`, `validation-drill-record`, `ai-evaluation-record`; each has at least one valid and one invalid fixture.
 `qualification-manifest` fixtures validate schema shape only; digest verification

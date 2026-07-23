@@ -151,6 +151,7 @@ async def process_next_deterministic_analysis_job(
             analysis_run=analysis_run,
             storage_root=storage_root,
             project_root=project_root,
+            config=config,
             hmac_key=hmac_key,
             now=now,
         )

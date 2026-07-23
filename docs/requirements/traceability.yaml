@@ -40,6 +40,16 @@
       "requirement_text": "FedRAMP 20x Program Class C packages conform to the reviewed official package contract and semantic rules.",
       "epic": "EP-03-fedramp-20x",
       "implementation_files": [
+        "docs/contracts/authority-manifest.json",
+        "docs/contracts/analysis-profile.schema.json",
+        "scripts/compile_analysis_profiles.py",
+        "src/ato_service/analysis_profile.py",
+        "src/ato_service/analysis_profile_compiler.py",
+        "src/ato_service/analysis_profile_validation.py",
+        "src/ato_service/authority_catalog.py",
+        "src/ato_service/fedramp_profile.py",
+        "src/ato_service/oscal_catalog.py",
+        "reference/profiles/fedramp-20x-program-class-c.json",
         "src/ato_service/profile_artifacts.py",
         "src/ato_service/fedramp_schema.py",
         "src/ato_service/export_readiness.py",
@@ -47,12 +57,18 @@
         "tests/fixtures/profile_artifacts/fedramp-20x-class-c-sealed.json"
       ],
       "test_ids": [
+        "tests/test_compile_analysis_profiles.py::test_committed_reference_profiles_match_generation",
+        "tests/test_compile_analysis_profiles.py::test_check_mode_passes_for_committed_reference_profiles",
+        "tests/ato_service/test_fedramp_profile.py::test_extract_yields_exactly_201_unique_sorted_items",
+        "tests/ato_service/test_fedramp_profile.py::test_compile_fedramp_20x_class_c_profile_is_schema_and_semantically_valid",
+        "tests/ato_service/test_analysis_profile.py::test_load_pinned_profile_loads_committed_bundled_profiles",
+        "tests/ato_service/test_analysis_profile_compiler.py::test_compile_draft_analysis_profile_binds_verified_manifest_id",
         "tests/ato_service/test_profile_artifacts.py::test_fedramp_fixture_cpo_validates_against_vendored_schema",
         "tests/ato_service/test_profile_artifacts.py::test_fedramp_20x_generates_spec_paths_and_schema_ids",
         "tests/ato_service/test_profile_artifacts.py::test_generate_profile_artifacts_is_deterministic",
         "tests/ato_service/test_profile_artifacts.py::test_assemble_export_bundle_reproduces_fedramp_manifest_hash"
       ],
-      "verification_type": "Deterministic Class C draft artifact generators with vendored official-schema structural validation and HS-001/HS-009 disclaimers; semantic qualification remains blocked by HS-001",
+      "verification_type": "Offline authority compiler produces bundled draft Class C profile (201 assessment items) with schema and semantic validation; export artifact generators and vendored official-schema structural validation; HS-001/HS-009 block qualification and complete package readiness claims; cadence_rules remain empty pending authority-bound evaluator",
       "status": "partial"
     },
     {
@@ -62,8 +78,13 @@
       "epic": "EP-01-core-safety",
       "implementation_files": [
         "docs/contracts/domain.schema.json",
+        "docs/contracts/fisma-control-inventory.schema.json",
         "docs/contracts/fixtures/domain.valid.fisma-package-revision.json",
         "docs/contracts/fisma-template-pack.schema.json",
+        "scripts/compile_fisma_analysis_profile.py",
+        "src/ato_service/fisma_control_inventory.py",
+        "src/ato_service/fisma_profile.py",
+        "src/ato_service/analysis_profile.py",
         "src/ato_service/fisma_generator.py",
         "src/ato_service/fisma_template_pack.py",
         "src/ato_service/export_readiness.py",
@@ -71,11 +92,15 @@
       ],
       "test_ids": [
         "tests/test_contracts.py::test_contract_fixtures_follow_contracts",
+        "tests/test_compile_fisma_analysis_profile.py::test_cli_reports_runtime_config_snippet_and_digests",
+        "tests/ato_service/test_fisma_control_inventory.py::test_load_valid_example_returns_sorted_control_ids",
+        "tests/ato_service/test_fisma_profile.py::test_compile_fisma_agency_security_profile_is_schema_and_semantically_valid",
+        "tests/ato_service/test_analysis_profile.py::test_load_runtime_profile_requires_fisma_reference",
         "tests/ato_service/test_fisma_generator.py::test_generic_generator_marks_hs002_blockers_and_privacy_notice",
         "tests/ato_service/test_fisma_generator.py::test_fisma_export_readiness_allows_generic_draft_without_privacy_execution",
         "tests/ato_service/test_downstream_contracts.py::test_export_readiness_fisma_security_only_does_not_require_privacy_execution"
       ],
-      "verification_type": "Security-only FISMA generator with privacy-scope notice, HS-002 generic draft fallback, and digest-verified template-pack rendering without agency parity claims",
+      "verification_type": "Customer FISMA control inventory contract and offline compiler; explicit FISMA_ANALYSIS_PROFILE_FILE_REFERENCE required at runtime with no synthetic fallback; security-only generator with privacy-scope notice and digest-verified template-pack rendering; HS-002 blocks customer-ready export until approved customer inventory and template inputs",
       "status": "partial"
     },
     {
@@ -87,6 +112,7 @@
         "docs/contracts/domain.schema.json",
         "docs/contracts/fixtures/domain.invalid.profile-boundary.json",
         "src/ato_service/authorization_boundary.py",
+        "src/ato_service/analysis_profile.py",
         "src/ato_service/package_revisions.py",
         "src/ato_service/package_revision_drafts.py",
         "src/ato_service/problems.py",
@@ -94,10 +120,13 @@
       ],
       "test_ids": [
         "tests/ato_service/test_authorization_boundary.py",
+        "tests/ato_service/test_analysis_profile.py::test_bundled_profile_path_rejects_fedramp_20x_class_b",
+        "tests/ato_service/test_analysis_profile.py::test_bundled_profile_path_rejects_invalid_20x_combinations",
+        "tests/ato_service/test_analysis_profile.py::test_bundled_profile_path_rejects_invalid_rev5_combinations",
         "tests/ato_service/test_package_revisions.py::test_validate_patch_metadata_rejects_classified_sensitivity",
         "tests/ato_service/test_package_revision_upload_first.py::test_validate_patch_metadata_requires_at_least_one_field"
       ],
-      "verification_type": "Deterministic unsupported authorization-path and classified-sensitivity rejection at API and draft intake boundaries",
+      "verification_type": "Deterministic unsupported authorization-path and classified-sensitivity rejection at API, draft intake, and bundled profile selection boundaries",
       "status": "partial"
     },
     {

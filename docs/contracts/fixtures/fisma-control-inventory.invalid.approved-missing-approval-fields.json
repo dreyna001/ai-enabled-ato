@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "inventory_id": "agency-approved-inventory-invalid",
+  "authority_manifest_id": "ato-authorities-2026-07-10-draft",
+  "impact_level": "moderate",
+  "status": "approved",
+  "approved_at": null,
+  "approved_by": null,
+  "source_reference": "Invalid approved inventory missing required approval metadata.",
+  "control_ids": [
+    "AC-1",
+    "AC-2",
+    "IA-5"
+  ]
+}

@@ -62,6 +62,7 @@ FIXTURE_SCHEMA_PATHS = {
         "normalize-proposal-response",
         "normalize-proposal-fact-bundle",
         "fisma-template-pack",
+        "fisma-control-inventory",
         "sufficiency-matrix-response",
         "qualification-manifest",
         "validation-drill-record",

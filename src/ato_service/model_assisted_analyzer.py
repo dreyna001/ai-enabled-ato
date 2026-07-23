@@ -200,8 +200,20 @@ async def _execute_sufficiency_matrix(
 ) -> SufficiencyMatrixResult:
     profile = load_profile_catalog(
         profile_id=package_revision.profile_id,
+        certification_class=package_revision.certification_class,
+        impact_level=package_revision.impact_level,
         project_root=project_root,
+        config=config,
     )
+    profile_manifest_id = profile.get("authority_manifest_id")
+    if (
+        not isinstance(profile_manifest_id, str)
+        or profile_manifest_id != analysis_run.authority_manifest_id
+    ):
+        raise ModelAssistedAnalysisProcessingError(
+            "analysis profile authority_manifest_id does not match run binding",
+            error_code="reconciliation_required",
+        )
     if analysis_run.analysis_profile_sha256 != analysis_profile_sha256(profile):
         raise ModelAssistedAnalysisProcessingError(
             "analysis profile digest does not match pinned catalog",

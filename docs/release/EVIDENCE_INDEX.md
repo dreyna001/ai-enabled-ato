@@ -24,6 +24,19 @@
 | `data/qualification/manifest.json` | Sealed qualification corpus with digests |
 | `docs/contracts/authority-manifest.json` | Pinned authority metadata (**HS-001** review remains open while `status=draft`) |
 | `reference/authorities/` | Vendored authority bytes referenced by the manifest |
+| `reference/profiles/*.json` | Bundled draft analysis profiles (`qualification_status=draft`; **HS-001** blocks qualified claims) |
+| `scripts/compile_analysis_profiles.py` | Regenerate/check bundled draft profiles before release build |
+| `scripts/compile_fisma_analysis_profile.py` | Compile customer FISMA agency profile as deployment input (not bundled by default) |
+
+## Profile regeneration and verification commands
+
+```bash
+python scripts/compile_analysis_profiles.py --check
+python scripts/compile_fisma_analysis_profile.py --help
+scripts/verify_release.sh dist/releases/ato-analyzer-<version>.tar.gz
+```
+
+Release build fails closed when bundled profiles are missing or differ from deterministic regeneration. Offline archive verification checks presence, checksum manifest alignment, JSON parse, schema validation, and that `qualification_status` remains `draft`.
 
 ## AI evaluation evidence (optional)
 

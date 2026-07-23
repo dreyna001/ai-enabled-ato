@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from ato_service.analysis_profile import analysis_profile_sha256, load_pinned_fisma_synthetic_profile
+from ato_service.analysis_profile import analysis_profile_sha256
 
 PREFLIGHT_SCHEMA_VERSION = "1.0.0"
 
@@ -20,7 +20,7 @@ class PreflightContext:
     sealed_document: dict[str, Any] | None
     authority_manifest_id: str
     authority_manifest_sha256: str
-    project_root: Any
+    analysis_profile: dict[str, Any]
     evaluated_at: datetime
 
 
@@ -102,13 +102,7 @@ def evaluate_preflight(context: PreflightContext) -> dict[str, Any]:
     analysis_eligible = not analysis_blockers
     export_eligible = not export_blockers
 
-    profile = load_pinned_fisma_synthetic_profile(project_root=context.project_root)
-    if context.profile_id != profile["profile_id"]:
-        profile = {
-            "profile_id": context.profile_id,
-            "profile_version": "1.0.0",
-            "assessment_items": [],
-        }
+    profile = _validated_runtime_profile(context)
 
     return {
         "schema_version": PREFLIGHT_SCHEMA_VERSION,
@@ -126,11 +120,32 @@ def evaluate_preflight(context: PreflightContext) -> dict[str, Any]:
         },
         "profile_fingerprint": {
             "profile_id": context.profile_id,
-            "profile_version": profile.get("profile_version", "1.0.0"),
+            "profile_version": profile["profile_version"],
             "sha256": analysis_profile_sha256(profile),
         },
         "evaluated_at": _format_utc(context.evaluated_at),
     }
+
+
+def _validated_runtime_profile(context: PreflightContext) -> dict[str, Any]:
+    profile = context.analysis_profile
+    profile_id = profile.get("profile_id")
+    if not isinstance(profile_id, str) or profile_id != context.profile_id:
+        raise ValueError(
+            "runtime analysis profile profile_id does not match package revision profile"
+        )
+    profile_manifest_id = profile.get("authority_manifest_id")
+    if (
+        not isinstance(profile_manifest_id, str)
+        or profile_manifest_id != context.authority_manifest_id
+    ):
+        raise ValueError(
+            "runtime analysis profile authority_manifest_id does not match revision binding"
+        )
+    profile_version = profile.get("profile_version")
+    if not isinstance(profile_version, str) or not profile_version.strip():
+        raise ValueError("runtime analysis profile must declare profile_version")
+    return profile
 
 
 def _profile_section(*, document: dict[str, Any], profile_id: str) -> Any:

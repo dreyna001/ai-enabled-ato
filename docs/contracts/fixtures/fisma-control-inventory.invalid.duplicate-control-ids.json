@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "inventory_id": "agency-duplicate-controls-invalid",
+  "authority_manifest_id": "ato-authorities-2026-07-10-draft",
+  "impact_level": "high",
+  "status": "draft",
+  "approved_at": null,
+  "approved_by": null,
+  "source_reference": "Invalid inventory with duplicate control identifiers.",
+  "control_ids": [
+    "AC-1",
+    "AC-2",
+    "AC-1"
+  ]
+}

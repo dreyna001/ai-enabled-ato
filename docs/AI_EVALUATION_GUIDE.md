@@ -10,7 +10,7 @@ This guide defines the gold labels, fixtures, adjudication, metrics, and immutab
 
 It covers:
 
-- `sufficiency_matrix` status and citation evaluation against sealed package bytes and pinned profile catalogs;
+- `sufficiency_matrix` status and citation evaluation against sealed package bytes and pinned compiled profile catalogs (`reference/profiles/` for bundled FedRAMP profiles; customer FISMA profiles compiled from approved control inventories);
 - `normalize_proposal` field evaluation;
 - prompt-injection and prohibited-claim evaluation for every model step in qualification scope; and
 - deterministic validation of model output before scoring.
@@ -195,7 +195,7 @@ A field is critical when an incorrect, missing, or spurious value can change rou
 - assessment identity and applicability: `assessment_item_type`, `assessment_item_id`, `control_id`, `authoritative_requirement_ref`, `organization_defined_parameters`, `responsibility`;
 - authority binding: `authority_manifest_id` and every source authority identifier;
 - ownership: every `owner=assessor` marker and assessor identity, summary, verification, validation, or comment field;
-- freshness and cadence: `source_date` and every date or reporting period used by a mandatory authority rule;
+- freshness and cadence: `source_date` and every date or reporting period used by a mandatory authority rule when an authority-bound cadence evaluator is present. **Current limitation:** compiled profiles emit `cadence_rules: []`; cadence requirements appear only as assessment items and deterministic cadence validation is out of scope for qualification until that evaluator ships;
 - KSI qualification: KSI identifiers, method identifiers, method evidence references, metric periods, metric values, and metric status; and
 - every field marked required by a pinned official schema or mandatory by the applicable pinned authority catalog.
 
@@ -452,7 +452,7 @@ Live qualification is mandatory before any customer pilot and whenever any of th
 - endpoint behavior;
 - prompt;
 - output schema;
-- authority catalog;
+- authority catalog or compiled analysis profile bytes (`reference/profiles/` or customer FISMA compiles);
 - context-selection algorithm; or
 - status policy.
 

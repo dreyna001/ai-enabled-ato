@@ -9,8 +9,9 @@ from ato_service.analysis_profile import (
     AnalysisProfileError,
     assessment_item_type_for_id,
     expected_assessment_item_ids,
-    load_pinned_profile,
+    load_runtime_profile,
 )
+from ato_service.runtime_config import RuntimeConfig
 
 SUPPORTED_PROFILE_IDS: frozenset[str] = frozenset(
     {
@@ -27,10 +28,23 @@ def require_supported_profile_id(profile_id: str) -> str:
     return profile_id
 
 
-def load_profile_catalog(*, profile_id: str, project_root: Path) -> dict[str, Any]:
-    """Load and validate the pinned catalog for one supported profile."""
+def load_profile_catalog(
+    *,
+    profile_id: str,
+    certification_class: str | None,
+    impact_level: str | None,
+    project_root: Path,
+    config: RuntimeConfig,
+) -> dict[str, Any]:
+    """Load and validate the runtime-selected catalog for one supported profile."""
     require_supported_profile_id(profile_id)
-    return load_pinned_profile(profile_id=profile_id, project_root=project_root)
+    return load_runtime_profile(
+        profile_id=profile_id,
+        certification_class=certification_class,
+        impact_level=impact_level,
+        project_root=project_root,
+        config=config,
+    )
 
 
 def assessment_items_for_prompt(

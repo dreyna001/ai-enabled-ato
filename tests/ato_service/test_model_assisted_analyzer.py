@@ -28,6 +28,7 @@ from ato_service.model_assisted_analyzer import (
     process_next_model_assisted_analysis,
 )
 from ato_service.runtime_config import load_runtime_config_from_dict
+from tests.ato_service.test_analysis_profile import fisma_runtime_config, write_digest_pinned_fisma_profile
 from ato_service.sufficiency_matrix.parse import validate_and_parse_response
 from ato_service.sufficiency_matrix.runner import run_sufficiency_matrix
 from ato_service.text_llm import ChatMessage, TextModelCallError
@@ -40,6 +41,8 @@ REVISION_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
 JOB_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
 ATTEMPT_ID = uuid.UUID("44444444-4444-4444-8444-444444444444")
 SOURCE_ID = uuid.UUID("55555555-5555-4555-8555-555555555555")
+FEDRAMP_ASSESSMENT_ITEM_ID = "AFC-CSO-ACK"
+RUNTIME_AUTHORITY_MANIFEST_ID = "ato-authorities-2026-07-10-draft"
 STATEMENT = (
     "The provider maintains documented account management procedures."
 )
@@ -49,11 +52,20 @@ def _run(awaitable: Any) -> Any:
     return asyncio.run(awaitable)
 
 
+def _fedramp_profile() -> dict[str, Any]:
+    return load_pinned_profile(
+        profile_id="fedramp_20x_program",
+        project_root=ROOT,
+        certification_class="C",
+        impact_level=None,
+    )
+
+
 def _config(tmp_path: Path, **overrides: Any) -> Any:
     document = {
         "schema_version": "1.0.0",
         "runtime_profile": "dev_local",
-        "STORAGE_DATA_PATH": str(tmp_path / "storage"),
+        "STORAGE_DATA_PATH": "/tmp/ato-model-assisted-analyzer/storage",
         "TEXT_MODEL_ENDPOINT_URL": "https://mock.local/v1",
         "TEXT_MODEL_NAME": "mock-assisted",
         "TEXT_MODEL_CONTEXT_TOKENS": 8192,
@@ -95,7 +107,7 @@ def _source_sha256(pointer: str, text: str) -> str:
     return hashlib.sha256(f"{pointer}:{text}".encode("utf-8")).hexdigest()
 
 
-def _sealed_document(*, control_id: str = "FR-1") -> dict[str, Any]:
+def _sealed_document(*, control_id: str = FEDRAMP_ASSESSMENT_ITEM_ID) -> dict[str, Any]:
     return {
         "package": {"profile_id": "fedramp_20x_program", "title": "Demo"},
         "security_controls": {
@@ -107,7 +119,7 @@ def _sealed_document(*, control_id: str = "FR-1") -> dict[str, Any]:
     }
 
 
-def _field_provenance(*, control_id: str = "FR-1") -> dict[str, Any]:
+def _field_provenance(*, control_id: str = FEDRAMP_ASSESSMENT_ITEM_ID) -> dict[str, Any]:
     pointer = f"/security_controls/{control_id}/implementation_statement"
     return {
         pointer: {
@@ -144,7 +156,7 @@ def _package_revision(*, data_origin: str = "synthetic", sensitivity: str = "int
         data_origin=data_origin,
         sensitivity=sensitivity,
         effective_data_labels=[sensitivity, data_origin],
-        authority_manifest_id="authority.v2",
+        authority_manifest_id=RUNTIME_AUTHORITY_MANIFEST_ID,
         content_manifest_sha256="a" * 64,
         package_content_sha256=sealed.content_sha256,
         revision_version=1,
@@ -155,7 +167,7 @@ def _package_revision(*, data_origin: str = "synthetic", sensitivity: str = "int
 
 
 def _analysis_run(*, run_type: str = "targeted") -> AnalysisRun:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     return AnalysisRun(
         run_id=RUN_ID,
         package_revision_id=REVISION_ID,
@@ -166,7 +178,7 @@ def _analysis_run(*, run_type: str = "targeted") -> AnalysisRun:
         requested_at=NOW,
         started_at=NOW,
         completed_at=None,
-        authority_manifest_id="authority.v2",
+        authority_manifest_id=RUNTIME_AUTHORITY_MANIFEST_ID,
         analysis_profile_sha256=hashlib.sha256(
             canonical_json_bytes(profile)
         ).hexdigest(),
@@ -175,7 +187,7 @@ def _analysis_run(*, run_type: str = "targeted") -> AnalysisRun:
         model_profile="openai_compatible",
         artifact_manifest_sha256=None,
         llm_call_count=0,
-        assessment_item_ids=["FR-1"],
+        assessment_item_ids=[FEDRAMP_ASSESSMENT_ITEM_ID],
         error_code=None,
         error_retryable=None,
     )
@@ -213,7 +225,7 @@ def _claimed() -> ClaimedJob:
 
 def _valid_response_json() -> str:
     sources = _field_provenance()
-    pointer = "/security_controls/FR-1/implementation_statement"
+    pointer = f"/security_controls/{FEDRAMP_ASSESSMENT_ITEM_ID}/implementation_statement"
     source_sha256 = sources[pointer]["source_sha256"]
     citation = build_evidence_citation(
         source=type(
@@ -232,7 +244,7 @@ def _valid_response_json() -> str:
         "schema_version": "1.0.0",
         "rows": [
             {
-                "assessment_item_id": "FR-1",
+                "assessment_item_id": FEDRAMP_ASSESSMENT_ITEM_ID,
                 "model_proposed_status": "supported",
                 "finding_summary": "Supported by sealed statement.",
                 "gaps": [],
@@ -253,12 +265,12 @@ def test_build_model_call_request_requires_production_approval_flags(tmp_path: P
 
 def test_routing_denial_makes_zero_llm_calls(tmp_path: Path) -> None:
     revision = _package_revision(data_origin="customer_production", sensitivity="customer_sensitive")
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     result = _run(
         run_sufficiency_matrix(
             run_id=RUN_ID,
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=revision, config=_config(tmp_path)),
             input_budget_tokens=_resolved_input_budget(tmp_path),
@@ -309,8 +321,13 @@ def test_happy_targeted_run_persists_rows_with_one_llm_call(tmp_path: Path) -> N
 
 
 def test_happy_full_run_covers_all_profile_items(tmp_path: Path) -> None:
-    profile = load_pinned_profile(profile_id="fisma_agency_security", project_root=ROOT)
+    profile_file, digest, profile, impact_level = write_digest_pinned_fisma_profile(tmp_path)
     expected_ids = expected_assessment_item_ids(profile)
+    config = fisma_runtime_config(
+        tmp_path,
+        profile_path=profile_file,
+        expected_sha256=digest,
+    )
     session = AsyncMock()
     session.add = MagicMock()
     with pytest.MonkeyPatch.context() as monkeypatch:
@@ -332,11 +349,11 @@ def test_happy_full_run_covers_all_profile_items(tmp_path: Path) -> None:
                     parent_revision_id=None,
                     profile_id="fisma_agency_security",
                     certification_class=None,
-                    impact_level="moderate",
+                    impact_level=impact_level,
                     data_origin="synthetic",
                     sensitivity="internal_unclassified",
                     effective_data_labels=["internal_unclassified", "synthetic"],
-                    authority_manifest_id="authority.v2",
+                    authority_manifest_id=RUNTIME_AUTHORITY_MANIFEST_ID,
                     content_manifest_sha256="a" * 64,
                     package_content_sha256=_sealed().content_sha256,
                     revision_version=1,
@@ -354,7 +371,7 @@ def test_happy_full_run_covers_all_profile_items(tmp_path: Path) -> None:
                     requested_at=NOW,
                     started_at=NOW,
                     completed_at=None,
-                    authority_manifest_id="authority.v2",
+                    authority_manifest_id=RUNTIME_AUTHORITY_MANIFEST_ID,
                     analysis_profile_sha256=hashlib.sha256(canonical_json_bytes(profile)).hexdigest(),
                     config_fingerprint="c" * 64,
                     prompt_bundle_sha256="d" * 64,
@@ -368,7 +385,7 @@ def test_happy_full_run_covers_all_profile_items(tmp_path: Path) -> None:
                 sealed=_sealed(),
                 storage_root=tmp_path / "storage",
                 project_root=ROOT,
-                config=_config(tmp_path),
+                config=config,
                 hmac_key=b"x" * MIN_AUDIT_HMAC_KEY_BYTES,
                 now=NOW,
                 text_client=FakeTextClient(responses=[]),
@@ -379,13 +396,13 @@ def test_happy_full_run_covers_all_profile_items(tmp_path: Path) -> None:
 
 
 def test_malformed_response_uses_one_repair_then_fails(tmp_path: Path) -> None:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     client = FakeTextClient(responses=["not-json", _valid_response_json()])
     result = _run(
         run_sufficiency_matrix(
             run_id=RUN_ID,
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
             input_budget_tokens=_resolved_input_budget(tmp_path),
@@ -400,13 +417,13 @@ def test_malformed_response_uses_one_repair_then_fails(tmp_path: Path) -> None:
 
 
 def test_malformed_response_after_repair_fails_without_persistence(tmp_path: Path) -> None:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     client = FakeTextClient(responses=["not-json", "still-not-json"])
     result = _run(
         run_sufficiency_matrix(
             run_id=RUN_ID,
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,),
             sealed=_sealed(),
             model_request=build_model_call_request(
                 package_revision=_package_revision(),
@@ -423,13 +440,13 @@ def test_malformed_response_after_repair_fails_without_persistence(tmp_path: Pat
 
 
 def test_timeout_is_retryable_and_surfaces_model_timeout(tmp_path: Path) -> None:
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     client = FakeTextClient(fail_with_timeout=True)
     result = _run(
         run_sufficiency_matrix(
             run_id=RUN_ID,
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
             input_budget_tokens=_resolved_input_budget(tmp_path),
@@ -445,12 +462,12 @@ def test_timeout_is_retryable_and_surfaces_model_timeout(tmp_path: Path) -> None
 def test_citation_mismatch_rejects_row(tmp_path: Path) -> None:
     raw = json.loads(_valid_response_json())
     raw["rows"][0]["citations"][0]["chunk_id"] = "f" * 64
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     result = _run(
         run_sufficiency_matrix(
             run_id=RUN_ID,
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
             input_budget_tokens=_resolved_input_budget(tmp_path),
@@ -465,15 +482,15 @@ def test_citation_mismatch_rejects_row(tmp_path: Path) -> None:
 def test_missing_duplicate_and_extra_rows_fail_coverage() -> None:
     raw = json.loads(_valid_response_json())
     with pytest.raises(Exception):
-        validate_and_parse_response(raw_text=json.dumps(raw), expected_assessment_item_ids=("FR-1", "FR-2"))
+        validate_and_parse_response(raw_text=json.dumps(raw), expected_assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID, "FR-2"))
     duplicate = copy.deepcopy(raw)
     duplicate["rows"].append(copy.deepcopy(duplicate["rows"][0]))
     with pytest.raises(Exception):
-        validate_and_parse_response(raw_text=json.dumps(duplicate), expected_assessment_item_ids=("FR-1",))
+        validate_and_parse_response(raw_text=json.dumps(duplicate), expected_assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,))
     extra = copy.deepcopy(raw)
     extra["rows"][0]["assessment_item_id"] = "EXTRA-1"
     with pytest.raises(Exception):
-        validate_and_parse_response(raw_text=json.dumps(extra), expected_assessment_item_ids=("FR-1",))
+        validate_and_parse_response(raw_text=json.dumps(extra), expected_assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,))
 
 
 def test_status_ceiling_rejects_supported_without_evidence(tmp_path: Path) -> None:
@@ -481,7 +498,7 @@ def test_status_ceiling_rejects_supported_without_evidence(tmp_path: Path) -> No
         "schema_version": "1.0.0",
         "rows": [
             {
-                "assessment_item_id": "FR-1",
+                "assessment_item_id": FEDRAMP_ASSESSMENT_ITEM_ID,
                 "model_proposed_status": "supported",
                 "finding_summary": "Claimed without evidence.",
                 "gaps": [],
@@ -491,12 +508,12 @@ def test_status_ceiling_rejects_supported_without_evidence(tmp_path: Path) -> No
             }
         ],
     }
-    profile = load_pinned_profile(profile_id="fedramp_20x_program", project_root=ROOT)
+    profile = _fedramp_profile()
     result = _run(
         run_sufficiency_matrix(
             run_id=RUN_ID,
             profile=profile,
-            assessment_item_ids=("FR-1",),
+            assessment_item_ids=(FEDRAMP_ASSESSMENT_ITEM_ID,),
             sealed=_sealed(),
             model_request=build_model_call_request(package_revision=_package_revision(), config=_config(tmp_path)),
             input_budget_tokens=_resolved_input_budget(tmp_path),
@@ -539,7 +556,7 @@ def test_start_run_replay_returns_same_payload(tmp_path: Path) -> None:
                 package_revision_id=REVISION_ID,
                 request=StartRunInput(run_type="full", parent_run_id=None, assessment_item_ids=()),
                 config=_config(tmp_path),
-                authority_manifest_id="authority.v2",
+                authority_manifest_id=RUNTIME_AUTHORITY_MANIFEST_ID,
                 project_root=ROOT,
                 idempotency_key="idempotency-key-01234567",
                 hmac_key=b"x" * MIN_AUDIT_HMAC_KEY_BYTES,
@@ -615,3 +632,37 @@ def test_policy_blocked_terminalizes_run_with_zero_llm_calls(tmp_path: Path) -> 
     assert exc_info.value.policy_blocked is True
     assert analysis_run.status == "policy_blocked"
     assert analysis_run.llm_call_count == 0
+
+
+def test_process_next_model_assisted_analysis_rejects_profile_manifest_mismatch(
+    tmp_path: Path,
+) -> None:
+    profile = _fedramp_profile()
+    mismatched_profile = dict(profile)
+    mismatched_profile["authority_manifest_id"] = "wrong.manifest"
+    session = AsyncMock()
+    session.add = MagicMock()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ato_service.model_assisted_analyzer.load_profile_catalog",
+            lambda **_kwargs: mismatched_profile,
+        )
+        with pytest.raises(ModelAssistedAnalysisProcessingError) as exc_info:
+            _run(
+                process_next_model_assisted_analysis(
+                    session,
+                    claimed=_claimed(),
+                    package_revision=_package_revision(),
+                    analysis_run=_analysis_run(run_type="targeted"),
+                    sealed=_sealed(),
+                    storage_root=tmp_path / "storage",
+                    project_root=ROOT,
+                    config=_config(tmp_path),
+                    hmac_key=b"x" * MIN_AUDIT_HMAC_KEY_BYTES,
+                    now=NOW,
+                    text_client=FakeTextClient(responses=[_valid_response_json()]),
+                )
+            )
+
+    assert exc_info.value.error_code == "reconciliation_required"

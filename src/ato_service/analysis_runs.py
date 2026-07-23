@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ato_service.analysis_profile import (
     analysis_profile_sha256,
     expected_assessment_item_ids,
-    load_pinned_profile,
+    load_runtime_profile,
 )
 from ato_service.audit import append_audit_event
 from ato_service.auth_context import AuthenticatedPrincipal
@@ -357,10 +357,27 @@ async def start_run(
     if int(active_run_count or 0) >= int(max_concurrent_runs):
         raise ConcurrentRunLimitExceededError()
 
-    profile = load_pinned_profile(
+    profile = load_runtime_profile(
         profile_id=package_revision.profile_id,
+        certification_class=package_revision.certification_class,
+        impact_level=package_revision.impact_level,
         project_root=project_root,
+        config=config,
     )
+    profile_manifest_id = profile.get("authority_manifest_id")
+    if (
+        not isinstance(profile_manifest_id, str)
+        or profile_manifest_id != authority_manifest_id
+    ):
+        raise AnalysisRunValidationError(
+            "analysis profile authority_manifest_id does not match runtime authority manifest",
+            error_code="reconciliation_required",
+        )
+    if profile_manifest_id != package_revision.authority_manifest_id:
+        raise AnalysisRunValidationError(
+            "analysis profile authority_manifest_id does not match package revision binding",
+            error_code="reconciliation_required",
+        )
     if package_revision.profile_id != profile["profile_id"]:
         raise AnalysisRunValidationError(
             "pinned analysis profile does not match package revision profile",
