@@ -286,9 +286,14 @@ copy_repo_payload() {
 }
 
 set_install_tree_permissions() {
-    chown -R root:root "$INSTALL_DIR" || err "Failed to set ownership on $INSTALL_DIR"
-    find "$INSTALL_DIR" -type d -exec chmod 755 {} + || err "Failed to set directory permissions under $INSTALL_DIR"
-    find "$INSTALL_DIR" -type f -exec chmod 644 {} + || err "Failed to set file permissions under $INSTALL_DIR"
+    local runtime_data_path="$INSTALL_DIR/data"
+    chown root:root "$INSTALL_DIR" || err "Failed to set ownership on $INSTALL_DIR"
+    find "$INSTALL_DIR" -path "$runtime_data_path" -prune -o -exec chown root:root {} + \
+        || err "Failed to set ownership under $INSTALL_DIR"
+    find "$INSTALL_DIR" -path "$runtime_data_path" -prune -o -type d -exec chmod 755 {} + \
+        || err "Failed to set directory permissions under $INSTALL_DIR"
+    find "$INSTALL_DIR" -path "$runtime_data_path" -prune -o -type f -exec chmod 644 {} + \
+        || err "Failed to set file permissions under $INSTALL_DIR"
     if [[ -d "$INSTALL_DIR/venv/bin" ]]; then
         chmod 755 "$INSTALL_DIR/venv/bin/"* || err "Failed to set venv bin permissions"
     fi

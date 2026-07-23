@@ -38,6 +38,7 @@ export async function createRevision(
   page: Page,
   profileId: SupportedProfileId,
 ): Promise<void> {
+  await page.getByRole("button", { name: "New revision" }).click();
   await page.getByLabel("Profile").selectOption(profileId);
   if (profileId === "fedramp_20x_program") {
     await page.getByLabel("Certification class").selectOption("C");

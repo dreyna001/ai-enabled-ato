@@ -19,7 +19,7 @@ import {
 type RevisionCreateFormProps = {
   revisions: PackageRevision[];
   busy?: boolean;
-  onCreate: (input: CreateRevisionInput) => void;
+  onCreate: (input: CreateRevisionInput) => boolean | Promise<boolean>;
 };
 
 const emptyFormValues = (): RevisionMetadataFormValues => ({
@@ -36,11 +36,17 @@ export function RevisionCreateForm({
   onCreate,
 }: RevisionCreateFormProps) {
   const readyParents = revisions.filter((item) => item.status === "ready");
+  const [expanded, setExpanded] = useState(false);
   const [parentId, setParentId] = useState<string>("");
   const [formValues, setFormValues] = useState<RevisionMetadataFormValues>(emptyFormValues);
 
   const validationIssues = useMemo(() => validateMetadataForm(formValues), [formValues]);
   const canCreate = validationIssues.length === 0 && !busy;
+
+  const resetForm = () => {
+    setParentId("");
+    setFormValues(emptyFormValues());
+  };
 
   const updateField = <K extends keyof RevisionMetadataFormValues>(
     key: K,
@@ -53,6 +59,34 @@ export function RevisionCreateForm({
       }),
     );
   };
+
+  const handleCancel = () => {
+    resetForm();
+    setExpanded(false);
+  };
+
+  const handleCreate = async () => {
+    const success = await onCreate(buildCreateRevisionInput(formValues, parentId || null));
+    if (success) {
+      resetForm();
+      setExpanded(false);
+    }
+  };
+
+  if (!expanded) {
+    return (
+      <div className="rounded-sm border bg-muted/20 p-4">
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy}
+          onClick={() => setExpanded(true)}
+        >
+          New revision
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 rounded-sm border bg-muted/20 p-4">
@@ -190,14 +224,25 @@ export function RevisionCreateForm({
       {validationIssues.length > 0 ? (
         <p className="text-sm text-muted-foreground">{validationIssues[0]}</p>
       ) : null}
-      <Button
-        type="button"
-        size="sm"
-        disabled={!canCreate}
-        onClick={() => onCreate(buildCreateRevisionInput(formValues, parentId || null))}
-      >
-        Create revision
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!canCreate}
+          onClick={() => void handleCreate()}
+        >
+          Create revision
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={handleCancel}
+        >
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

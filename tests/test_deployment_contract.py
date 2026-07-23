@@ -553,7 +553,10 @@ def test_install_script_does_not_shell_source_config_or_log_secrets(
 
 def test_install_script_keeps_application_code_root_owned(install_text: str) -> None:
     assert "set_install_tree_permissions" in install_text
-    assert 'chown -R root:root "$INSTALL_DIR"' in install_text
+    assert 'chown root:root "$INSTALL_DIR"' in install_text
+    assert 'local runtime_data_path="$INSTALL_DIR/data"' in install_text
+    assert '-path "$runtime_data_path" -prune' in install_text
+    assert 'chown -R root:root "$INSTALL_DIR"' not in install_text
     assert 'chown -R "$SVC_USER:$SVC_USER" "$INSTALL_DIR"' not in install_text
     assert 'ensure_dir "$INSTALL_DIR" "root:root" 755' in install_text
     assert 'ensure_dir "$DATA_DIR" "$SVC_USER:$SVC_USER" 750' in install_text

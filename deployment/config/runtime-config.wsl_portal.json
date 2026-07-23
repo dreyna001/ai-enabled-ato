@@ -36,5 +36,9 @@
   "TEXT_MODEL_TEMPERATURE": 0,
   "CONTEXT_UTILIZATION_TARGET": 0.7,
   "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": true,
-  "CUI_MODEL_BOUNDARY_APPROVED": true
+  "CUI_MODEL_BOUNDARY_APPROVED": true,
+  "FISMA_ANALYSIS_PROFILE_FILE_REFERENCE": {
+    "path": "/opt/ato-analyzer/reference/profiles/fisma-agency-security-moderate-draft.json",
+    "expected_sha256": "a36201ede546aeb45e938690974990dd7ebc1016ab702639d0e8595fcd6ea23f"
+  }
 }

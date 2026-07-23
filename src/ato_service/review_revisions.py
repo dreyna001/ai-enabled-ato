@@ -227,11 +227,13 @@ async def create_review_revision(
         )
         .limit(1)
     )
-    if submitted_result.scalar_one_or_none() is not None:
-        raise ReviewRevisionValidationError(
-            "a submitted review revision already exists for this run",
-            error_code="review_already_submitted",
+    existing_submitted = submitted_result.scalar_one_or_none()
+    if existing_submitted is not None:
+        dispositions = await _load_dispositions(
+            session,
+            review_revision_id=existing_submitted.review_revision_id,
         )
+        return _review_mutation_result(existing_submitted, dispositions=dispositions, status=200)
 
     request_digest = request_digest_from_payload({"run_id": str(run_id).lower()})
     replay = await load_idempotency_replay(

@@ -149,7 +149,7 @@ async def _supersede_stale_export_drafts(
                 "review_revision_id": str(review_revision_id).lower(),
                 "payload_manifest_sha256": export_draft.payload_manifest_sha256,
             },
-            now=now,
+            occurred_at=now,
         )
 
 
@@ -231,7 +231,7 @@ async def _assert_approval_pending_and_fresh(
             outcome="succeeded",
             reason_code="approval_expired",
             metadata={"export_draft_id": str(approval.export_draft_id).lower()},
-            now=now,
+            occurred_at=now,
         )
         raise ExportValidationError("approval has expired", error_code="approval_expired")
 
@@ -278,7 +278,7 @@ async def _verify_approval_payload_binding(
                 "expected_payload_manifest_sha256": approval.payload_manifest_sha256,
                 "current_payload_manifest_sha256": current_hash,
             },
-            now=now,
+            occurred_at=now,
         )
     raise ExportValidationError(
         "approval payload hash mismatch",
@@ -540,7 +540,7 @@ async def submit_export_draft(
         require_package_role(principal, system=system, revision=revision, role=ROLE_REVIEWER)
     except AuthorizationDeniedError:
         raise
-    assert_if_match(if_match=if_match, current_version=1)
+    assert_if_match(if_match, 1)
     if export_draft.status != "draft":
         raise ExportValidationError(
             "export draft is not in draft status",
@@ -576,7 +576,7 @@ async def submit_export_draft(
         outcome="succeeded",
         reason_code=None,
         metadata={"approval_id": str(approval_id).lower()},
-        now=now,
+        occurred_at=now,
     )
     await record_idempotency_outcome(
         session,
@@ -669,7 +669,7 @@ async def deliver_export_download(
             outcome="succeeded",
             reason_code=None,
             metadata={"replayed": True},
-            now=now,
+            occurred_at=now,
         )
         return ExportDownloadResult(
             zip_bytes=zip_bytes,
@@ -798,7 +798,7 @@ async def deliver_export_download(
             "approval_id": str(approval.approval_id).lower(),
             "payload_manifest_sha256": export_draft.payload_manifest_sha256,
         },
-        now=now,
+        occurred_at=now,
     )
     await record_idempotency_outcome(
         session,
@@ -999,7 +999,7 @@ async def approve_export(
                 "payload_manifest_sha256": approval.payload_manifest_sha256,
             },
         ),
-        now=now,
+        occurred_at=now,
     )
     await record_idempotency_outcome(
         session,
@@ -1146,7 +1146,7 @@ async def reject_export(
                 "payload_manifest_sha256": approval.payload_manifest_sha256,
             },
         ),
-        now=now,
+        occurred_at=now,
     )
     await record_idempotency_outcome(
         session,
@@ -1206,7 +1206,7 @@ async def process_approval_expiry(
             outcome="succeeded",
             reason_code="approval_expired",
             metadata={"export_draft_id": str(export_draft.export_draft_id).lower()},
-            now=now,
+            occurred_at=now,
         )
 
     approved_result = await session.execute(
@@ -1241,7 +1241,7 @@ async def process_approval_expiry(
             outcome="succeeded",
             reason_code="export_expired",
             metadata={"approval_id": str(approval.approval_id).lower()},
-            now=now,
+            occurred_at=now,
         )
 
     return ApprovalExpiryResult(

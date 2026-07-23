@@ -361,3 +361,38 @@ def test_create_review_revision_returns_existing_draft_for_run() -> None:
     assert result.payload["review_revision_id"] == str(REVIEW_REVISION_ID).lower()
     assert result.payload["version"] == 3
     assert not session.added
+
+
+def test_create_review_revision_returns_existing_submitted_for_run() -> None:
+    existing = _review_revision(status="submitted", version=5)
+    disposition = _disposition(decision="accepted")
+    session = _RecordingSession(
+        [
+            _scalar_result(_run_row()),
+            _scalar_result(_revision()),
+            _scalar_result(_system()),
+            _scalar_result(None),
+            _scalar_result(existing),
+        ]
+    )
+
+    with patch(
+        "ato_service.review_revisions._load_dispositions",
+        new=AsyncMock(return_value=[disposition]),
+    ):
+        result = _run(
+            create_review_revision(
+                session,
+                principal=OWNER_PRINCIPAL,
+                run_id=RUN_ID,
+                idempotency_key=IDEM_KEY,
+                hmac_key=HMAC_KEY,
+                now=NOW,
+            )
+        )
+
+    assert result.status == 200
+    assert result.payload["status"] == "submitted"
+    assert result.payload["review_revision_id"] == str(REVIEW_REVISION_ID).lower()
+    assert result.payload["version"] == 5
+    assert not session.added

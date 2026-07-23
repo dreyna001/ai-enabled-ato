@@ -3,6 +3,7 @@ export type SessionInfo = {
   groups: string[];
   csrf_token: string;
   portal_origin: string;
+  single_user_mode_enabled?: boolean;
 };
 
 export type System = {

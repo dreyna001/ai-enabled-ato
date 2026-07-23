@@ -120,7 +120,7 @@ block some features like chat but often still allows walking the workflow.
 
 ### 2. Create revision (metadata-first)
 
-**Portal:** **Package Revisions** card — **Create revision** form with required path metadata.
+**Portal:** **Package Revisions** card — click **New revision** to expand the create form with required path metadata. The form is collapsed by default so it does not duplicate fields shown in **Revision metadata** after a revision is selected.
 
 #### Create form fields
 
@@ -132,6 +132,7 @@ block some features like chat but often still allows walking the workflow.
 | **Data origin** | Human-only attestation — required before create |
 | **Sensitivity** | Human-only attestation — required before create |
 | **Create revision** | Creates revision with status `uploading` and persisted metadata |
+| **Cancel** | Collapses the create form and clears entered values without creating |
 
 Metadata remains editable through **Revision metadata** (`PATCH` with ETag) while the revision is `uploading`, `scanning`, `extracting`, or `awaiting_confirmation`.
 
@@ -655,6 +656,7 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 
 | Status | What you see |
 |--------|--------------|
+| (no revision selected) | **Package Revisions** list and collapsed **New revision** button |
 | `uploading` | Revision metadata panel + package upload panel |
 | `scanning` / `extracting` | Intake progress panel |
 | `invalid` / `quarantined` / `archived` | Terminal intake panel |
@@ -667,7 +669,7 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 
 1. **Sign in** at `/login`
 2. **Create System** → select it
-3. **Create revision** — set profile, class or impact, **data origin**, **sensitivity** (optional parent pre-fills metadata)
+3. **Create revision** — click **New revision**, set profile, class or impact, **data origin**, **sensitivity** (optional parent pre-fills metadata)
 4. **Upload** evidence → **Finalize upload**
 5. Wait for **scanning / extracting / intake MAP+REDUCE**
 6. Correct **Revision metadata** if needed → **Save metadata**

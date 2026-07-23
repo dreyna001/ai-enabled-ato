@@ -105,6 +105,7 @@ export function ReviewExportWorkbench({
     exportDraft?.status === "rejected";
 
   const isSubmitter = approval?.submitted_by === session.actor_id;
+  const canDecideApproval = !isSubmitter || session.single_user_mode_enabled;
 
   useEffect(() => {
     if (matrixRows.length > 0) {
@@ -115,24 +116,6 @@ export function ReviewExportWorkbench({
       .then((page) => setLoadedMatrixRows(page.items))
       .catch(() => setLoadedMatrixRows([]));
   }, [runId, matrixRows]);
-
-  useEffect(() => {
-    const storedId = loadStoredReviewRevisionId(runId);
-    if (storedId && !review) {
-      setMessage(`Resume review revision ${storedId.slice(0, 8)}… from this browser session.`);
-    }
-  }, [runId, review]);
-
-  useEffect(() => {
-    if (!review) {
-      setComments([]);
-      return;
-    }
-    saveStoredReviewRevisionId(runId, review.review_revision_id);
-    void listReviewComments(review.review_revision_id)
-      .then((result) => setComments(result.items))
-      .catch(() => setComments([]));
-  }, [review?.review_revision_id, review?.status, runId]);
 
   const exportReadinessBlocked = preflight !== null && !preflight.export_eligible;
   const exportBlockers = preflight?.export_blockers ?? [];
@@ -155,19 +138,43 @@ export function ReviewExportWorkbench({
     setError(formatApiError(err));
   };
 
-  const startReview = async () => {
+  const openReview = async () => {
     setBusy(true);
     setError("");
     try {
-      const created = await createReviewRevision(session, runId);
-      setReview(created);
-      setMessage("Review revision opened.");
+      const opened = await createReviewRevision(session, runId);
+      setReview(opened);
+      setMessage(
+        opened.status === "submitted"
+          ? "Review already submitted. Continue with export."
+          : "Review revision opened.",
+      );
     } catch (err) {
       handleApiError(err);
     } finally {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    const storedId = loadStoredReviewRevisionId(runId);
+    if (storedId && !review) {
+      void openReview();
+    }
+    // Resume once per run when a stored review id exists.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  useEffect(() => {
+    if (!review) {
+      setComments([]);
+      return;
+    }
+    saveStoredReviewRevisionId(runId, review.review_revision_id);
+    void listReviewComments(review.review_revision_id)
+      .then((result) => setComments(result.items))
+      .catch(() => setComments([]));
+  }, [review?.review_revision_id, review?.status, runId]);
 
   const saveDisposition = async (
     matrixRowId: string,
@@ -391,8 +398,10 @@ export function ReviewExportWorkbench({
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         {!review ? (
-          <Button type="button" size="sm" disabled={busy} onClick={() => void startReview()}>
-            Open review revision
+          <Button type="button" size="sm" disabled={busy} onClick={() => void openReview()}>
+            {loadStoredReviewRevisionId(runId)
+              ? "Resume review revision"
+              : "Open review revision"}
           </Button>
         ) : (
           <>
@@ -569,10 +578,12 @@ export function ReviewExportWorkbench({
                   </Badge>
                   {isSubmitter ? (
                     <span className="text-xs text-muted-foreground">
-                      You submitted this export — a different approver must approve or reject.
+                      {session.single_user_mode_enabled
+                        ? "Single-user demo mode allows you to approve or reject your own export."
+                        : "You submitted this export — a different approver must approve or reject."}
                     </span>
                   ) : null}
-                  {approval.decision === "pending" && !isSubmitter ? (
+                  {approval.decision === "pending" && canDecideApproval ? (
                     <>
                       <Button type="button" size="sm" disabled={busy} onClick={() => void approve()}>
                         Approve export

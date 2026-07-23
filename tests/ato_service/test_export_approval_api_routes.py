@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from ato_service.api_dependencies import (
     get_audit_hmac_key,
@@ -68,6 +69,27 @@ def _app(tmp_path: Path, *, single_user_mode_enabled: bool | None) -> FastAPI:
     application.dependency_overrides[get_runtime_state] = lambda: runtime_state
     application.dependency_overrides[get_audit_hmac_key] = lambda: b"audit-test-key"
     return application
+
+
+@pytest.mark.parametrize("single_user_mode_enabled", [True, False])
+def test_auth_session_reports_single_user_mode(
+    tmp_path: Path,
+    single_user_mode_enabled: bool,
+) -> None:
+    application = _app(
+        tmp_path,
+        single_user_mode_enabled=single_user_mode_enabled,
+    )
+
+    @application.middleware("http")
+    async def _inject_principal(request: Request, call_next):
+        request.state.authenticated_principal = _principal()
+        return await call_next(request)
+
+    response = TestClient(application).get("/api/v1/auth/session")
+
+    assert response.status_code == 200
+    assert response.json()["single_user_mode_enabled"] is single_user_mode_enabled
 
 
 @pytest.mark.parametrize(

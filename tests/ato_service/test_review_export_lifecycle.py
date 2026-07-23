@@ -22,6 +22,7 @@ from ato_service.export_service import (
     approve_export,
     process_approval_expiry,
     reject_export,
+    submit_export_draft,
 )
 from ato_service.review_revisions import (
     ReviewRevisionValidationError,
@@ -158,6 +159,53 @@ def test_validate_disposition_requires_edited_summary() -> None:
     with pytest.raises(ReviewRevisionValidationError) as exc_info:
         _validate_disposition_decision(decision="edited", edited_summary=None)
     assert exc_info.value.error_code == "request_schema_invalid"
+
+
+def test_submit_export_records_audit_at_supplied_time() -> None:
+    export_draft = _export_draft(status="draft")
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=export_draft))
+    )
+    principal = _principal(actor_id="reviewer@example.test", groups=("owners",))
+
+    with patch(
+        "ato_service.export_service.load_idempotency_replay",
+        AsyncMock(return_value=None),
+    ), patch(
+        "ato_service.export_service._load_review_context",
+        AsyncMock(
+            return_value=(
+                _SubmittedReviewRevision(),
+                _Run(),
+                _Revision(),
+                _System(),
+                [],
+            )
+        ),
+    ), patch(
+        "ato_service.export_service.append_audit_event",
+        autospec=True,
+    ) as audit_event, patch(
+        "ato_service.export_service.record_idempotency_outcome",
+        AsyncMock(),
+    ):
+        result = _run(
+            submit_export_draft(
+                session,
+                principal=principal,
+                export_draft_id=EXPORT_DRAFT_ID,
+                if_match='"v1"',
+                idempotency_key="submit-export-key-01",
+                hmac_key=b"audit-test-key",
+                now=NOW,
+            )
+        )
+
+    assert result.status == 201
+    assert result.payload["decision"] == "pending"
+    assert export_draft.status == "pending_approval"
+    assert audit_event.await_args.kwargs["occurred_at"] == NOW
 
 
 def test_reject_export_happy_path() -> None:

@@ -1,0 +1,174 @@
+{
+  "schema_version": "2.0.0",
+  "profile_id": "fisma_agency_security",
+  "profile_version": "1.0.0",
+  "authority_manifest_id": "ato-authorities-2026-07-10-draft",
+  "generated_at": "2026-07-10T22:33:12Z",
+  "qualification_status": "draft",
+  "certification_class": null,
+  "impact_level": "moderate",
+  "assessment_items": [
+    {
+      "assessment_item_type": "nist_control",
+      "assessment_item_id": "AC-1",
+      "title": "Policy and Procedures",
+      "requirement_text": "a. Develop, document, and disseminate to {{ insert: param, ac-1_prm_1 }}: 1. {{ insert: param, ac-01_odp.03 }} access control policy that: (a) Addresses purpose, scope, roles, responsibilities, management commitment, coordination among organizational entities, and compliance; and (b) Is consistent with applicable laws, executive orders, directives, regulations, policies, standards, and guidelines; and 2. Procedures to facilitate the implementation of the access control policy and the associated access controls; b. Designate an {{ insert: param, ac-01_odp.04 }} to manage the development, documentation, and dissemination of the access control policy and procedures; and c. Review and update the current access control: 1. Policy {{ insert: param, ac-01_odp.05 }} and following {{ insert: param, ac-01_odp.06 }} ; and 2. Procedures {{ insert: param, ac-01_odp.07 }} and following {{ insert: param, ac-01_odp.08 }}.",
+      "force": "customer_required",
+      "owner": "system_owner",
+      "applicability": {
+        "paths": [
+          "agency_fisma"
+        ],
+        "classes": [],
+        "impact_levels": [
+          "moderate"
+        ],
+        "affects": [
+          "system_owner"
+        ]
+      },
+      "authority_refs": [
+        {
+          "authority_id": "nist-sp800-53-release-5.2.0",
+          "archive_member": "oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog-min.json",
+          "source_pointer": "/catalog/groups/0/controls/0"
+        }
+      ],
+      "required_evidence_kinds": [],
+      "model_analysis_allowed": false
+    },
+    {
+      "assessment_item_type": "nist_control",
+      "assessment_item_id": "AC-2",
+      "title": "Account Management",
+      "requirement_text": "a. Define and document the types of accounts allowed and specifically prohibited for use within the system; b. Assign account managers; c. Require {{ insert: param, ac-02_odp.01 }} for group and role membership; d. Specify: 1. Authorized users of the system; 2. Group and role membership; and 3. Access authorizations (i.e., privileges) and {{ insert: param, ac-02_odp.02 }} for each account; e. Require approvals by {{ insert: param, ac-02_odp.03 }} for requests to create accounts; f. Create, enable, modify, disable, and remove accounts in accordance with {{ insert: param, ac-02_odp.04 }}; g. Monitor the use of accounts; h. Notify account managers and {{ insert: param, ac-02_odp.05 }} within: 1. {{ insert: param, ac-02_odp.06 }} when accounts are no longer required; 2. {{ insert: param, ac-02_odp.07 }} when users are terminated or transferred; and 3. {{ insert: param, ac-02_odp.08 }} when system usage or need-to-know changes for an individual; i. Authorize access to the system based on: 1. A valid access authorization; 2. Intended system usage; and 3. {{ insert: param, ac-02_odp.09 }}; j. Review accounts for compliance with account management requirements {{ insert: param, ac-02_odp.10 }}; k. Establish and implement a process for changing shared or group account authenticators (if deployed) when individuals are removed from the group; and l. Align account management processes with personnel termination and transfer processes.",
+      "force": "customer_required",
+      "owner": "system_owner",
+      "applicability": {
+        "paths": [
+          "agency_fisma"
+        ],
+        "classes": [],
+        "impact_levels": [
+          "moderate"
+        ],
+        "affects": [
+          "system_owner"
+        ]
+      },
+      "authority_refs": [
+        {
+          "authority_id": "nist-sp800-53-release-5.2.0",
+          "archive_member": "oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog-min.json",
+          "source_pointer": "/catalog/groups/0/controls/1"
+        }
+      ],
+      "required_evidence_kinds": [],
+      "model_analysis_allowed": false
+    },
+    {
+      "assessment_item_type": "nist_control",
+      "assessment_item_id": "IA-5",
+      "title": "Authenticator Management",
+      "requirement_text": "Manage system authenticators by: a. Verifying, as part of the initial authenticator distribution, the identity of the individual, group, role, service, or device receiving the authenticator; b. Establishing initial authenticator content for any authenticators issued by the organization; c. Ensuring that authenticators have sufficient strength of mechanism for their intended use; d. Establishing and implementing administrative procedures for initial authenticator distribution, for lost or compromised or damaged authenticators, and for revoking authenticators; e. Changing default authenticators prior to first use; f. Changing or refreshing authenticators {{ insert: param, ia-05_odp.01 }} or when {{ insert: param, ia-05_odp.02 }} occur; g. Protecting authenticator content from unauthorized disclosure and modification; h. Requiring individuals to take, and having devices implement, specific controls to protect authenticators; and i. Changing authenticators for group or role accounts when membership to those accounts changes.",
+      "force": "customer_required",
+      "owner": "system_owner",
+      "applicability": {
+        "paths": [
+          "agency_fisma"
+        ],
+        "classes": [],
+        "impact_levels": [
+          "moderate"
+        ],
+        "affects": [
+          "system_owner"
+        ]
+      },
+      "authority_refs": [
+        {
+          "authority_id": "nist-sp800-53-release-5.2.0",
+          "archive_member": "oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog-min.json",
+          "source_pointer": "/catalog/groups/6/controls/4"
+        }
+      ],
+      "required_evidence_kinds": [],
+      "model_analysis_allowed": false
+    }
+  ],
+  "artifact_requirements": [
+    {
+      "artifact_id": "poam_draft",
+      "display_name": "POA&M Draft",
+      "required": true,
+      "owner": "system_owner",
+      "official_schema_authority_id": null,
+      "human_readable_required": true,
+      "machine_readable_required": true,
+      "export_paths": [
+        "human/poam-draft.md",
+        "machine/poam-draft.json"
+      ],
+      "authority_refs": []
+    },
+    {
+      "artifact_id": "sar_input_pack",
+      "display_name": "SAR Input Pack",
+      "required": true,
+      "owner": "assessor",
+      "official_schema_authority_id": null,
+      "human_readable_required": true,
+      "machine_readable_required": true,
+      "export_paths": [
+        "human/sar-input-pack.md",
+        "machine/sar-input-pack.json"
+      ],
+      "authority_refs": []
+    },
+    {
+      "artifact_id": "security_readiness_matrix",
+      "display_name": "Security Readiness and Assessment Matrix",
+      "required": true,
+      "owner": "product_analysis",
+      "official_schema_authority_id": null,
+      "human_readable_required": true,
+      "machine_readable_required": true,
+      "export_paths": [
+        "human/security-readiness.md",
+        "machine/security-readiness.json",
+        "human/assessment-matrix.md",
+        "validation/fisma-export-readiness.json"
+      ],
+      "authority_refs": []
+    },
+    {
+      "artifact_id": "ssp_security_draft",
+      "display_name": "SSP Security Draft",
+      "required": true,
+      "owner": "system_owner",
+      "official_schema_authority_id": null,
+      "human_readable_required": true,
+      "machine_readable_required": true,
+      "export_paths": [
+        "human/ssp-security-draft.md",
+        "machine/ssp-security-draft.json"
+      ],
+      "authority_refs": []
+    }
+  ],
+  "cadence_rules": [],
+  "status_policy": {
+    "allowed_statuses": [
+      "supported",
+      "partial",
+      "unsupported",
+      "insufficient_evidence"
+    ],
+    "no_evidence_status": "insufficient_evidence",
+    "incomplete_context_ceiling": "partial",
+    "all_stale_ceiling": "partial",
+    "system_may_be_more_favorable_than_model": false,
+    "exact_row_coverage_required": true,
+    "repair_attempts": 1
+  }
+}

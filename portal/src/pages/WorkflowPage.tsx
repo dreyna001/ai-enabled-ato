@@ -925,15 +925,18 @@ export function WorkflowPage({
           <CardContent>
             <RevisionCreateForm
               revisions={revisions}
-              onCreate={(input: CreateRevisionInput) => {
-                void createRevision(session, selectedSystemId, input)
-                  .then((created) => {
-                    setSelectedRevisionId(created.package_revision_id);
-                    syncRoute(selectedSystemId, created.package_revision_id);
-                    return refreshRevisions();
-                  })
-                  .then(() => setMessage("Revision created."))
-                  .catch((err) => setError(formatApiError(err)));
+              onCreate={async (input: CreateRevisionInput) => {
+                try {
+                  const created = await createRevision(session, selectedSystemId, input);
+                  setSelectedRevisionId(created.package_revision_id);
+                  syncRoute(selectedSystemId, created.package_revision_id);
+                  await refreshRevisions();
+                  setMessage("Revision created.");
+                  return true;
+                } catch (err) {
+                  setError(formatApiError(err));
+                  return false;
+                }
               }}
             />
             {revisions.length === 0 ? (

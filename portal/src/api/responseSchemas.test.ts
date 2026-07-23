@@ -5,12 +5,30 @@ import {
   parseDisposition,
   parsePackageRevision,
   parseSearchResults,
+  parseSessionInfo,
   parseSystem,
 } from "@/api/responseSchemas";
 
 describe("extended response schema parsers", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("parses explicit single-user mode and defaults it off when absent", () => {
+    const session = {
+      actor_id: "operator@example.test",
+      groups: ["owners"],
+      csrf_token: "c".repeat(32),
+      portal_origin: "http://localhost:5173",
+    };
+
+    expect(
+      parseSessionInfo({
+        ...session,
+        single_user_mode_enabled: true,
+      })?.single_user_mode_enabled,
+    ).toBe(true);
+    expect(parseSessionInfo(session)?.single_user_mode_enabled).toBe(false);
   });
 
   it("parses change analysis payloads", () => {

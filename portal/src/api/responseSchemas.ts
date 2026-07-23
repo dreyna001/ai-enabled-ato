@@ -11,6 +11,7 @@ const sessionSchema = z.object({
   groups: z.array(z.string()),
   csrf_token: z.string().min(1),
   portal_origin: z.string().min(1),
+  single_user_mode_enabled: z.boolean().default(false),
 });
 
 const systemSchema = z.object({

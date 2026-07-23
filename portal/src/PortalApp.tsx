@@ -75,7 +75,14 @@ export function PortalApp() {
     const controller = new AbortController();
     void refreshSession(controller.signal);
     void refreshReadiness(controller.signal);
-    return () => controller.abort();
+    const refreshOnFocus = () => {
+      void refreshSession();
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      controller.abort();
+      window.removeEventListener("focus", refreshOnFocus);
+    };
   }, [refreshReadiness, refreshSession]);
 
   const handleSignOut = () => {

@@ -127,13 +127,17 @@ def create_auth_router() -> APIRouter:
         return redirect_response
 
     @router.get("/auth/session", tags=["Auth"])
-    async def get_auth_session(request: Request) -> dict[str, Any]:
+    async def get_auth_session(
+        request: Request,
+        runtime_state: Annotated[AppRuntimeState, Depends(get_runtime_state)],
+    ) -> dict[str, Any]:
         principal = require_authenticated_principal(request)
         return {
             "actor_id": principal.actor_id,
             "groups": list(principal.groups),
             "csrf_token": principal.csrf_token,
             "portal_origin": principal.allowed_origins[0],
+            "single_user_mode_enabled": runtime_state.config.single_user_mode_enabled,
         }
 
     @router.post("/auth/logout", status_code=204, tags=["Auth"])
