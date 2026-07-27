@@ -8,6 +8,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from ato_service.db.session import (
     create_async_engine_from_url,
     create_session_factory,
     require_postgresql_url,
+    session_scope,
 )
 from ato_service.local_env import load_local_env_file
 from ato_service.health import (
@@ -144,13 +146,12 @@ def create_app(
 ) -> FastAPI:
     """Create the service application with injected readiness dependencies."""
     app = FastAPI(
-        title="ATO Evidence Analysis Portal API",
+        title="Internal SSP Drafting Portal API",
         version="1.0.0",
         description=(
-            "Published P-1 API contract. Implemented in this build: health "
-            "endpoints, OIDC session auth, the P1.1 Systems + PackageRevision "
-            "slice (systems, package-revisions, file upload, finalize, confirm), "
-            "and fact proposal review. Other contract paths remain unimplemented."
+            "Internal ISSO workflow for system intake, evidence extraction, "
+            "SSP and control-statement generation, contextual editing, "
+            "approval, and export."
         ),
         servers=[{"url": "/api/v1"}],
         lifespan=lifespan,
@@ -159,13 +160,10 @@ def create_app(
     app.add_middleware(SessionAuthenticationMiddleware)
     app.add_middleware(IdentityHeaderGuardMiddleware)
     app.include_router(create_health_router(readiness_probe))
-    from ato_service.api_router import create_api_router
     from ato_service.auth_router import create_auth_router
+    from ato_service.ssp_workspace.api import build_ssp_workspace_router
 
-    app.include_router(create_api_router(), prefix="/api/v1")
-    from ato_service.extended_api_router import build_extended_router
-
-    app.include_router(build_extended_router(), prefix="/api/v1")
+    app.include_router(build_ssp_workspace_router(), prefix="/api/v1")
     app.include_router(create_auth_router(), prefix="/api/v1")
     app.openapi = lambda: _custom_openapi(app)
     if runtime_state is not None:
@@ -221,6 +219,14 @@ def build_app_from_config(
         )
         runtime.engine = create_async_engine_from_url(resolved_dsn)
         runtime.session_factory = create_session_factory(runtime.engine)
+        from ato_service.ssp_workspace.profiles import ensure_builtin_profile
+
+        async with session_scope(runtime.session_factory) as bootstrap_session:
+            await ensure_builtin_profile(
+                bootstrap_session,
+                project_root=root,
+                now=datetime.now(timezone.utc),
+            )
         setattr(
             _app.state,
             RUNTIME_STATE_ATTR,

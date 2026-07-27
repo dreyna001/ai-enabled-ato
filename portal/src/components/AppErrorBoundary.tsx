@@ -29,13 +29,13 @@ export class AppErrorBoundary extends Component<
             <h1 className="text-lg font-semibold">Portal UI Error</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               The portal could not render this view. Refresh the page or return to
-              the Workflow.
+              the SSP workspace.
             </p>
             <Link
               className="mt-4 inline-flex text-sm font-medium underline underline-offset-4"
-              to="/workflow"
+              to="/ssp"
             >
-              Go to Workflow
+              Go to SSP workspace
             </Link>
           </div>
         </div>

@@ -9,10 +9,8 @@ import {
 } from "@/api/client";
 import { AppLayout } from "@/components/Layout";
 import { SessionBootstrapSkeleton } from "@/components/LoadingSkeletons";
-import {
-  LoginPage,
-  WorkflowRoute,
-} from "@/pages/WorkflowPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { SspWorkspaceRoute } from "@/pages/SspWorkspaceRoute";
 import type { PortalReadinessState, SessionInfo } from "@/types";
 import { formatApiError } from "@/utils/formatApiError";
 
@@ -116,27 +114,10 @@ export function PortalApp() {
           />
         }
       >
-        <Route
-          path="/workflow"
-          element={
-            <WorkflowRoute session={session} readiness={readiness} />
-          }
-        />
-        <Route
-          path="/workflow/systems/:systemId"
-          element={
-            <WorkflowRoute session={session} readiness={readiness} />
-          }
-        />
-        <Route
-          path="/workflow/systems/:systemId/revisions/:revisionId"
-          element={
-            <WorkflowRoute session={session} readiness={readiness} />
-          }
-        />
+        <Route path="/ssp" element={<SspWorkspaceRoute session={session} />} />
       </Route>
-      <Route path="/login" element={<Navigate replace to="/workflow" />} />
-      <Route path="*" element={<Navigate replace to="/workflow" />} />
+      <Route path="/login" element={<Navigate replace to="/ssp" />} />
+      <Route path="*" element={<Navigate replace to="/ssp" />} />
     </Routes>
   );
 }

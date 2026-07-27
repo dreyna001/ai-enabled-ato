@@ -158,6 +158,10 @@ def test_build_app_from_config_validates_without_connecting(
     with (
         patch("ato_service.main.create_async_engine_from_url") as create_engine,
         patch("ato_service.main.create_session_factory") as create_session_factory,
+        patch(
+            "ato_service.ssp_workspace.profiles.ensure_builtin_profile",
+            new_callable=AsyncMock,
+        ),
     ):
         engine = MagicMock()
         engine.connect = MagicMock()
@@ -193,6 +197,10 @@ def test_valid_draft_manifest_starts_and_disposes_engine(
     with (
         patch("ato_service.main.create_async_engine_from_url") as create_engine,
         patch("ato_service.main.create_session_factory") as create_session_factory,
+        patch(
+            "ato_service.ssp_workspace.profiles.ensure_builtin_profile",
+            new_callable=AsyncMock,
+        ),
     ):
         engine = MagicMock()
         connect_cm = AsyncMock()
@@ -206,6 +214,11 @@ def test_valid_draft_manifest_starts_and_disposes_engine(
         engine.dispose = AsyncMock()
         create_engine.return_value = engine
         session_factory = MagicMock()
+        bootstrap_session = MagicMock()
+        bootstrap_session.commit = AsyncMock()
+        bootstrap_session.rollback = AsyncMock()
+        bootstrap_session.close = AsyncMock()
+        session_factory.return_value = bootstrap_session
         create_session_factory.return_value = session_factory
 
         app = build_app_from_config(
@@ -242,7 +255,13 @@ def test_missing_authority_manifest_fails_startup_before_engine_creation(
     config = _dev_config(tmp_path)
     missing_manifest = tmp_path / "missing-authority-manifest.json"
 
-    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+    with (
+        patch("ato_service.main.create_async_engine_from_url") as create_engine,
+        patch(
+            "ato_service.ssp_workspace.profiles.ensure_builtin_profile",
+            new_callable=AsyncMock,
+        ),
+    ):
         app = build_app_from_config(
             config,
             dsn=POSTGRES_URL,
@@ -323,11 +342,20 @@ def test_build_app_from_config_disposes_engine_on_lifespan_failure(
     with (
         patch("ato_service.main.create_async_engine_from_url") as create_engine,
         patch("ato_service.main.create_session_factory") as create_session_factory,
+        patch(
+            "ato_service.ssp_workspace.profiles.ensure_builtin_profile",
+            new_callable=AsyncMock,
+        ),
     ):
         engine = MagicMock()
         engine.dispose = AsyncMock()
         create_engine.return_value = engine
         session_factory = MagicMock()
+        bootstrap_session = MagicMock()
+        bootstrap_session.commit = AsyncMock()
+        bootstrap_session.rollback = AsyncMock()
+        bootstrap_session.close = AsyncMock()
+        session_factory.return_value = bootstrap_session
         create_session_factory.return_value = session_factory
 
         app = build_app_from_config(
@@ -441,7 +469,14 @@ def test_load_app_from_config_path_builds_app(
     storage_root.mkdir(parents=True, exist_ok=True)
     manifest_path, _artifact_path = _write_draft_authority_manifest(tmp_path)
 
-    with patch("ato_service.main.create_async_engine_from_url") as create_engine:
+    with (
+        patch("ato_service.main.create_async_engine_from_url") as create_engine,
+        patch("ato_service.main.create_session_factory") as create_session_factory,
+        patch(
+            "ato_service.ssp_workspace.profiles.ensure_builtin_profile",
+            new_callable=AsyncMock,
+        ),
+    ):
         engine = MagicMock()
         connect_cm = AsyncMock()
         connection = AsyncMock()
@@ -453,6 +488,13 @@ def test_load_app_from_config_path_builds_app(
         engine.connect.return_value = connect_cm
         engine.dispose = AsyncMock()
         create_engine.return_value = engine
+        session_factory = MagicMock()
+        bootstrap_session = MagicMock()
+        bootstrap_session.commit = AsyncMock()
+        bootstrap_session.rollback = AsyncMock()
+        bootstrap_session.close = AsyncMock()
+        session_factory.return_value = bootstrap_session
+        create_session_factory.return_value = session_factory
 
         app = load_app_from_config_path(
             config_path,
@@ -479,22 +521,24 @@ def test_main_requires_config_path(
         main([])
 
 
-def test_create_app_mounts_p1_package_routes_without_runtime() -> None:
+def test_create_app_mounts_only_ssp_product_routes_without_runtime() -> None:
     app = create_app(readiness_probe=AsyncMock(return_value={}))
     paths = set(app.openapi()["paths"])
 
     assert all(not path.startswith("/api/v1") for path in paths)
-    assert "/systems" in paths
+    assert "/ssp-systems" in paths
+    assert "/ssp-profiles" in paths
+    assert "/ssp-workspaces" in paths
+    assert "/ssp-workspaces/{workspace_id}/evidence" in paths
+    assert "/ssp-workspaces/{workspace_id}/generate" in paths
+    assert "/ssp-workspaces/{workspace_id}/approve" in paths
+    assert "/ssp-workspaces/{workspace_id}/exports/{export_format}" in paths
     assert "/auth/login" in paths
     assert "/auth/logout" in paths
     assert "/auth/session" in paths
-    assert "/systems/{system_id}/package-revisions" in paths
-    assert "/package-revisions/{id}" in paths
-    assert "/package-revisions/{id}/files" in paths
-    assert "/package-revisions/{id}/finalize" in paths
-    assert "/package-revisions/{id}/confirm" in paths
-    assert "/package-revisions/{id}/proposals" in paths
-    assert "/proposals/{id}/accept" in paths
+    assert "/systems" not in paths
+    assert not any("package-revisions" in path for path in paths)
+    assert not any("analysis-runs" in path for path in paths)
     assert "/health/live" in paths
     assert "/health/ready" in paths
 
@@ -505,7 +549,7 @@ def test_create_app_openapi_avoids_double_api_prefix() -> None:
 
     assert schema["servers"] == [{"url": "/api/v1"}]
     assert all(not path.startswith("/api/v1") for path in schema["paths"])
-    assert "/systems" in schema["paths"]
+    assert "/ssp-workspaces" in schema["paths"]
     assert schema["paths"]["/health/live"]["get"]["servers"] == [
         {
             "url": "/",
@@ -514,11 +558,11 @@ def test_create_app_openapi_avoids_double_api_prefix() -> None:
     ]
 
 
-def test_create_app_description_documents_implemented_p1_subset() -> None:
+def test_create_app_description_documents_ssp_scope() -> None:
     app = create_app(readiness_probe=AsyncMock(return_value={}))
 
-    assert "P1.1 Systems + PackageRevision" in app.description
-    assert "unimplemented" in app.description.lower()
+    assert "SSP and control-statement generation" in app.description
+    assert "authorization decision" not in app.description.lower()
 
 
 def test_create_app_exposes_health_and_api_when_runtime_absent() -> None:
@@ -528,7 +572,7 @@ def test_create_app_exposes_health_and_api_when_runtime_absent() -> None:
         live = client.get("/health/live")
         assert live.status_code == 200
 
-        api = client.get("/api/v1/systems")
+        api = client.get("/api/v1/ssp-systems")
         assert api.status_code == 401
         assert api.headers["content-type"].startswith("application/problem+json")
         assert api.json()["error_code"] == "authentication_required"
@@ -543,6 +587,9 @@ def test_create_app_wires_identity_header_guard_middleware() -> None:
 def test_identity_header_guard_blocks_spoofed_headers_on_api_routes() -> None:
     app = create_app(readiness_probe=AsyncMock(return_value={}))
     with TestClient(app) as client:
-        response = client.get("/api/v1/systems", headers={"X-User-Id": "spoofed"})
+        response = client.get(
+            "/api/v1/ssp-systems",
+            headers={"X-User-Id": "spoofed"},
+        )
     assert response.status_code == 403
     assert response.json()["error_code"] == "authorization_denied"

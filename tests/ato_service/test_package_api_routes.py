@@ -431,7 +431,7 @@ def test_create_package_revision_rejects_profile_incompatible_metadata(
         ("profile_id", "unsupported_profile"),
         ("impact_level", "critical"),
         ("data_origin", "guessed"),
-        ("sensitivity", "unknown"),
+        ("sensitivity", "invalid_sensitivity"),
     ],
 )
 def test_create_package_revision_rejects_unsupported_metadata_enums(

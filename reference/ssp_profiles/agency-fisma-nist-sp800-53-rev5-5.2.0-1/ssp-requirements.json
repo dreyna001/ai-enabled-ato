@@ -1,0 +1,135 @@
+{
+  "items": [
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.name",
+      "min_length": 1,
+      "title": "System Name",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.identifier",
+      "min_length": 1,
+      "title": "System Identifier",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.purpose",
+      "min_length": 20,
+      "title": "System Purpose",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.owner",
+      "min_length": 1,
+      "title": "System Owner",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.isso",
+      "min_length": 1,
+      "title": "Information System Security Officer",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.authorization_boundary",
+      "min_length": 20,
+      "title": "Authorization Boundary",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.environment",
+      "min_length": 20,
+      "title": "Operational Environment",
+      "value_type": "string"
+    },
+    {
+      "allowed_values": [
+        "on_premises",
+        "agency_cloud",
+        "agency_hybrid"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.hosting_model",
+      "title": "Hosting Model",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.components",
+      "title": "Major System Components",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.interconnections",
+      "title": "System Interconnections",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.data_types",
+      "title": "Information Types",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.user_roles",
+      "title": "User and Privileged Roles",
+      "value_type": "string_list"
+    },
+    {
+      "allowed_values": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.impact_level",
+      "title": "Security Categorization Impact Level",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.categorization_rationale",
+      "min_length": 20,
+      "title": "Security Categorization Rationale",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.authorization_path",
+      "min_length": 10,
+      "title": "Authorization Path",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.identity_and_access",
+      "min_length": 20,
+      "title": "Identification and Access Approach",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.logging_and_monitoring",
+      "min_length": 20,
+      "title": "Logging and Monitoring Approach",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.contingency_and_recovery",
+      "min_length": 20,
+      "title": "Contingency and Recovery Approach",
+      "value_type": "string"
+    }
+  ],
+  "schema_version": "1.0.0"
+}

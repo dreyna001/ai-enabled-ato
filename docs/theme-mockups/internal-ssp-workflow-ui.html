@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATO SSP Workspace — Interactive Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --background: #0d1117;
+      --foreground: #e6edf3;
+      --card: #161b22;
+      --card-alt: #1c2129;
+      --sidebar: #10141a;
+      --border: #30363d;
+      --muted: #8b949e;
+      --primary: #1f6feb;
+      --link: #58a6ff;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+      --radius: 2px;
+      --font: "Public Sans", "Source Sans Pro", system-ui, sans-serif;
+      --mono: "Roboto Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--background); color: var(--foreground); }
+    body { font-family: var(--font); font-size: 14px; overflow: hidden; }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    .mono { font-family: var(--mono); }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; }
+    .tiny { font-size: 11px; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 244px minmax(0, 1fr);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      background: var(--sidebar);
+    }
+
+    .brand {
+      border-bottom: 1px solid var(--border);
+      padding: 18px 16px 14px;
+    }
+
+    .brand-mark {
+      color: var(--link);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+    }
+
+    .brand h1 {
+      margin: 5px 0 2px;
+      font-size: 16px;
+      letter-spacing: -0.2px;
+    }
+
+    .brand p { margin: 0; color: var(--muted); font-size: 11px; }
+
+    .system-chip {
+      margin: 12px 12px 4px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      padding: 10px;
+    }
+
+    .system-chip strong { display: block; font-size: 12px; }
+    .system-chip span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+
+    .nav {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      flex-direction: column;
+      gap: 3px;
+      overflow-y: auto;
+      padding: 10px 12px;
+    }
+
+    .nav-label {
+      padding: 10px 8px 4px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .nav button {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 9px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .nav button:hover { background: var(--card-alt); color: var(--foreground); }
+    .nav button.active {
+      border-color: var(--link);
+      background: var(--card-alt);
+      color: var(--foreground);
+    }
+
+    .nav-count {
+      min-width: 22px;
+      border-radius: 12px;
+      background: var(--border);
+      color: var(--foreground);
+      padding: 1px 6px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .sidebar-footer {
+      border-top: 1px solid var(--border);
+      padding: 12px 16px 16px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .sidebar-footer strong { display: block; color: var(--foreground); font-size: 12px; }
+
+    .shell {
+      display: flex;
+      min-width: 0;
+      min-height: 0;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      min-height: 58px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 17, 23, 0.96);
+      padding: 10px 24px;
+    }
+
+    .breadcrumb { color: var(--muted); font-size: 11px; }
+    .breadcrumb strong { color: var(--foreground); }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+
+    .content {
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      scrollbar-color: #555 transparent;
+      scrollbar-width: thin;
+    }
+
+    .view { display: none; max-width: 1280px; margin: 0 auto; }
+    .view.active { display: block; }
+
+    .page-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .page-head h2 { margin: 0; font-size: 22px; letter-spacing: -0.4px; }
+    .page-head p { max-width: 720px; margin: 6px 0 0; color: var(--muted); line-height: 1.5; }
+
+    .btn {
+      min-height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card-alt);
+      color: var(--foreground);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .btn:hover { border-color: var(--link); }
+    .btn-primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+    .btn-outline { border-color: var(--link); background: transparent; color: var(--link); }
+    .btn-ghost { border-color: transparent; background: transparent; color: var(--muted); }
+    .btn-danger { border-color: var(--danger); background: transparent; color: var(--danger); }
+    .btn:disabled { cursor: not-allowed; opacity: 0.45; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card-alt);
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .badge-success { border-color: rgba(63,185,80,.45); background: rgba(63,185,80,.12); color: #56d364; }
+    .badge-warning { border-color: rgba(210,153,34,.5); background: rgba(210,153,34,.12); color: #e3b341; }
+    .badge-danger { border-color: rgba(248,81,73,.5); background: rgba(248,81,73,.12); color: #ff7b72; }
+    .badge-info { border-color: rgba(88,166,255,.5); background: rgba(88,166,255,.12); color: #79c0ff; }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding: 13px 15px;
+    }
+
+    .card-head h3 { margin: 0; font-size: 13px; }
+    .card-body { padding: 15px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+    .stat { min-height: 106px; padding: 14px; }
+    .stat-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+    .stat-value { margin-top: 10px; font-size: 25px; font-weight: 800; letter-spacing: -0.5px; }
+    .stat-foot { margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .stat-foot strong { color: var(--foreground); }
+
+    .progress {
+      height: 5px;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: var(--border);
+    }
+
+    .progress span { display: block; height: 100%; background: var(--primary); }
+    .progress.success span { background: var(--success); }
+    .progress.warning span { background: var(--warning); }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      padding: 4px 0;
+    }
+
+    .workflow-step {
+      position: relative;
+      min-height: 94px;
+      border-left: 3px solid var(--border);
+      padding: 9px 14px;
+    }
+
+    .workflow-step.complete { border-color: var(--success); }
+    .workflow-step.current { border-color: var(--primary); background: rgba(31,111,235,.08); }
+    .workflow-step strong { display: block; font-size: 12px; }
+    .workflow-step p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; }
+    td { font-size: 12px; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr.clickable:hover { background: var(--card-alt); }
+
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
+    .input, .textarea, .select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+      background: var(--background);
+      color: var(--foreground);
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
+    .input:focus, .textarea:focus, .select:focus { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+
+    .upload-zone {
+      border: 1px dashed var(--link);
+      background: rgba(31,111,235,.06);
+      padding: 28px;
+      text-align: center;
+    }
+
+    .upload-zone strong { display: block; }
+    .upload-zone p { margin: 6px 0 13px; color: var(--muted); font-size: 11px; }
+
+    .file-list { display: flex; flex-direction: column; gap: 8px; }
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) 120px 104px 80px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--border);
+      background: var(--background);
+      padding: 9px 10px;
+    }
+
+    .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+
+    .split {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      min-height: 620px;
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    .split-nav { border-right: 1px solid var(--border); background: var(--sidebar); }
+    .split-nav-head { border-bottom: 1px solid var(--border); padding: 13px; }
+    .split-nav-list { padding: 7px; }
+    .split-nav button {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 9px;
+      text-align: left;
+      font-size: 11px;
+    }
+
+    .split-nav button.active { border-color: var(--link); background: var(--card-alt); color: var(--foreground); }
+    .editor { display: flex; min-width: 0; flex-direction: column; }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+
+    .document {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 30px 40px;
+      line-height: 1.7;
+    }
+
+    .document h3 { margin: 0 0 14px; font-size: 20px; }
+    .document h4 { margin: 23px 0 8px; font-size: 13px; }
+    .document p { color: #c9d1d9; }
+    .editable-block {
+      border: 1px solid transparent;
+      padding: 8px;
+    }
+    .editable-block:hover { border-color: var(--border); }
+    .editable-block:focus { border-color: var(--primary); outline: none; background: var(--background); }
+
+    .source-note {
+      border-left: 3px solid var(--link);
+      background: var(--card-alt);
+      padding: 9px 11px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .controls-layout {
+      display: grid;
+      grid-template-columns: minmax(380px, .9fr) minmax(440px, 1.1fr);
+      min-height: 650px;
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    .control-list { min-width: 0; border-right: 1px solid var(--border); }
+    .control-filter { display: grid; grid-template-columns: 1fr 150px; gap: 8px; border-bottom: 1px solid var(--border); padding: 10px; }
+    .control-row {
+      display: grid;
+      grid-template-columns: 64px 1fr auto;
+      gap: 10px;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--foreground);
+      padding: 12px;
+      text-align: left;
+    }
+
+    .control-row:hover, .control-row.active { background: var(--card-alt); }
+    .control-row.active { box-shadow: inset 3px 0 var(--primary); }
+    .control-id { color: var(--link); font-family: var(--mono); font-size: 12px; font-weight: 600; }
+    .control-title { font-size: 12px; font-weight: 700; }
+    .control-summary { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+    .control-editor { min-width: 0; padding: 18px; }
+    .control-editor h3 { margin: 0; }
+    .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .evidence-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .evidence-item { border: 1px solid var(--border); background: var(--background); padding: 9px; font-size: 11px; }
+
+    .agent-layout {
+      display: grid;
+      grid-template-columns: minmax(420px, .9fr) minmax(420px, 1.1fr);
+      min-height: 650px;
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    .conversation { display: flex; min-width: 0; flex-direction: column; border-right: 1px solid var(--border); }
+    .conversation-head { border-bottom: 1px solid var(--border); padding: 13px 15px; }
+    .messages { display: flex; flex: 1; flex-direction: column; gap: 12px; overflow-y: auto; padding: 16px; }
+    .message { max-width: 88%; border: 1px solid var(--border); padding: 10px 12px; font-size: 12px; line-height: 1.5; }
+    .message.agent { align-self: flex-start; background: var(--card-alt); }
+    .message.user { align-self: flex-end; border-color: var(--primary); background: rgba(31,111,235,.12); }
+    .message-label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+    .chat-box { display: grid; grid-template-columns: 1fr auto; gap: 8px; border-top: 1px solid var(--border); padding: 12px; }
+    .change-panel { min-width: 0; padding: 16px; }
+    .change-card { border: 1px solid var(--border); background: var(--background); margin-top: 12px; }
+    .change-card-head { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 10px; }
+    .change-before, .change-after { padding: 11px; font-size: 11px; line-height: 1.5; }
+    .change-before { color: var(--muted); text-decoration-color: var(--danger); }
+    .change-after { border-top: 1px solid var(--border); background: rgba(63,185,80,.06); color: #c9d1d9; }
+
+    .review-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border: 1px solid rgba(210,153,34,.55);
+      border-left: 4px solid var(--warning);
+      background: rgba(210,153,34,.08);
+      padding: 14px 16px;
+    }
+
+    .review-banner h3 { margin: 0; font-size: 13px; }
+    .review-banner p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+
+    .check-list { display: flex; flex-direction: column; gap: 8px; }
+    .check-row { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); padding: 9px 0; }
+    .check-mark { color: var(--success); font-weight: 800; }
+    .check-warn { color: var(--warning); font-weight: 800; }
+
+    .profile-version {
+      display: grid;
+      grid-template-columns: 1.2fr .6fr .6fr .8fr auto;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px;
+    }
+
+    .profile-version:last-child { border-bottom: 0; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.72);
+      padding: 20px;
+    }
+
+    .modal.open { display: flex; }
+    .modal-card { width: min(560px, 100%); border: 1px solid var(--border); background: var(--card); box-shadow: 0 18px 60px #000; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); padding: 12px 15px; }
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 20;
+      display: none;
+      max-width: 380px;
+      border: 1px solid rgba(63,185,80,.55);
+      border-left: 4px solid var(--success);
+      background: var(--card);
+      padding: 11px 14px;
+      box-shadow: 0 12px 30px #000;
+      font-size: 12px;
+    }
+
+    .toast.show { display: block; }
+
+    .agent-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9;
+      display: none;
+      justify-content: flex-end;
+      background: rgba(0, 0, 0, 0.55);
+    }
+
+    .agent-drawer-backdrop.open { display: flex; }
+
+    .agent-drawer {
+      display: flex;
+      width: min(480px, 100%);
+      height: 100%;
+      flex-direction: column;
+      border-left: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: -18px 0 50px rgba(0, 0, 0, 0.45);
+    }
+
+    .agent-drawer-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding: 15px;
+    }
+
+    .agent-context {
+      border-bottom: 1px solid var(--border);
+      background: rgba(31, 111, 235, 0.08);
+      padding: 11px 15px;
+    }
+
+    .agent-context strong { display: block; font-size: 12px; }
+    .agent-context span { color: var(--muted); font-size: 10px; }
+
+    .agent-drawer-messages {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      padding: 15px;
+    }
+
+    .agent-drawer-compose {
+      border-top: 1px solid var(--border);
+      padding: 12px;
+    }
+
+    .agent-drawer-compose .actions {
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+
+    .spacer-12 { height: 12px; }
+    .spacer-16 { height: 16px; }
+    .spacer-20 { height: 20px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    @media (max-width: 1050px) {
+      .app { grid-template-columns: 205px minmax(0, 1fr); }
+      .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .controls-layout, .agent-layout { grid-template-columns: 1fr; }
+      .control-list, .conversation { border-right: 0; border-bottom: 1px solid var(--border); }
+      .control-editor, .change-panel { min-height: 520px; }
+    }
+
+    @media (max-width: 760px) {
+      body { overflow: auto; }
+      .app { display: block; height: auto; }
+      .sidebar { position: static; }
+      .nav { flex-flow: row wrap; }
+      .nav-label, .system-chip, .sidebar-footer { display: none; }
+      .nav button { width: auto; }
+      .shell { min-height: 100vh; }
+      .content { overflow: visible; padding: 16px; }
+      .topbar { padding: 10px 16px; }
+      .grid-4, .grid-3, .grid-2, .workflow, .field-grid { grid-template-columns: 1fr; }
+      .page-head { flex-direction: column; }
+      .split { grid-template-columns: 1fr; }
+      .split-nav { border-right: 0; border-bottom: 1px solid var(--border); }
+      .file-row, .profile-version { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand">
+        <div class="brand-mark">Federal Civilian</div>
+        <h1>ATO SSP Workspace</h1>
+        <p>Internal documentation accelerator</p>
+      </div>
+
+      <div class="system-chip">
+        <strong>Grants Intake Management</strong>
+        <span class="mono">GIMS-2026-014 · Moderate</span>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-label">System workspace</div>
+        <button class="active" data-view="overview"><span>Overview</span></button>
+        <button data-view="intake"><span>Intake &amp; Evidence</span><span class="nav-count">18</span></button>
+        <button data-view="ssp"><span>SSP Document</span><span class="nav-count">78%</span></button>
+        <button data-view="controls"><span>Controls</span><span class="nav-count">325</span></button>
+        <button data-view="agent"><span>Agent Workspace</span><span class="nav-count">5</span></button>
+        <button data-view="review"><span>Review &amp; Export</span></button>
+        <div class="nav-label">Administration</div>
+        <button data-view="profiles"><span>Local Profiles</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <strong>Jordan Lee</strong>
+        ISSO · Agency Security Office
+      </div>
+    </aside>
+
+    <section class="shell">
+      <header class="topbar">
+        <div>
+          <div class="breadcrumb">Systems / Grants Intake Management / <strong id="current-view-label">Overview</strong></div>
+          <div class="tiny muted mono" style="margin-top:4px">Profile: agency-fisma-80053r5-moderate@5.2.0</div>
+        </div>
+        <div class="top-actions">
+          <span class="badge badge-warning">Working</span>
+          <button class="btn btn-outline" data-agent-context="Current workspace">Ask Agent</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="view active" id="view-overview">
+          <div class="page-head">
+            <div>
+              <h2>System workspace</h2>
+              <p>One working SSP, one control inventory, and one agent-assisted path from incomplete evidence to ISSO-approved content.</p>
+            </div>
+            <button class="btn btn-primary" data-view="intake">Add Evidence</button>
+          </div>
+
+          <div class="grid-4">
+            <div class="card stat">
+              <div class="stat-label">Evidence</div>
+              <div class="stat-value">18</div>
+              <div class="stat-foot"><strong>14</strong> processed · 4 screenshots</div>
+            </div>
+            <div class="card stat">
+              <div class="stat-label">SSP completion</div>
+              <div class="stat-value">78%</div>
+              <div class="progress" style="margin-top:10px"><span style="width:78%"></span></div>
+            </div>
+            <div class="card stat">
+              <div class="stat-label">Controls drafted</div>
+              <div class="stat-value">290</div>
+              <div class="stat-foot">of 325 selected controls</div>
+            </div>
+            <div class="card stat">
+              <div class="stat-label">Open questions</div>
+              <div class="stat-value" style="color:var(--warning)">5</div>
+              <div class="stat-foot">3 agency · 2 technical</div>
+            </div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Documentation workflow</h3>
+              <span class="small muted">Last agent update: 11 minutes ago</span>
+            </div>
+            <div class="card-body">
+              <div class="workflow">
+                <div class="workflow-step complete">
+                  <strong>1. Intake</strong>
+                  <p>System workspace created and initial evidence uploaded.</p>
+                </div>
+                <div class="workflow-step complete">
+                  <strong>2. Generate</strong>
+                  <p>SSP and selected control objects populated from available facts.</p>
+                </div>
+                <div class="workflow-step current">
+                  <strong>3. Resolve &amp; Edit</strong>
+                  <p>Agent and ISSO are resolving five remaining questions.</p>
+                </div>
+                <div class="workflow-step">
+                  <strong>4. Approve &amp; Export</strong>
+                  <p>ISSO approves the working content once ready.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-head"><h3>System summary</h3><button class="btn btn-ghost" data-view="ssp">Open SSP</button></div>
+              <div class="card-body">
+                <table>
+                  <tbody>
+                    <tr><th>Purpose</th><td>Manage discretionary grant applications and reviewer workflows</td></tr>
+                    <tr><th>Hosting</th><td>Agency-owned AWS commercial environment</td></tr>
+                    <tr><th>Boundary</th><td>Application, managed database, object storage, and agency integration services</td></tr>
+                    <tr><th>Data</th><td>CUI, business contact information, grant application records</td></tr>
+                    <tr><th>Impact</th><td><span class="badge badge-info">Moderate</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3>Next actions</h3><button class="btn btn-ghost" data-agent-context="System workspace">Open Agent</button></div>
+              <div class="card-body">
+                <div class="check-list">
+                  <div class="check-row"><span class="check-warn">!</span><span>Confirm log retention period</span><span class="badge badge-warning">Agency</span></div>
+                  <div class="check-row"><span class="check-warn">!</span><span>Identify account review frequency</span><span class="badge badge-warning">ISSO</span></div>
+                  <div class="check-row"><span class="check-warn">!</span><span>Upload production network diagram</span><span class="badge">Evidence</span></div>
+                  <div class="check-row"><span class="check-mark">✓</span><span>Confirm authorization boundary</span><span class="badge badge-success">Done</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-intake">
+          <div class="page-head">
+            <div>
+              <h2>Intake &amp; evidence</h2>
+              <p>Upload whatever is available. Agents extract system facts from documents, screenshots, diagrams, and structured exports.</p>
+            </div>
+            <button class="btn btn-primary" id="generate-button">Generate Updated Content</button>
+          </div>
+
+          <div class="grid-3">
+            <div class="card stat">
+              <div class="stat-label">Uploaded</div><div class="stat-value">18</div><div class="stat-foot">42.8 MB total</div>
+            </div>
+            <div class="card stat">
+              <div class="stat-label">Processed</div><div class="stat-value">14</div><div class="stat-foot">Text and visual extraction complete</div>
+            </div>
+            <div class="card stat">
+              <div class="stat-label">Pending review</div><div class="stat-value">4</div><div class="stat-foot">New facts available for regeneration</div>
+            </div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="card">
+            <div class="card-body">
+              <div class="upload-zone">
+                <strong>Drop system evidence here</strong>
+                <p>PDF, DOCX, XLSX, JSON, XML, PNG, JPEG, WebP, Markdown, and text</p>
+                <button class="btn btn-outline" id="choose-files-button">Choose Files</button>
+                <input id="mock-file-input" class="sr-only" type="file" multiple />
+              </div>
+            </div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Evidence inventory</h3>
+              <div class="actions">
+                <select class="select" style="width:150px"><option>All types</option><option>Documents</option><option>Screenshots</option><option>Diagrams</option></select>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="file-list" id="file-list">
+                <div class="file-row">
+                  <div class="file-name">GIMS System Architecture v4.pdf</div><span class="muted small">Architecture</span><span class="badge badge-success">Processed</span><span class="mono tiny">2.8 MB</span>
+                </div>
+                <div class="file-row">
+                  <div class="file-name">CloudTrail retention settings.png</div><span class="muted small">Screenshot</span><span class="badge badge-success">Processed</span><span class="mono tiny">644 KB</span>
+                </div>
+                <div class="file-row">
+                  <div class="file-name">Identity and Access Procedures.docx</div><span class="muted small">Policy</span><span class="badge badge-success">Processed</span><span class="mono tiny">311 KB</span>
+                </div>
+                <div class="file-row">
+                  <div class="file-name">Security groups - production.png</div><span class="muted small">Screenshot</span><span class="badge badge-warning">Review</span><span class="mono tiny">892 KB</span>
+                </div>
+                <div class="file-row">
+                  <div class="file-name">Application Data Flow.drawio.pdf</div><span class="muted small">Diagram</span><span class="badge badge-warning">Review</span><span class="mono tiny">1.1 MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-ssp">
+          <div class="page-head">
+            <div>
+              <h2>SSP document</h2>
+              <p>The agent and ISSO edit one working document. Control sections stay synchronized with the control objects.</p>
+            </div>
+            <div class="actions">
+              <span class="badge badge-success">Saved</span>
+              <button class="btn btn-outline" data-agent-context="SSP · Section 1 · System Identification">Ask Agent to Edit</button>
+              <button class="btn btn-primary" id="save-ssp-button">Save Document</button>
+            </div>
+          </div>
+
+          <div class="split">
+            <aside class="split-nav">
+              <div class="split-nav-head">
+                <strong class="small">SSP sections</strong>
+                <div class="tiny muted" style="margin-top:4px">12 of 15 substantially complete</div>
+              </div>
+              <div class="split-nav-list">
+                <button class="active">1. System Identification</button>
+                <button>2. System Environment</button>
+                <button>3. Authorization Boundary</button>
+                <button>4. Information Types</button>
+                <button>5. System Interconnections</button>
+                <button>6. Roles &amp; Responsibilities</button>
+                <button>7. Security Controls</button>
+                <button>8. Continuous Monitoring</button>
+                <button>9. Attachments</button>
+              </div>
+            </aside>
+            <article class="editor">
+              <div class="editor-toolbar">
+                <div>
+                  <strong class="small">1. System Identification</strong>
+                  <span class="tiny muted"> · Last regenerated Jul 27, 2026 10:42 AM</span>
+                </div>
+                <span class="badge badge-info">Agent generated</span>
+              </div>
+              <div class="document">
+                <h3>Grants Intake Management System</h3>
+                <div class="source-note">Working SSP · Agency FISMA — NIST SP 800-53 Rev. 5 · Moderate baseline</div>
+
+                <h4>1.1 System Purpose</h4>
+                <p class="editable-block" contenteditable="true">The Grants Intake Management System (GIMS) supports the agency's discretionary grant application lifecycle. The system receives applications, routes submissions to program reviewers, records review decisions, and produces award recommendation packages.</p>
+
+                <h4>1.2 System Ownership</h4>
+                <p class="editable-block" contenteditable="true">The Office of Grants Management is the system owner. The Office of the Chief Information Officer operates the hosting environment and provides identity, network, logging, vulnerability management, and incident response services.</p>
+
+                <h4>1.3 Operational Status</h4>
+                <p class="editable-block" contenteditable="true">GIMS is in pre-production implementation. The authorization boundary and production hosting architecture have been confirmed. Production operational procedures are being finalized.</p>
+
+                <h4>1.4 System Description</h4>
+                <p class="editable-block" contenteditable="true">GIMS is a browser-based application deployed in an agency-owned AWS commercial environment. The boundary includes the application service, managed relational database, object storage, agency identity integration, centralized logging integration, and supporting network controls.</p>
+
+                <h4>Sources</h4>
+                <div class="evidence-list">
+                  <div class="evidence-item"><span class="mono">ARCH-001 · pages 2–6</span><br><span class="muted">GIMS System Architecture v4.pdf</span></div>
+                  <div class="evidence-item"><span class="mono">INTAKE-004 · responses 1–9</span><br><span class="muted">System intake questionnaire</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-controls">
+          <div class="page-head">
+            <div>
+              <h2>Control workbench</h2>
+              <p>Each selected control is an editable object. Agent changes update the object and the corresponding SSP section.</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-outline" data-agent-context="Control AC-2 · Account Management">Ask Agent</button>
+              <button class="btn btn-primary" id="save-control-button">Save Control</button>
+            </div>
+          </div>
+
+          <div class="controls-layout">
+            <div class="control-list">
+              <div class="control-filter">
+                <input class="input" id="control-search" placeholder="Search controls" aria-label="Search controls" />
+                <select class="select" id="control-status-filter"><option value="all">All statuses</option><option value="complete">Draft complete</option><option value="needs-input">Needs input</option></select>
+              </div>
+              <div id="control-rows">
+                <button class="control-row active" data-control="ac-2" data-status="needs-input">
+                  <span class="control-id">AC-2</span>
+                  <span><span class="control-title">Account Management</span><span class="control-summary">Agency identity integration documented; review frequency unresolved.</span></span>
+                  <span class="badge badge-warning">Input</span>
+                </button>
+                <button class="control-row" data-control="au-2" data-status="complete">
+                  <span class="control-id">AU-2</span>
+                  <span><span class="control-title">Event Logging</span><span class="control-summary">Application and platform event types documented.</span></span>
+                  <span class="badge badge-success">Drafted</span>
+                </button>
+                <button class="control-row" data-control="au-11" data-status="needs-input">
+                  <span class="control-id">AU-11</span>
+                  <span><span class="control-title">Audit Record Retention</span><span class="control-summary">Storage configuration found; agency retention period unresolved.</span></span>
+                  <span class="badge badge-warning">Input</span>
+                </button>
+                <button class="control-row" data-control="cm-2" data-status="complete">
+                  <span class="control-id">CM-2</span>
+                  <span><span class="control-title">Baseline Configuration</span><span class="control-summary">Infrastructure baseline and repository process documented.</span></span>
+                  <span class="badge badge-success">Drafted</span>
+                </button>
+                <button class="control-row" data-control="sc-8" data-status="complete">
+                  <span class="control-id">SC-8</span>
+                  <span><span class="control-title">Transmission Confidentiality</span><span class="control-summary">TLS configuration supported by architecture and screenshots.</span></span>
+                  <span class="badge badge-success">Drafted</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="control-editor">
+              <div style="display:flex;justify-content:space-between;gap:12px">
+                <div>
+                  <div class="control-id" id="control-editor-id">AC-2</div>
+                  <h3 id="control-editor-title">Account Management</h3>
+                </div>
+                <span class="badge badge-warning" id="control-editor-badge">Needs input</span>
+              </div>
+
+              <div class="spacer-20"></div>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="control-status">Implementation status</label>
+                  <select class="select" id="control-status">
+                    <option>Implemented</option><option selected>Partially implemented</option><option>Planned</option><option>Not implemented</option><option>Not applicable</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="control-responsibility">Responsibility</label>
+                  <select class="select" id="control-responsibility">
+                    <option>System specific</option><option selected>Hybrid</option><option>Inherited</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="spacer-16"></div>
+              <div class="field">
+                <label for="control-statement">Implementation statement</label>
+                <textarea class="textarea" id="control-statement" style="min-height:210px">GIMS uses the agency enterprise identity provider to create, manage, and disable user identities. Access requires an approved agency identity and application role assignment. The GIMS application administrator assigns application roles after approval by the user's program manager.
+
+The agency identity service disables separated-user accounts through the enterprise offboarding process. GIMS consumes the resulting identity status during authentication. Application administrators review privileged application roles; the required review frequency is pending agency confirmation.</textarea>
+              </div>
+
+              <div class="spacer-16"></div>
+              <div class="field">
+                <label>Supporting evidence</label>
+                <div class="evidence-list">
+                  <div class="evidence-item"><strong>Identity and Access Procedures.docx</strong><br><span class="muted">Section 4.2 · Account provisioning and removal</span></div>
+                  <div class="evidence-item"><strong>GIMS System Architecture v4.pdf</strong><br><span class="muted">Page 8 · Agency identity integration</span></div>
+                </div>
+              </div>
+
+              <div class="spacer-16"></div>
+              <div class="source-note" style="border-left-color:var(--warning)">
+                <strong style="color:var(--foreground)">Unresolved:</strong> How often must privileged application roles be reviewed?
+                <button class="btn btn-ghost" data-agent-context="Control AC-2 · unresolved review frequency" style="float:right;padding:0 4px;min-height:auto;color:var(--link)">Resolve with Agent</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-agent">
+          <div class="page-head">
+            <div>
+              <h2>Agent workspace</h2>
+              <p>Resolve missing information or request document changes. Accepted changes update the working SSP and control objects.</p>
+            </div>
+            <span class="badge badge-info">5 open questions</span>
+          </div>
+
+          <div class="agent-layout">
+            <div class="conversation">
+              <div class="conversation-head">
+                <strong class="small">Working session</strong>
+                <div class="tiny muted" style="margin-top:3px">Context: SSP + AC-2 + uploaded evidence</div>
+              </div>
+              <div class="messages" id="messages">
+                <div class="message agent">
+                  <span class="message-label">Agent</span>
+                  AC-2 is mostly complete. The remaining gap is the review frequency for privileged application roles. What frequency should the SSP document?
+                </div>
+                <div class="message user">
+                  <span class="message-label">ISSO</span>
+                  Privileged roles are reviewed quarterly by the application administrator and ISSO.
+                </div>
+                <div class="message agent">
+                  <span class="message-label">Agent</span>
+                  I prepared updates to AC-2 and SSP section 6.3. Review the proposed changes before applying them.
+                </div>
+              </div>
+              <div class="chat-box">
+                <input class="input" id="chat-input" placeholder="Answer a question or request a document change…" aria-label="Message agent" />
+                <button class="btn btn-primary" id="send-chat-button">Send</button>
+              </div>
+            </div>
+
+            <div class="change-panel">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div>
+                  <strong>Proposed document changes</strong>
+                  <div class="tiny muted" style="margin-top:4px">2 objects affected</div>
+                </div>
+                <span class="badge badge-warning">Not applied</span>
+              </div>
+
+              <div class="change-card">
+                <div class="change-card-head"><strong class="small mono">AC-2 · implementation_statement</strong><span class="badge">Control</span></div>
+                <div class="change-before"><strong>Current:</strong><br>Application administrators review privileged application roles; the required review frequency is pending agency confirmation.</div>
+                <div class="change-after"><strong>Proposed:</strong><br>The application administrator and ISSO review privileged application roles quarterly. Review results are recorded in the agency service management system.</div>
+              </div>
+
+              <div class="change-card">
+                <div class="change-card-head"><strong class="small mono">SSP · section 6.3</strong><span class="badge">Document</span></div>
+                <div class="change-before"><strong>Current:</strong><br>Privileged access is periodically reviewed.</div>
+                <div class="change-after"><strong>Proposed:</strong><br>The application administrator and ISSO perform a quarterly review of privileged application access and document the completed review in the agency service management system.</div>
+              </div>
+
+              <div class="spacer-16"></div>
+              <div class="actions">
+                <button class="btn btn-primary" id="apply-changes-button">Apply Changes</button>
+                <button class="btn btn-outline" id="revise-changes-button">Ask Agent to Revise</button>
+                <button class="btn btn-ghost">Dismiss</button>
+              </div>
+
+              <div class="spacer-20"></div>
+              <div class="card">
+                <div class="card-head"><h3>Other unresolved questions</h3></div>
+                <div class="card-body">
+                  <div class="check-list">
+                    <div class="check-row"><span class="check-warn">!</span><span>AU-11 audit retention period</span><button class="btn btn-ghost tiny">Open</button></div>
+                    <div class="check-row"><span class="check-warn">!</span><span>Production incident notification path</span><button class="btn btn-ghost tiny">Open</button></div>
+                    <div class="check-row"><span class="check-warn">!</span><span>External interconnection owner</span><button class="btn btn-ghost tiny">Open</button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-review">
+          <div class="page-head">
+            <div>
+              <h2>Review &amp; export</h2>
+              <p>Approve once the working content is ready. Unresolved items may remain visible in the export when the ISSO chooses.</p>
+            </div>
+          </div>
+
+          <div class="review-banner">
+            <div>
+              <h3>Ready for ISSO review with 5 unresolved items</h3>
+              <p>The SSP and 325 control objects are saved. No per-edit approval is required.</p>
+            </div>
+            <button class="btn btn-primary" id="approve-button">Approve Working Content</button>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="grid-3">
+            <div class="card stat"><div class="stat-label">SSP sections</div><div class="stat-value">15</div><div class="stat-foot">12 complete · 3 partial</div></div>
+            <div class="card stat"><div class="stat-label">Control objects</div><div class="stat-value">325</div><div class="stat-foot">290 drafted · 35 partial</div></div>
+            <div class="card stat"><div class="stat-label">Evidence links</div><div class="stat-value">486</div><div class="stat-foot">Across 18 source artifacts</div></div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-head"><h3>Readiness checks</h3></div>
+              <div class="card-body">
+                <div class="check-list">
+                  <div class="check-row"><span class="check-mark">✓</span><span>System purpose documented</span><span class="badge badge-success">Complete</span></div>
+                  <div class="check-row"><span class="check-mark">✓</span><span>Authorization boundary confirmed</span><span class="badge badge-success">Complete</span></div>
+                  <div class="check-row"><span class="check-mark">✓</span><span>Impact and baseline selected</span><span class="badge badge-success">Complete</span></div>
+                  <div class="check-row"><span class="check-warn">!</span><span>Five unresolved questions remain</span><span class="badge badge-warning">Visible</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3>Export package</h3><span class="badge" id="approval-status">Not approved</span></div>
+              <div class="card-body">
+                <div class="field">
+                  <label for="export-format">Format</label>
+                  <select class="select" id="export-format"><option>Microsoft Word (.docx)</option><option>PDF</option><option>OSCAL JSON</option><option>JSON data package</option></select>
+                </div>
+                <div class="spacer-12"></div>
+                <label class="small"><input type="checkbox" checked /> Include unresolved-items appendix</label>
+                <div class="spacer-16"></div>
+                <button class="btn btn-outline" id="export-button" disabled>Export Approved Content</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-profiles">
+          <div class="page-head">
+            <div>
+              <h2>Local profile administration</h2>
+              <p>Profiles are imported as versioned offline bundles. Systems remain pinned until an administrator explicitly migrates them.</p>
+            </div>
+            <button class="btn btn-primary" id="import-profile-button">Import Profile Bundle</button>
+          </div>
+
+          <div class="grid-3">
+            <div class="card stat"><div class="stat-label">Active profile</div><div class="stat-value" style="font-size:18px">800-53 Rev. 5</div><div class="stat-foot">Release 5.2.0</div></div>
+            <div class="card stat"><div class="stat-label">Local bundles</div><div class="stat-value">3</div><div class="stat-foot">2 active · 1 archived</div></div>
+            <div class="card stat"><div class="stat-label">Pinned systems</div><div class="stat-value">14</div><div class="stat-foot">12 current · 2 eligible to migrate</div></div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Agency FISMA — NIST SP 800-53 Rev. 5</h3>
+              <span class="badge badge-success">Available</span>
+            </div>
+            <div class="profile-version">
+              <div><strong>Release 5.2.0</strong><div class="tiny muted mono">profile-agency-fisma-r5-5.2.0.bundle</div></div>
+              <span class="small">Aug 27, 2025</span>
+              <span class="badge badge-success">Active</span>
+              <span class="small">12 systems pinned</span>
+              <button class="btn btn-ghost">View Manifest</button>
+            </div>
+            <div class="profile-version">
+              <div><strong>Release 5.1.1</strong><div class="tiny muted mono">profile-agency-fisma-r5-5.1.1.bundle</div></div>
+              <span class="small">Nov 7, 2023</span>
+              <span class="badge">Archived</span>
+              <span class="small">2 systems pinned</span>
+              <button class="btn btn-ghost">Compare</button>
+            </div>
+          </div>
+
+          <div class="spacer-16"></div>
+          <div class="card">
+            <div class="card-head"><h3>Offline update process</h3></div>
+            <div class="card-body">
+              <div class="workflow" style="grid-template-columns:repeat(5,1fr)">
+                <div class="workflow-step complete"><strong>1. Acquire</strong><p>Download official catalog and baseline files.</p></div>
+                <div class="workflow-step complete"><strong>2. Bundle</strong><p>Add agency overlay, template, manifest, and checksums.</p></div>
+                <div class="workflow-step current"><strong>3. Import</strong><p>Validate and load the bundle as inactive.</p></div>
+                <div class="workflow-step"><strong>4. Activate</strong><p>Review changes and activate for new systems.</p></div>
+                <div class="workflow-step"><strong>5. Migrate</strong><p>Explicitly migrate pinned systems when ready.</p></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </section>
+  </div>
+
+  <div class="agent-drawer-backdrop" id="agent-drawer-backdrop">
+    <aside class="agent-drawer" role="dialog" aria-modal="true" aria-labelledby="agent-drawer-title">
+      <div class="agent-drawer-head">
+        <div>
+          <strong id="agent-drawer-title">Ask Agent</strong>
+          <div class="tiny muted" style="margin-top:4px">Edit the content you are currently viewing</div>
+        </div>
+        <button class="btn btn-ghost" id="close-agent-drawer">Close</button>
+      </div>
+
+      <div class="agent-context">
+        <span>Current context</span>
+        <strong id="agent-context-label">SSP · Section 1 · System Identification</strong>
+      </div>
+
+      <div class="agent-drawer-messages" id="agent-drawer-messages">
+        <div class="message agent">
+          <span class="message-label">Agent</span>
+          I will limit changes to this content. What should I update?
+        </div>
+        <div class="message user">
+          <span class="message-label">ISSO</span>
+          Make the hosting description clearer and include the agency identity service.
+        </div>
+        <div class="message agent">
+          <span class="message-label">Agent</span>
+          I prepared a targeted edit. Your other SSP sections and controls will not be regenerated.
+        </div>
+
+        <div class="change-card" style="margin-top:2px">
+          <div class="change-card-head">
+            <strong class="small">Proposed patch</strong>
+            <span class="badge badge-info">1 section</span>
+          </div>
+          <div class="change-before">GIMS is a browser-based application deployed in an agency-owned AWS environment.</div>
+          <div class="change-after">GIMS is a browser-based application deployed in an agency-owned AWS environment and integrated with the agency enterprise identity service for authentication.</div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="drawer-apply-button">Apply Change</button>
+          <button class="btn btn-outline" id="drawer-revise-button">Revise</button>
+        </div>
+      </div>
+
+      <div class="agent-drawer-compose">
+        <textarea class="textarea" id="drawer-agent-input" style="min-height:74px" placeholder="Answer a question or request a change to this content…"></textarea>
+        <div class="actions">
+          <span class="tiny muted">Current context only</span>
+          <button class="btn btn-primary" id="drawer-send-button">Send</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal" id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+    <div class="modal-card">
+      <div class="card-head">
+        <div>
+          <h3 id="profile-modal-title">Import offline profile bundle</h3>
+          <div class="tiny muted" style="margin-top:4px">The bundle remains inactive until validation and review complete.</div>
+        </div>
+        <button class="btn btn-ghost" id="close-profile-modal">Close</button>
+      </div>
+      <div class="card-body">
+        <div class="upload-zone">
+          <strong>Select a signed profile bundle</strong>
+          <p>Bundle manifest, source versions, OSCAL content, agency tailoring, template, and checksums</p>
+          <button class="btn btn-outline" id="select-bundle-button">Select Bundle</button>
+        </div>
+        <div class="spacer-16"></div>
+        <div class="source-note">Import validation checks schema compatibility, required files, manifest fields, and every recorded checksum.</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancel-profile-modal">Cancel</button>
+        <button class="btn btn-primary" id="validate-profile-button">Validate &amp; Import</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const viewLabels = {
+      overview: "Overview",
+      intake: "Intake & Evidence",
+      ssp: "SSP Document",
+      controls: "Controls",
+      agent: "Agent Workspace",
+      review: "Review & Export",
+      profiles: "Local Profiles"
+    };
+
+    function showView(viewName) {
+      document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+      document.querySelectorAll("[data-view]").forEach((button) => button.classList.remove("active"));
+      const target = document.getElementById(`view-${viewName}`);
+      if (!target) return;
+      target.classList.add("active");
+      document.querySelectorAll(`[data-view="${viewName}"]`).forEach((button) => {
+        if (button.closest(".nav")) button.classList.add("active");
+      });
+      document.getElementById("current-view-label").textContent = viewLabels[viewName] || viewName;
+      document.querySelector(".content").scrollTop = 0;
+      window.location.hash = viewName;
+    }
+
+    document.querySelectorAll("[data-view]").forEach((button) => {
+      button.addEventListener("click", () => showView(button.dataset.view));
+    });
+
+    function toast(message) {
+      const node = document.getElementById("toast");
+      node.textContent = message;
+      node.classList.add("show");
+      window.clearTimeout(window.mockToastTimer);
+      window.mockToastTimer = window.setTimeout(() => node.classList.remove("show"), 2600);
+    }
+
+    document.getElementById("choose-files-button").addEventListener("click", () => {
+      document.getElementById("mock-file-input").click();
+    });
+
+    document.getElementById("mock-file-input").addEventListener("change", (event) => {
+      const files = Array.from(event.target.files || []);
+      const list = document.getElementById("file-list");
+      files.forEach((file) => {
+        const row = document.createElement("div");
+        row.className = "file-row";
+        const size = file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+        row.innerHTML = `<div class="file-name"></div><span class="muted small">New evidence</span><span class="badge badge-warning">Queued</span><span class="mono tiny"></span>`;
+        row.querySelector(".file-name").textContent = file.name;
+        row.querySelector(".mono").textContent = size;
+        list.prepend(row);
+      });
+      if (files.length) toast(`${files.length} file${files.length === 1 ? "" : "s"} added to the intake queue.`);
+      event.target.value = "";
+    });
+
+    document.getElementById("generate-button").addEventListener("click", () => {
+      toast("Updated SSP and control generation started.");
+    });
+
+    document.getElementById("save-ssp-button").addEventListener("click", () => toast("SSP document saved."));
+    document.getElementById("save-control-button").addEventListener("click", () => toast("Control object and SSP section saved."));
+
+    const controlData = {
+      "ac-2": {
+        id: "AC-2",
+        title: "Account Management",
+        badge: "Needs input",
+        badgeClass: "badge-warning",
+        status: "Partially implemented",
+        responsibility: "Hybrid",
+        statement: `GIMS uses the agency enterprise identity provider to create, manage, and disable user identities. Access requires an approved agency identity and application role assignment. The GIMS application administrator assigns application roles after approval by the user's program manager.
+
+The agency identity service disables separated-user accounts through the enterprise offboarding process. GIMS consumes the resulting identity status during authentication. Application administrators review privileged application roles; the required review frequency is pending agency confirmation.`
+      },
+      "au-2": {
+        id: "AU-2",
+        title: "Event Logging",
+        badge: "Draft complete",
+        badgeClass: "badge-success",
+        status: "Implemented",
+        responsibility: "Hybrid",
+        statement: "GIMS records authentication events, authorization failures, administrative changes, application errors, data exports, and security-relevant configuration changes. Application events are forwarded to the agency centralized logging service for monitoring and investigation."
+      },
+      "au-11": {
+        id: "AU-11",
+        title: "Audit Record Retention",
+        badge: "Needs input",
+        badgeClass: "badge-warning",
+        status: "Partially implemented",
+        responsibility: "Hybrid",
+        statement: "GIMS forwards audit records to the agency centralized logging service and stores application audit data in an access-controlled log archive. The agency-required retention period has not yet been confirmed."
+      },
+      "cm-2": {
+        id: "CM-2",
+        title: "Baseline Configuration",
+        badge: "Draft complete",
+        badgeClass: "badge-success",
+        status: "Implemented",
+        responsibility: "System specific",
+        statement: "The GIMS team maintains version-controlled infrastructure and application configuration baselines. Changes are proposed through pull requests, reviewed by an authorized engineer, tested in a non-production environment, and promoted through the approved deployment pipeline."
+      },
+      "sc-8": {
+        id: "SC-8",
+        title: "Transmission Confidentiality and Integrity",
+        badge: "Draft complete",
+        badgeClass: "badge-success",
+        status: "Implemented",
+        responsibility: "Hybrid",
+        statement: "GIMS protects information in transit using agency-approved TLS configurations. External and internal application connections terminate only on approved encrypted endpoints. Agency network services provide certificate management and boundary protections."
+      }
+    };
+
+    document.querySelectorAll(".control-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        document.querySelectorAll(".control-row").forEach((item) => item.classList.remove("active"));
+        row.classList.add("active");
+        const data = controlData[row.dataset.control];
+        if (!data) return;
+        document.getElementById("control-editor-id").textContent = data.id;
+        document.getElementById("control-editor-title").textContent = data.title;
+        const badge = document.getElementById("control-editor-badge");
+        badge.textContent = data.badge;
+        badge.className = `badge ${data.badgeClass}`;
+        document.getElementById("control-status").value = data.status;
+        document.getElementById("control-responsibility").value = data.responsibility;
+        document.getElementById("control-statement").value = data.statement;
+      });
+    });
+
+    function filterControls() {
+      const query = document.getElementById("control-search").value.trim().toLowerCase();
+      const status = document.getElementById("control-status-filter").value;
+      document.querySelectorAll(".control-row").forEach((row) => {
+        const matchesText = row.textContent.toLowerCase().includes(query);
+        const matchesStatus = status === "all" || row.dataset.status === status;
+        row.style.display = matchesText && matchesStatus ? "grid" : "none";
+      });
+    }
+
+    document.getElementById("control-search").addEventListener("input", filterControls);
+    document.getElementById("control-status-filter").addEventListener("change", filterControls);
+
+    function sendChat() {
+      const input = document.getElementById("chat-input");
+      const value = input.value.trim();
+      if (!value) return;
+      const message = document.createElement("div");
+      message.className = "message user";
+      const label = document.createElement("span");
+      label.className = "message-label";
+      label.textContent = "ISSO";
+      message.append(label, document.createTextNode(value));
+      document.getElementById("messages").append(message);
+      input.value = "";
+      message.scrollIntoView({ behavior: "smooth", block: "end" });
+      window.setTimeout(() => {
+        const reply = document.createElement("div");
+        reply.className = "message agent";
+        const replyLabel = document.createElement("span");
+        replyLabel.className = "message-label";
+        replyLabel.textContent = "Agent";
+        reply.append(replyLabel, document.createTextNode("I found the affected SSP and control content. I prepared a proposed update for review."));
+        document.getElementById("messages").append(reply);
+        reply.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 500);
+    }
+
+    document.getElementById("send-chat-button").addEventListener("click", sendChat);
+    document.getElementById("chat-input").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") sendChat();
+    });
+
+    document.getElementById("apply-changes-button").addEventListener("click", () => {
+      document.getElementById("control-statement").value = controlData["ac-2"].statement.replace(
+        "Application administrators review privileged application roles; the required review frequency is pending agency confirmation.",
+        "The application administrator and ISSO review privileged application roles quarterly. Review results are recorded in the agency service management system."
+      );
+      toast("Applied changes to AC-2 and SSP section 6.3.");
+    });
+
+    document.getElementById("revise-changes-button").addEventListener("click", () => {
+      document.getElementById("chat-input").value = "Revise the proposed wording to be shorter and name the evidence source.";
+      document.getElementById("chat-input").focus();
+    });
+
+    const agentDrawerBackdrop = document.getElementById("agent-drawer-backdrop");
+    const agentContextLabel = document.getElementById("agent-context-label");
+
+    function closeAgentDrawer() {
+      agentDrawerBackdrop.classList.remove("open");
+    }
+
+    document.querySelectorAll("[data-agent-context]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const requestedContext = button.dataset.agentContext;
+        agentContextLabel.textContent = requestedContext === "Current workspace"
+          ? `${document.getElementById("current-view-label").textContent} · current selection`
+          : requestedContext;
+        agentDrawerBackdrop.classList.add("open");
+      });
+    });
+
+    document.getElementById("close-agent-drawer").addEventListener("click", closeAgentDrawer);
+    agentDrawerBackdrop.addEventListener("click", (event) => {
+      if (event.target === agentDrawerBackdrop) closeAgentDrawer();
+    });
+    document.getElementById("drawer-apply-button").addEventListener("click", () => {
+      toast("Targeted change applied to the current content.");
+      closeAgentDrawer();
+    });
+    document.getElementById("drawer-revise-button").addEventListener("click", () => {
+      document.getElementById("drawer-agent-input").value = "Revise this to be shorter.";
+      document.getElementById("drawer-agent-input").focus();
+    });
+    document.getElementById("drawer-send-button").addEventListener("click", () => {
+      const input = document.getElementById("drawer-agent-input");
+      if (!input.value.trim()) return;
+      const message = document.createElement("div");
+      message.className = "message user";
+      const label = document.createElement("span");
+      label.className = "message-label";
+      label.textContent = "ISSO";
+      message.append(label, document.createTextNode(input.value.trim()));
+      document.getElementById("agent-drawer-messages").append(message);
+      input.value = "";
+      message.scrollIntoView({ behavior: "smooth", block: "end" });
+    });
+
+    document.getElementById("approve-button").addEventListener("click", (event) => {
+      event.currentTarget.textContent = "Approved";
+      event.currentTarget.disabled = true;
+      const status = document.getElementById("approval-status");
+      status.textContent = "ISSO approved";
+      status.className = "badge badge-success";
+      document.getElementById("export-button").disabled = false;
+      toast("Working SSP and control content approved.");
+    });
+
+    document.getElementById("export-button").addEventListener("click", () => {
+      toast(`Export prepared as ${document.getElementById("export-format").value}.`);
+    });
+
+    const profileModal = document.getElementById("profile-modal");
+    function closeProfileModal() { profileModal.classList.remove("open"); }
+    document.getElementById("import-profile-button").addEventListener("click", () => profileModal.classList.add("open"));
+    document.getElementById("close-profile-modal").addEventListener("click", closeProfileModal);
+    document.getElementById("cancel-profile-modal").addEventListener("click", closeProfileModal);
+    document.getElementById("select-bundle-button").addEventListener("click", () => toast("Synthetic profile bundle selected."));
+    document.getElementById("validate-profile-button").addEventListener("click", () => {
+      closeProfileModal();
+      toast("Profile bundle validated and imported as inactive.");
+    });
+    profileModal.addEventListener("click", (event) => {
+      if (event.target === profileModal) closeProfileModal();
+    });
+
+    const initialView = window.location.hash.replace("#", "");
+    if (viewLabels[initialView]) showView(initialView);
+  </script>
+</body>
+</html>

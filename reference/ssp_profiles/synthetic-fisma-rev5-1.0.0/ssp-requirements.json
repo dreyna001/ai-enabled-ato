@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "items": [
+    {
+      "item_id": "system.name",
+      "title": "System Name",
+      "value_type": "string",
+      "min_length": 1,
+      "evidence_required_for_agent": true
+    },
+    {
+      "item_id": "system.purpose",
+      "title": "System Purpose",
+      "value_type": "string",
+      "min_length": 20,
+      "evidence_required_for_agent": true
+    },
+    {
+      "item_id": "system.hosting_model",
+      "title": "Hosting Model",
+      "value_type": "string",
+      "allowed_values": [
+        "on_premises",
+        "agency_cloud",
+        "agency_hybrid"
+      ],
+      "evidence_required_for_agent": true
+    },
+    {
+      "item_id": "system.authorization_boundary",
+      "title": "Authorization Boundary",
+      "value_type": "string",
+      "min_length": 20,
+      "evidence_required_for_agent": true
+    },
+    {
+      "item_id": "system.data_types",
+      "title": "Information Types",
+      "value_type": "string_list",
+      "evidence_required_for_agent": true
+    }
+  ]
+}

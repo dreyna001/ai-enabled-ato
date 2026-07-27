@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "low": [
+    "AC-1"
+  ],
+  "moderate": [
+    "AC-1",
+    "AC-2"
+  ],
+  "high": [
+    "AC-1",
+    "AC-2",
+    "IA-2"
+  ]
+}

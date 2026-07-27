@@ -1,6 +1,7 @@
-# ATO Evidence Analysis
+# Internal SSP Drafting Portal
 
-Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable_analysis` under `Desktop\Cursor`.
+Internal agency tool for turning incomplete system information and evidence into
+an editable SSP, control implementation statements, and tracked questions.
 
 ## Docs
 
@@ -8,6 +9,7 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 
 | File | Purpose |
 | --- | --- |
+| [`docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md`](docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md) | Current product scope, workflow, architecture, and implementation record |
 | [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md) | **Normative** product, security, and implementation contract |
 | [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md) | Non-normative product vision and delivery summary |
 | [`ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md`](ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md) | User workflow and epic acceptance map |
@@ -43,14 +45,14 @@ Standalone project for the ATO Evidence Analysis Portal. Sibling to `llm_notable
 
 ## Current state
 
-- **Normative target:** FedRAMP 20x Program Class C package preparation plus security-only agency FISMA, one on-prem installation per customer enterprise
-- **P-1 / P0 gates:** Recorded in [`docs/P1_GATE_RECORD.md`](docs/P1_GATE_RECORD.md) and [`docs/P0_GATE_RECORD.md`](docs/P0_GATE_RECORD.md); Phase 6 documentation reconciliation recorded in [`docs/P6_GATE_RECORD.md`](docs/P6_GATE_RECORD.md)
-- **Alembic head:** `20260717_0013` (nullable package revision metadata columns; metadata-first create uses persisted values without a new migration)
-- **Delivered stack (code-complete, contract-tested):** `ato_service` API with OIDC-backed server sessions; React/Vite portal; `ato-intake-worker` and `ato-analyzer-worker` long-running workers; full `/api/v1` surface (systems, package revisions, draft editor, intake, deterministic and model-assisted analysis runs, review dispositions, export approval/download, package search and bounded chat); `ato-operator` preflight, migration verify, qualification check, validation drills, audit verify, and search-index rebuild; deployment assets for API, portal nginx, intake/analyzer workers; sealed qualification corpus under `data/qualification/`
-- **dev_local substitutes:** synthetic JSON intake path, HS-005 integrity-only malware substitute, and fake scanner/model/IdP boundaries in workflow integration tests — not production customer extraction or live IdP deployment
-- **Not claimed:** production release, live RHEL install/upgrade/rollback drills, customer IdP verification (**HS-003**), production malware scanning (**HS-005**), real customer model calls (**HS-004**), AI qualification (**HS-006**), qualified authority review (**HS-001**), or backup-target verification (**HS-008**)
-- **Deployment scaffold:** install/upgrade/drain/rollback/smoke scripts, systemd units, and inactive nginx templates under [`deployment/`](deployment/); not proof of RHEL validation or production release
-- **Model boundary:** OpenAI-compatible or Bedrock text backends; routing policy evaluates before every model call; customer production data remains blocked by default and by open hard stops
+- **Product scope:** Internal ISSO intake, evidence extraction, SSP/control drafting, contextual editing, approval, and DOCX/JSON export
+- **First profile:** Agency FISMA — NIST SP 800-53 Rev. 5, with Low, Moderate, and High baselines stored as an immutable local bundle
+- **Portal:** `/ssp` is the default and only product workflow
+- **API:** `/api/v1/ssp-*` plus health and OIDC session routes; legacy package and analysis routes are not mounted
+- **Alembic head:** `20260727_0014`
+- **Portability:** identity, model, storage, database, scanner, and secrets remain deployment configuration; agency content is supplied by versioned local bundles
+- **Not claimed:** control assessment, SAP, SAR, POA&M management, authorization decision, continuous monitoring, or FedRAMP profiles
+- **Cutover safety:** legacy source and migrations remain retained but unreachable until an operator confirms that no live deployment depends on them
 
 The historical Block 1 developer CLI has been retired. New work belongs in `ato_service` and the frozen contracts only.
 

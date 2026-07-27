@@ -170,3 +170,55 @@ APPROVAL_DECISION_VALUES: tuple[str, ...] = (
     "approved",
     "rejected",
 )
+
+SSP_WORKSPACE_STATUS_VALUES: tuple[str, ...] = ("working", "archived")
+SSP_REVISION_STATUS_VALUES: tuple[str, ...] = (
+    "working",
+    "approved",
+    "superseded",
+)
+SSP_EVIDENCE_STATUS_VALUES: tuple[str, ...] = (
+    "uploaded",
+    "processing",
+    "processed",
+    "failed",
+)
+SSP_FACT_STATUS_VALUES: tuple[str, ...] = ("active", "superseded")
+SSP_SECTION_STATUS_VALUES: tuple[str, ...] = (
+    "empty",
+    "generated",
+    "edited",
+    "reviewed",
+)
+SSP_CONTROL_STATUS_VALUES: tuple[str, ...] = (
+    "empty",
+    "generated",
+    "partial",
+    "reviewed",
+)
+SSP_QUESTION_STATUS_VALUES: tuple[str, ...] = ("open", "answered", "dismissed")
+SSP_PATCH_STATUS_VALUES: tuple[str, ...] = (
+    "proposed",
+    "applied",
+    "rejected",
+    "stale",
+)
+SSP_PROFILE_STATUS_VALUES: tuple[str, ...] = ("inactive", "active", "archived")
+SSP_PROVENANCE_VALUES: tuple[str, ...] = (
+    "extracted",
+    "agent_generated",
+    "isso_entered",
+)
+SSP_QUESTION_TARGET_VALUES: tuple[str, ...] = ("fact", "ssp_section", "control")
+SSP_QUESTION_OWNER_VALUES: tuple[str, ...] = (
+    "agency",
+    "technical",
+    "isso",
+    "system_owner",
+    "other",
+)
+SSP_EVIDENCE_LINK_TARGET_VALUES: tuple[str, ...] = (
+    "fact",
+    "ssp_section",
+    "control",
+)

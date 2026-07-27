@@ -105,6 +105,17 @@ EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
         "package_revision_search_chunks",
         "package_revision_search_indexes",
         "package_revision_chat_usage",
+        "ssp_profile_versions",
+        "ssp_workspaces",
+        "ssp_workspace_revisions",
+        "ssp_evidence_artifacts",
+        "ssp_system_facts",
+        "ssp_sections",
+        "ssp_control_statements",
+        "ssp_questions",
+        "ssp_evidence_links",
+        "ssp_agent_patches",
+        "ssp_approval_snapshots",
     }
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states", "package_revision_search_chunks"})
@@ -396,10 +407,15 @@ def test_postgresql_ddl_compiles_for_all_tables() -> None:
         ddl = _compile_create_table(table_name)
         assert f"CREATE TABLE {table_name}" in ddl
         assert "TIMESTAMP WITH TIME ZONE" in ddl or table_name in {
-            "source_artifacts",
-            "matrix_rows",
-            "package_revision_search_chunks",
-        }
+                "source_artifacts",
+                "matrix_rows",
+                "package_revision_search_chunks",
+                "ssp_system_facts",
+                "ssp_sections",
+                "ssp_control_statements",
+                "ssp_questions",
+                "ssp_evidence_links",
+            }
         for index in _table(table_name).indexes:
             index_sql = str(CreateIndex(index).compile(dialect=dialect))
             assert index_sql.startswith("CREATE INDEX") or index_sql.startswith(
@@ -569,10 +585,10 @@ def test_create_session_factory_does_not_connect() -> None:
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
-def test_alembic_head_is_package_search_index_migration() -> None:
+def test_alembic_head_is_ssp_workspace_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260717_0013"
+    assert script.get_current_head() == "20260727_0014"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

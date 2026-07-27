@@ -1,4 +1,4 @@
-import { ClipboardList, LogOut, Shield } from "lucide-react";
+import { FileText, LogOut, Shield } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,9 @@ export function PortalNavHeader() {
     <div className="shrink-0 px-3 py-3">
       <Link
         className="block px-2 text-sm font-semibold tracking-tight text-sidebar-foreground"
-        to="/workflow"
+        to="/ssp"
       >
-        ATO Evidence Analysis Portal
+        SSP Drafting Portal
       </Link>
       <nav aria-label="Primary" className="mt-3 flex flex-col gap-1">
         <NavLink
@@ -22,11 +22,11 @@ export function PortalNavHeader() {
               isActive && "border border-link bg-sidebar-accent text-sidebar-accent-foreground",
             )
           }
-          to="/workflow"
+          to="/ssp"
         >
           <span className="inline-flex items-center gap-1">
-            <ClipboardList className="size-3" />
-            Package Workflow
+            <FileText className="size-3" />
+            SSP Workspace
           </span>
         </NavLink>
       </nav>

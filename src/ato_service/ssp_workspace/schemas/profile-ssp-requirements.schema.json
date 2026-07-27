@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ato.local/schemas/ssp-profile-requirements.schema.json",
+  "title": "SSP workspace required items",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "items"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "title",
+          "value_type",
+          "evidence_required_for_agent"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9._-]{2,127}$",
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "\\S"
+          },
+          "value_type": {
+            "type": "string",
+            "enum": ["string", "string_list"]
+          },
+          "min_length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "allowed_values": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "evidence_required_for_agent": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

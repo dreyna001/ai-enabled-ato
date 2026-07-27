@@ -1,0 +1,270 @@
+import {
+  Bot,
+  ClipboardCheck,
+  FileStack,
+  FileText,
+  HelpCircle,
+  LayoutDashboard,
+  ShieldCheck,
+} from "lucide-react";
+import { useState } from "react";
+import { ContextualAgentDrawer } from "@/components/ssp-workspace/ContextualAgentDrawer";
+import { ControlWorkbench } from "@/components/ssp-workspace/ControlWorkbench";
+import { EvidencePanel } from "@/components/ssp-workspace/EvidencePanel";
+import { QuestionsPanel } from "@/components/ssp-workspace/QuestionsPanel";
+import { ReviewExportPanel } from "@/components/ssp-workspace/ReviewExportPanel";
+import { SspDocumentPanel } from "@/components/ssp-workspace/SspDocumentPanel";
+import { WorkspaceOverview } from "@/components/ssp-workspace/WorkspaceOverview";
+import {
+  WorkspaceEmptyState,
+  WorkspaceErrorState,
+  WorkspaceLoadingState,
+} from "@/components/ssp-workspace/WorkspaceStatePanel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type {
+  AgentContext,
+  SspWorkspace,
+  SspWorkspaceActions,
+} from "@/sspWorkspaceTypes";
+import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
+
+type WorkspaceView =
+  | "overview"
+  | "evidence"
+  | "ssp"
+  | "controls"
+  | "questions"
+  | "review";
+
+export type SspWorkspacePageProps =
+  | { state: "loading" }
+  | { state: "error"; message: string; onRetry?: () => void }
+  | { state: "empty"; onCreateWorkspace?: () => void }
+  | {
+      state: "success";
+      workspace: SspWorkspace;
+      actions?: SspWorkspaceActions;
+      initialView?: WorkspaceView;
+    };
+
+const NAV_ITEMS: Array<{
+  id: WorkspaceView;
+  label: string;
+  icon: typeof LayoutDashboard;
+}> = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "evidence", label: "Intake & evidence", icon: FileStack },
+  { id: "ssp", label: "SSP document", icon: FileText },
+  { id: "controls", label: "Controls", icon: ShieldCheck },
+  { id: "questions", label: "Questions", icon: HelpCircle },
+  { id: "review", label: "Review & export", icon: ClipboardCheck },
+];
+
+function countForView(
+  view: WorkspaceView,
+  metrics: ReturnType<typeof calculateSspWorkspaceMetrics>,
+): string | null {
+  if (view === "evidence") return String(metrics.evidence);
+  if (view === "ssp") return `${metrics.sspCompletion}%`;
+  if (view === "controls") return String(metrics.selectedControls);
+  if (view === "questions") return String(metrics.openQuestions);
+  return null;
+}
+
+function SspWorkspaceSuccess({
+  workspace,
+  actions = {},
+  initialView = "overview",
+}: {
+  workspace: SspWorkspace;
+  actions?: SspWorkspaceActions;
+  initialView?: WorkspaceView;
+}) {
+  const [view, setView] = useState<WorkspaceView>(initialView);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
+    workspace.sections[0]?.id ?? null,
+  );
+  const [selectedControlId, setSelectedControlId] = useState<string | null>(
+    workspace.controls.find(
+      (control) => control.state === "partial" || control.state === "empty",
+    )?.id ??
+      workspace.controls[0]?.id ??
+      null,
+  );
+  const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
+  const metrics = calculateSspWorkspaceMetrics(workspace);
+  const currentViewLabel =
+    NAV_ITEMS.find((item) => item.id === view)?.label ?? "Workspace";
+
+  return (
+    <div className="min-h-full bg-background">
+      <header className="border-b bg-card">
+        <div className="mx-auto flex max-w-[96rem] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Systems / {workspace.name} / {currentViewLabel}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold">{workspace.name}</h1>
+              <Badge variant="outline">{workspace.profile.baseline}</Badge>
+              <Badge variant={metrics.approved ? "success" : "secondary"}>
+                {metrics.approved ? "ISSO approved" : "Working revision"}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {workspace.profile.name} · {workspace.profile.version} · Revision{" "}
+              <span className="font-mono">{workspace.revisionId}</span>
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setAgentContext({
+                targetType: "workspace",
+                targetId: workspace.id,
+                label: workspace.name,
+              })
+            }
+          >
+            <Bot aria-hidden="true" />
+            Ask agent
+          </Button>
+        </div>
+      </header>
+
+      <div className="mx-auto grid max-w-[96rem] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <nav
+          className="flex gap-1 overflow-x-auto lg:flex-col"
+          aria-label="SSP workspace"
+        >
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const count = countForView(item.id, metrics);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-muted lg:w-full",
+                  view === item.id &&
+                    "bg-primary text-primary-foreground hover:bg-primary/90",
+                )}
+                aria-current={view === item.id ? "page" : undefined}
+                onClick={() => setView(item.id)}
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                <span className="flex-1">{item.label}</span>
+                {count ? (
+                  <span
+                    className={cn(
+                      "rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground",
+                      view === item.id &&
+                        "bg-primary-foreground/15 text-primary-foreground",
+                    )}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </nav>
+
+        <main className="min-w-0">
+          {view === "overview" ? (
+            <WorkspaceOverview
+              workspace={workspace}
+              metrics={metrics}
+              onGenerate={actions.onGenerate}
+              onNavigate={setView}
+              onOpenAgent={setAgentContext}
+            />
+          ) : null}
+          {view === "evidence" ? (
+            <EvidencePanel
+              evidence={workspace.evidence}
+              onUpload={actions.onUploadEvidence}
+            />
+          ) : null}
+          {view === "ssp" ? (
+            <SspDocumentPanel
+              sections={workspace.sections}
+              selectedSectionId={selectedSectionId}
+              onSelectSection={setSelectedSectionId}
+              onSave={actions.onSaveSection}
+              onOpenAgent={setAgentContext}
+            />
+          ) : null}
+          {view === "controls" ? (
+            <ControlWorkbench
+              controls={workspace.controls}
+              selectedControlId={selectedControlId}
+              onSelectControl={setSelectedControlId}
+              onSave={actions.onSaveControl}
+              onOpenAgent={setAgentContext}
+            />
+          ) : null}
+          {view === "questions" ? (
+            <QuestionsPanel
+              questions={workspace.questions}
+              onOpenAgent={setAgentContext}
+            />
+          ) : null}
+          {view === "review" ? (
+            <ReviewExportPanel
+              workspace={workspace}
+              metrics={metrics}
+              onApprove={actions.onApprove}
+              onExport={actions.onExport}
+            />
+          ) : null}
+        </main>
+      </div>
+
+      {agentContext ? (
+        <ContextualAgentDrawer
+          context={agentContext}
+          patches={workspace.patches}
+          onClose={() => setAgentContext(null)}
+          onAskAgent={actions.onAskAgent}
+          onApplyPatch={actions.onApplyPatch}
+          onRejectPatch={actions.onRejectPatch}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function SspWorkspacePage(props: SspWorkspacePageProps) {
+  if (props.state === "loading") {
+    return (
+      <div className="mx-auto max-w-[96rem] p-4 sm:p-6">
+        <WorkspaceLoadingState />
+      </div>
+    );
+  }
+  if (props.state === "error") {
+    return (
+      <div className="mx-auto max-w-[96rem] p-4 sm:p-6">
+        <WorkspaceErrorState message={props.message} onRetry={props.onRetry} />
+      </div>
+    );
+  }
+  if (props.state === "empty") {
+    return (
+      <div className="mx-auto max-w-[96rem] p-4 sm:p-6">
+        <WorkspaceEmptyState onCreateWorkspace={props.onCreateWorkspace} />
+      </div>
+    );
+  }
+  return (
+    <SspWorkspaceSuccess
+      workspace={props.workspace}
+      actions={props.actions}
+      initialView={props.initialView}
+    />
+  );
+}

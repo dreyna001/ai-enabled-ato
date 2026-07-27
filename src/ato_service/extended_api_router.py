@@ -152,6 +152,9 @@ def _reconciliation_required_response() -> JSONResponse:
 
 def build_extended_router() -> APIRouter:
     router = APIRouter()
+    from ato_service.ssp_workspace.api import build_ssp_workspace_router
+
+    router.include_router(build_ssp_workspace_router())
 
     @router.get("/package-revisions/{id}/preflight", tags=["Packages"])
     async def get_package_revision_preflight(

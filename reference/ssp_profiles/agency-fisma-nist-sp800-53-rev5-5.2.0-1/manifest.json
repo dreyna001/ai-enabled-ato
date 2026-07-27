@@ -1,0 +1,43 @@
+{
+  "display_name": "Agency FISMA — NIST SP 800-53 Revision 5 Low/Moderate/High",
+  "files": [
+    {
+      "path": "catalog.json",
+      "role": "catalog",
+      "sha256": "d820835aa54aeb2265bdacdf8e678af7530443a59556563df898addf012024cb"
+    },
+    {
+      "path": "baselines.json",
+      "role": "baselines",
+      "sha256": "bed9d37c518c220f5d3a6a0179a730a43be64287d6d7a29bc81a3426fb589b17"
+    },
+    {
+      "path": "ssp-requirements.json",
+      "role": "ssp_requirements",
+      "sha256": "d2ab1c19273930a0c3881027f590ff378046a54a3fd02039cf364c2854e9c889"
+    }
+  ],
+  "profile_id": "agency-fisma-nist-sp800-53-rev5",
+  "profile_version": "5.2.0-1",
+  "schema_version": "1.0.0",
+  "sources": [
+    {
+      "reference": "reference/authorities/nist/oscal-content-1.5.0.zip (sha256:2fe26ac1087f49736e75be84f2b23333050e2227fac51f899b2ca4bd5e1109f4)",
+      "source_id": "nist-oscal-content",
+      "title": "NIST OSCAL Content",
+      "version": "1.5.0"
+    },
+    {
+      "reference": "oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog-min.json",
+      "source_id": "nist-sp-800-53",
+      "title": "Security and Privacy Controls for Information Systems and Organizations",
+      "version": "5.2.0"
+    },
+    {
+      "reference": "oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_LOW-baseline-resolved-profile_catalog-min.json, oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_MODERATE-baseline-resolved-profile_catalog-min.json, oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_HIGH-baseline-resolved-profile_catalog-min.json",
+      "source_id": "nist-sp-800-53b",
+      "title": "Control Baselines for Information Systems and Organizations",
+      "version": "5.2.0"
+    }
+  ]
+}

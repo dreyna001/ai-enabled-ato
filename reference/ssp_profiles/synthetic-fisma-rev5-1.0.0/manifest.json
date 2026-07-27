@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "synthetic-fisma-rev5",
+  "profile_version": "1.0.0",
+  "display_name": "Synthetic Agency FISMA — NIST SP 800-53 Revision 5",
+  "sources": [
+    {
+      "source_id": "nist-sp-800-53",
+      "title": "Security and Privacy Controls for Information Systems and Organizations",
+      "version": "Revision 5",
+      "reference": "Synthetic test subset derived from the structure of NIST SP 800-53 Revision 5; not authoritative content."
+    },
+    {
+      "source_id": "nist-sp-800-53b",
+      "title": "Control Baselines for Information Systems and Organizations",
+      "version": "Revision 5",
+      "reference": "Synthetic Low, Moderate, and High selections for tests only; not authoritative baseline content."
+    }
+  ],
+  "files": [
+    {
+      "role": "catalog",
+      "path": "catalog.json",
+      "sha256": "4b988f3572aa4ba98358aed90f67965484541ba0ae9f4f4f65429d862f403a25"
+    },
+    {
+      "role": "baselines",
+      "path": "baselines.json",
+      "sha256": "75f93e7caa811fd151503b77f496325859aafe145e2590c3dfb6ee3281bae6bb"
+    },
+    {
+      "role": "ssp_requirements",
+      "path": "ssp-requirements.json",
+      "sha256": "bb6ecbf87eb05533286f80f10fb713f00370ab5d16ecd7bd006b55b42437b7aa"
+    }
+  ]
+}

@@ -1973,3 +1973,610 @@ class PackageRevisionChatUsage(Base):
             "actor_id",
         ),
     )
+
+
+class SspProfileVersion(Base):
+    """Immutable locally imported agency content bundle."""
+
+    __tablename__ = "ssp_profile_versions"
+
+    profile_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    profile_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    bundle: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    imported_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "profile_key",
+            "version",
+            name="uq_ssp_profile_versions_profile_key_version",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_PROFILE_STATUS_VALUES,
+            constraint_name="ck_ssp_profile_versions_status",
+        ),
+        ck.sha256_check(
+            "bundle_sha256",
+            constraint_name="ck_ssp_profile_versions_bundle_sha256",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(bundle) = 'object'",
+            name="ck_ssp_profile_versions_bundle_object",
+        ),
+        CheckConstraint(
+            "char_length(profile_key) >= 1",
+            name="ck_ssp_profile_versions_profile_key_min_length",
+        ),
+        CheckConstraint(
+            "char_length(version) >= 1",
+            name="ck_ssp_profile_versions_version_min_length",
+        ),
+        CheckConstraint(
+            "char_length(imported_by) >= 1",
+            name="ck_ssp_profile_versions_imported_by_min_length",
+        ),
+        Index("ix_ssp_profile_versions_status", "status"),
+        Index(
+            "uq_ssp_profile_versions_one_active_profile_key",
+            "profile_key",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
+
+
+class SspWorkspace(Base):
+    """Working area for one system's internal SSP drafting workflow."""
+
+    __tablename__ = "ssp_workspaces"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("systems.system_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    profile_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_profile_versions.profile_version_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    current_revision_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("system_id", name="uq_ssp_workspaces_system_id"),
+        ForeignKeyConstraint(
+            ["current_revision_id", "workspace_id"],
+            [
+                "ssp_workspace_revisions.revision_id",
+                "ssp_workspace_revisions.workspace_id",
+            ],
+            ondelete="RESTRICT",
+            name="fk_ssp_workspaces_current_revision_workspace",
+            use_alter=True,
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_WORKSPACE_STATUS_VALUES,
+            constraint_name="ck_ssp_workspaces_status",
+        ),
+        CheckConstraint(
+            "(status = 'working' AND archived_at IS NULL) OR "
+            "(status = 'archived' AND archived_at IS NOT NULL)",
+            name="ck_ssp_workspaces_archive_fields",
+        ),
+        CheckConstraint(
+            "char_length(created_by) >= 1",
+            name="ck_ssp_workspaces_created_by_min_length",
+        ),
+        Index("ix_ssp_workspaces_system_id", "system_id"),
+        Index("ix_ssp_workspaces_profile_version_id", "profile_version_id"),
+    )
+
+
+class SspWorkspaceRevision(Base):
+    """Immutable, hash-bound snapshot of all editable workspace content."""
+
+    __tablename__ = "ssp_workspace_revisions"
+
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    parent_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "version",
+            name="uq_ssp_workspace_revisions_workspace_version",
+        ),
+        UniqueConstraint(
+            "revision_id",
+            "workspace_id",
+            name="uq_ssp_workspace_revisions_revision_workspace",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_REVISION_STATUS_VALUES,
+            constraint_name="ck_ssp_workspace_revisions_status",
+        ),
+        ck.sha256_check(
+            "content_sha256",
+            constraint_name="ck_ssp_workspace_revisions_content_sha256",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(content) = 'object'",
+            name="ck_ssp_workspace_revisions_content_object",
+        ),
+        CheckConstraint(
+            "version >= 1",
+            name="ck_ssp_workspace_revisions_version_positive",
+        ),
+        CheckConstraint(
+            "char_length(created_by) >= 1",
+            name="ck_ssp_workspace_revisions_created_by_min_length",
+        ),
+        Index("ix_ssp_workspace_revisions_workspace_id", "workspace_id"),
+        Index(
+            "uq_ssp_workspace_revisions_one_working",
+            "workspace_id",
+            unique=True,
+            postgresql_where=text("status = 'working'"),
+        ),
+    )
+
+
+class SspEvidenceArtifact(Base):
+    """Workspace evidence record backed by the existing artifact storage boundary."""
+
+    __tablename__ = "ssp_evidence_artifacts"
+
+    evidence_artifact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("source_artifacts.artifact_id", ondelete="RESTRICT"),
+    )
+    storage_key: Mapped[str] = mapped_column(String(67), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    display_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    detected_format: Mapped[str | None] = mapped_column(String(32))
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    extracted_segments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    uploaded_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure_code: Mapped[str | None] = mapped_column(String(128))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "sha256",
+            name="uq_ssp_evidence_artifacts_workspace_sha256",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_EVIDENCE_STATUS_VALUES,
+            constraint_name="ck_ssp_evidence_artifacts_status",
+        ),
+        ck.sha256_check(
+            "sha256",
+            constraint_name="ck_ssp_evidence_artifacts_sha256",
+        ),
+        ck.regex_check(
+            "storage_key",
+            ck.STORAGE_KEY_REGEX,
+            constraint_name="ck_ssp_evidence_artifacts_storage_key",
+        ),
+        CheckConstraint(
+            "split_part(storage_key, '/', 2) = sha256",
+            name="ck_ssp_evidence_artifacts_storage_key_matches_sha256",
+        ),
+        CheckConstraint(
+            "size_bytes >= 1",
+            name="ck_ssp_evidence_artifacts_size_bytes_positive",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(extracted_segments) = 'array'",
+            name="ck_ssp_evidence_artifacts_segments_array",
+        ),
+        CheckConstraint(
+            "(status = 'processed' AND processed_at IS NOT NULL "
+            "AND failure_code IS NULL) OR "
+            "(status = 'failed' AND processed_at IS NOT NULL "
+            "AND failure_code IS NOT NULL) OR "
+            "(status IN ('uploaded', 'processing') AND processed_at IS NULL "
+            "AND failure_code IS NULL)",
+            name="ck_ssp_evidence_artifacts_status_fields",
+        ),
+        CheckConstraint(
+            "char_length(display_filename) >= 1",
+            name="ck_ssp_evidence_artifacts_filename_min_length",
+        ),
+        CheckConstraint(
+            "char_length(media_type) >= 1",
+            name="ck_ssp_evidence_artifacts_media_type_min_length",
+        ),
+        CheckConstraint(
+            "char_length(uploaded_by) >= 1",
+            name="ck_ssp_evidence_artifacts_uploaded_by_min_length",
+        ),
+        ck.regex_check(
+            "failure_code",
+            ck.ERROR_CODE_REGEX,
+            constraint_name="ck_ssp_evidence_artifacts_failure_code",
+            nullable=True,
+        ),
+        Index("ix_ssp_evidence_artifacts_workspace_id", "workspace_id"),
+        Index("ix_ssp_evidence_artifacts_status", "status"),
+    )
+
+
+class SspSystemFact(Base):
+    """Structured fact materialized for one immutable revision."""
+
+    __tablename__ = "ssp_system_facts"
+
+    fact_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    fact_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    value: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    provenance: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "revision_id",
+            "fact_key",
+            name="uq_ssp_system_facts_revision_fact_key",
+        ),
+        ck.enum_check(
+            "provenance",
+            ev.SSP_PROVENANCE_VALUES,
+            constraint_name="ck_ssp_system_facts_provenance",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_FACT_STATUS_VALUES,
+            constraint_name="ck_ssp_system_facts_status",
+        ),
+        CheckConstraint(
+            "char_length(fact_key) >= 1",
+            name="ck_ssp_system_facts_fact_key_min_length",
+        ),
+        Index("ix_ssp_system_facts_revision_id", "revision_id"),
+    )
+
+
+class SspSection(Base):
+    """Editable SSP section materialized for one immutable revision."""
+
+    __tablename__ = "ssp_sections"
+
+    section_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    section_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str] = mapped_column(String(100_000), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "revision_id",
+            "section_key",
+            name="uq_ssp_sections_revision_section_key",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_SECTION_STATUS_VALUES,
+            constraint_name="ck_ssp_sections_status",
+        ),
+        CheckConstraint(
+            "(status = 'empty' AND char_length(trim(content)) = 0) OR "
+            "(status <> 'empty' AND char_length(trim(content)) >= 1)",
+            name="ck_ssp_sections_status_content",
+        ),
+        CheckConstraint(
+            "char_length(section_key) >= 1",
+            name="ck_ssp_sections_section_key_min_length",
+        ),
+        CheckConstraint(
+            "char_length(title) >= 1",
+            name="ck_ssp_sections_title_min_length",
+        ),
+        Index("ix_ssp_sections_revision_id", "revision_id"),
+    )
+
+
+class SspControlStatement(Base):
+    """One independently editable control implementation statement."""
+
+    __tablename__ = "ssp_control_statements"
+
+    control_statement_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    control_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    implementation_status: Mapped[str | None] = mapped_column(String(64))
+    implementation_statement: Mapped[str] = mapped_column(
+        String(100_000), nullable=False
+    )
+    responsibility: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    unresolved_reason: Mapped[str | None] = mapped_column(String(4_000))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "revision_id",
+            "control_id",
+            name="uq_ssp_control_statements_revision_control_id",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_CONTROL_STATUS_VALUES,
+            constraint_name="ck_ssp_control_statements_status",
+        ),
+        CheckConstraint(
+            "(status = 'empty' AND char_length(trim(implementation_statement)) = 0) "
+            "OR (status IN ('generated', 'reviewed') "
+            "AND char_length(trim(implementation_statement)) >= 1) "
+            "OR (status = 'partial' "
+            "AND (char_length(trim(implementation_statement)) >= 1 "
+            "OR char_length(trim(COALESCE(unresolved_reason, ''))) >= 1))",
+            name="ck_ssp_control_statements_status_content",
+        ),
+        CheckConstraint(
+            "char_length(control_id) >= 1",
+            name="ck_ssp_control_statements_control_id_min_length",
+        ),
+        CheckConstraint(
+            "char_length(title) >= 1",
+            name="ck_ssp_control_statements_title_min_length",
+        ),
+        Index("ix_ssp_control_statements_revision_id", "revision_id"),
+        Index("ix_ssp_control_statements_control_id", "control_id"),
+    )
+
+
+class SspQuestion(Base):
+    """Persisted known information gap; not a claim of exhaustive discovery."""
+
+    __tablename__ = "ssp_questions"
+
+    question_record_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    question: Mapped[str] = mapped_column(String(4_000), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    answer: Mapped[str | None] = mapped_column(String(20_000))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "revision_id",
+            "question_id",
+            name="uq_ssp_questions_revision_question_id",
+        ),
+        ck.enum_check(
+            "target_type",
+            ev.SSP_QUESTION_TARGET_VALUES,
+            constraint_name="ck_ssp_questions_target_type",
+        ),
+        ck.enum_check(
+            "owner_type",
+            ev.SSP_QUESTION_OWNER_VALUES,
+            constraint_name="ck_ssp_questions_owner_type",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_QUESTION_STATUS_VALUES,
+            constraint_name="ck_ssp_questions_status",
+        ),
+        CheckConstraint(
+            "(status = 'answered' AND char_length(trim(answer)) >= 1) OR "
+            "(status = 'open' AND answer IS NULL) OR status = 'dismissed'",
+            name="ck_ssp_questions_status_answer",
+        ),
+        CheckConstraint(
+            "char_length(question) >= 1",
+            name="ck_ssp_questions_question_min_length",
+        ),
+        CheckConstraint(
+            "char_length(target_key) >= 1",
+            name="ck_ssp_questions_target_key_min_length",
+        ),
+        Index("ix_ssp_questions_revision_id", "revision_id"),
+        Index("ix_ssp_questions_status", "status"),
+    )
+
+
+class SspEvidenceLink(Base):
+    """Validated evidence locator attached to a fact, section, or control."""
+
+    __tablename__ = "ssp_evidence_links"
+
+    evidence_link_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    evidence_artifact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_evidence_artifacts.evidence_artifact_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    locator: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    __table_args__ = (
+        ck.enum_check(
+            "target_type",
+            ev.SSP_EVIDENCE_LINK_TARGET_VALUES,
+            constraint_name="ck_ssp_evidence_links_target_type",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(locator) = 'object' AND locator <> '{}'::jsonb",
+            name="ck_ssp_evidence_links_locator_nonempty_object",
+        ),
+        CheckConstraint(
+            "char_length(target_key) >= 1",
+            name="ck_ssp_evidence_links_target_key_min_length",
+        ),
+        Index("ix_ssp_evidence_links_revision_id", "revision_id"),
+        Index("ix_ssp_evidence_links_artifact_id", "evidence_artifact_id"),
+    )
+
+
+class SspAgentPatch(Base):
+    """Bounded, version-aware patch proposed by an agent."""
+
+    __tablename__ = "ssp_agent_patches"
+
+    patch_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    base_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    applied_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+    )
+    operations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    summary: Mapped[str] = mapped_column(String(2_000), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_by: Mapped[str | None] = mapped_column(String(255))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        ck.enum_check(
+            "status",
+            ev.SSP_PATCH_STATUS_VALUES,
+            constraint_name="ck_ssp_agent_patches_status",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(operations) = 'array' AND jsonb_array_length(operations) >= 1",
+            name="ck_ssp_agent_patches_operations_nonempty_array",
+        ),
+        CheckConstraint(
+            "(status = 'proposed' AND applied_revision_id IS NULL "
+            "AND resolved_by IS NULL AND resolved_at IS NULL) OR "
+            "(status = 'applied' AND applied_revision_id IS NOT NULL "
+            "AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL) OR "
+            "(status IN ('rejected', 'stale') AND applied_revision_id IS NULL "
+            "AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL)",
+            name="ck_ssp_agent_patches_status_fields",
+        ),
+        CheckConstraint(
+            "char_length(summary) >= 1",
+            name="ck_ssp_agent_patches_summary_min_length",
+        ),
+        Index("ix_ssp_agent_patches_workspace_id", "workspace_id"),
+        Index("ix_ssp_agent_patches_base_revision_id", "base_revision_id"),
+    )
+
+
+class SspApprovalSnapshot(Base):
+    """Immutable ISSO approval bound to an exact revision content hash."""
+
+    __tablename__ = "ssp_approval_snapshots"
+
+    approval_snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    revision_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    approved_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        ck.sha256_check(
+            "revision_sha256",
+            constraint_name="ck_ssp_approval_snapshots_revision_sha256",
+        ),
+        CheckConstraint(
+            "char_length(approved_by) >= 1",
+            name="ck_ssp_approval_snapshots_approved_by_min_length",
+        ),
+        Index("ix_ssp_approval_snapshots_workspace_id", "workspace_id"),
+    )
