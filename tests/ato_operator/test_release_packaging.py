@@ -43,6 +43,7 @@ def _write_minimal_release_tree(
         "docs/release",
         "docs/requirements",
         "reference/authorities",
+        "reference/ssp_profiles",
         "deployment/systemd",
         "deployment/nginx",
         "deployment/config",
@@ -75,6 +76,11 @@ def _write_minimal_release_tree(
         dirs_exist_ok=True,
     )
     shutil.copytree(
+        ROOT / "reference" / "ssp_profiles",
+        root / "reference" / "ssp_profiles",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
         ROOT / "deployment" / "systemd",
         root / "deployment" / "systemd",
         dirs_exist_ok=True,
@@ -102,6 +108,7 @@ def _write_minimal_release_tree(
         "docs/RELEASE_PACKAGING.md",
         "docs/AI_EVALUATION_GUIDE.md",
         "docs/THREAT_MODEL.md",
+        "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md",
         "scripts/install.sh",
         "scripts/upgrade.sh",
         "scripts/rollback.sh",
@@ -113,6 +120,8 @@ def _write_minimal_release_tree(
         "scripts/verify_release.sh",
         "scripts/compile_analysis_profiles.py",
         "scripts/compile_fisma_analysis_profile.py",
+        "scripts/build_ssp_profile_bundle.py",
+        "scripts/export_ssp_openapi.py",
     ):
         destination = root / relative_file
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -273,6 +282,10 @@ def test_verify_release_archive_includes_profiles_and_draft_warning(
         names = {member.name for member in tar.getmembers()}
     for relative_path in bundled_profile_relative_paths():
         assert relative_path in names
+    assert (
+        "reference/ssp_profiles/"
+        "agency-fisma-nist-sp800-53-rev5-5.2.0-1/manifest.json"
+    ) in names
 
 
 def test_verify_release_archive_rejects_symlink_input(tmp_path: Path) -> None:

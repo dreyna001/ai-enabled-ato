@@ -565,6 +565,17 @@ def test_create_app_description_documents_ssp_scope() -> None:
     assert "authorization decision" not in app.description.lower()
 
 
+def test_checked_in_ssp_openapi_matches_mounted_product_routes() -> None:
+    app = create_app(readiness_probe=AsyncMock(return_value={}))
+    published = json.loads(
+        (ROOT / "docs" / "contracts" / "ssp-openapi.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert published == app.openapi()
+
+
 def test_create_app_exposes_health_and_api_when_runtime_absent() -> None:
     app = create_app(readiness_probe=AsyncMock(return_value={}))
 

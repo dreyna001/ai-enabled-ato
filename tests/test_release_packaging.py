@@ -49,6 +49,7 @@ def _write_minimal_release_tree(
         "docs/requirements",
         "reference/authorities",
         "reference/profiles",
+        "reference/ssp_profiles",
         "deployment/systemd",
         "deployment/nginx",
         "deployment/config",
@@ -83,6 +84,11 @@ def _write_minimal_release_tree(
     shutil.copytree(
         ROOT / "reference" / "profiles",
         root / "reference" / "profiles",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        ROOT / "reference" / "ssp_profiles",
+        root / "reference" / "ssp_profiles",
         dirs_exist_ok=True,
     )
     shutil.copytree(

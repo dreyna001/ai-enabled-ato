@@ -77,7 +77,18 @@ async def postgres_integration_harness(
             "runtime_profile": "dev_local",
             "STORAGE_DATA_PATH": str(storage_root),
             "INSTALLATION_CUSTOMER_ENTERPRISE_ID": CUSTOMER_ENTERPRISE_ID,
-            "PROCESS_CAPABILITIES": {"package_search": True},
+            "PROCESS_CAPABILITIES": {
+                "api": True,
+                "intake_worker": True,
+                "analyzer_worker": True,
+                "portal_static": False,
+                "malware_scanning": False,
+                "text_model_calls": False,
+                "vision_model_calls": False,
+                "oidc_authentication": False,
+                "package_search": True,
+                "package_chat": False,
+            },
         },
         base_dir=tmp_path,
     )
@@ -101,5 +112,7 @@ async def postgres_integration_harness(
         yield harness
     finally:
         await session.close()
-        await transaction.rollback()
+        if transaction.is_active:
+            await transaction.rollback()
+        await connection.close()
         await engine.dispose()

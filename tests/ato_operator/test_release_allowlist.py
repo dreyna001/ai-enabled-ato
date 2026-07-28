@@ -37,6 +37,7 @@ def _write_minimal_allowlist_tree(root: Path) -> None:
         "docs/requirements",
         "reference/authorities",
         "reference/profiles",
+        "reference/ssp_profiles",
         "deployment/systemd",
         "deployment/nginx",
         "data/qualification",

@@ -77,6 +77,9 @@
       "$ref": "#/$defs/PackageNormalizationStep"
     },
     {
+      "$ref": "#/$defs/IntakeReport"
+    },
+    {
       "$ref": "#/$defs/Problem"
     }
   ],
@@ -528,7 +531,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Null while the system is active. Set by authorized soft-archive; never cleared in place."
         }
       }
     },
@@ -589,7 +593,14 @@
           ]
         },
         "profile_id": {
-          "$ref": "#/$defs/ProfileId"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProfileId"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "certification_class": {
           "type": [
@@ -615,14 +626,28 @@
           ]
         },
         "data_origin": {
-          "$ref": "#/$defs/DataOrigin"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "sensitivity": {
-          "$ref": "#/$defs/Sensitivity"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sensitivity"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "effective_data_labels": {
           "type": "array",
-          "minItems": 2,
+          "minItems": 0,
           "maxItems": 16,
           "uniqueItems": true,
           "items": {
@@ -759,6 +784,40 @@
                 ]
               }
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ready"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "profile_id": {
+                "$ref": "#/$defs/ProfileId"
+              },
+              "data_origin": {
+                "$ref": "#/$defs/DataOrigin"
+              },
+              "sensitivity": {
+                "$ref": "#/$defs/Sensitivity"
+              },
+              "effective_data_labels": {
+                "minItems": 2
+              }
+            },
+            "required": [
+              "profile_id",
+              "data_origin",
+              "sensitivity",
+              "effective_data_labels"
+            ]
           }
         },
         {
@@ -3797,6 +3856,462 @@
           }
         }
       ]
+    },
+    "IntakeReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_type",
+        "package_revision_id",
+        "revision_version",
+        "status",
+        "intake_stage",
+        "files",
+        "human_attestation",
+        "suggested_metadata",
+        "suggestion_sources",
+        "gaps",
+        "conflicts",
+        "omitted_chunks",
+        "context_complete",
+        "map_steps",
+        "confirmation",
+        "generated_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0"
+        },
+        "object_type": {
+          "const": "intake_report"
+        },
+        "package_revision_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "revision_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "uploading",
+            "scanning",
+            "extracting",
+            "awaiting_confirmation",
+            "ready",
+            "invalid",
+            "quarantined",
+            "archived"
+          ]
+        },
+        "intake_stage": {
+          "enum": [
+            "no_artifacts",
+            "upload_open",
+            "malware_scan",
+            "extract",
+            "intake_map",
+            "intake_reduce",
+            "awaiting_human_review",
+            "confirmed",
+            "blocked",
+            "archived"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/IntakeReportFile"
+          }
+        },
+        "human_attestation": {
+          "$ref": "#/$defs/IntakeReportHumanAttestation"
+        },
+        "suggested_metadata": {
+          "$ref": "#/$defs/IntakeReportSuggestedMetadata"
+        },
+        "suggestion_sources": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/IntakeReportSuggestionSource"
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/IntakeReportGap"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/IntakeReportConflict"
+          }
+        },
+        "omitted_chunks": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": {
+            "$ref": "#/$defs/IntakeReportOmittedChunk"
+          }
+        },
+        "context_complete": {
+          "type": "boolean"
+        },
+        "map_steps": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/IntakeReportMapStepSummary"
+          }
+        },
+        "confirmation": {
+          "$ref": "#/$defs/IntakeReportConfirmation"
+        },
+        "generated_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
+    },
+    "IntakeReportFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "display_filename",
+        "sha256",
+        "size_bytes",
+        "artifact_kind",
+        "malware_scan_status",
+        "extraction_status",
+        "uploaded_at"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "display_filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "sha256": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 104857600
+        },
+        "artifact_kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "malware_scan_status": {
+          "enum": [
+            "pending",
+            "clean",
+            "infected",
+            "error"
+          ]
+        },
+        "extraction_status": {
+          "enum": [
+            "pending",
+            "succeeded",
+            "failed",
+            "not_applicable"
+          ]
+        },
+        "uploaded_at": {
+          "$ref": "#/$defs/UtcDateTime"
+        }
+      }
+    },
+    "IntakeReportHumanAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_origin",
+        "sensitivity"
+      ],
+      "properties": {
+        "data_origin": {
+          "enum": [
+            "present",
+            "missing"
+          ]
+        },
+        "sensitivity": {
+          "enum": [
+            "present",
+            "missing"
+          ]
+        }
+      }
+    },
+    "IntakeReportSuggestedMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "certification_class",
+        "impact_level"
+      ],
+      "properties": {
+        "profile_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProfileId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "certification_class": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "B",
+            "C",
+            null
+          ]
+        },
+        "impact_level": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "low",
+            "moderate",
+            "high",
+            null
+          ]
+        }
+      }
+    },
+    "IntakeReportSuggestionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "proposed_value",
+        "source_artifact_id",
+        "source_sha256",
+        "source_locator"
+      ],
+      "properties": {
+        "field": {
+          "enum": [
+            "profile_id",
+            "certification_class",
+            "impact_level"
+          ]
+        },
+        "proposed_value": {},
+        "source_artifact_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "source_locator": {
+          "type": "object",
+          "maxProperties": 32
+        },
+        "model_step_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "IntakeReportGap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "IntakeReportConflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "values"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "values": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "maxProperties": 32
+          }
+        }
+      }
+    },
+    "IntakeReportOmittedChunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "segment_id"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "segment_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "IntakeReportMapStepSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_id",
+        "step_key",
+        "status",
+        "validation_outcome",
+        "fact_bundle_sha256",
+        "response_sha256",
+        "prompt_sha256",
+        "llm_call_count",
+        "error_code"
+      ],
+      "properties": {
+        "step_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "step_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "status": {
+          "enum": [
+            "reserved",
+            "running",
+            "completed",
+            "policy_blocked",
+            "failed",
+            "reconciliation_required"
+          ]
+        },
+        "validation_outcome": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{1,63}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fact_bundle_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "response_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "llm_call_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{2,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "IntakeReportConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed",
+        "blockers"
+      ],
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "blockers": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{2,127}$"
+          }
+        }
+      }
     },
     "AuthorizationDecisionRecord": {
       "type": "object",

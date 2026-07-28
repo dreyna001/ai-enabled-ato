@@ -1364,7 +1364,7 @@ async def _audit(
         action=action,
         object_type=object_type,
         object_id=object_id,
-        outcome="success",
+        outcome="succeeded",
         reason_code=None,
         metadata=metadata,
         occurred_at=now,

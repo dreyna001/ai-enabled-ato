@@ -18,6 +18,7 @@ ALLOWLIST_DIRECTORIES: tuple[str, ...] = (
     "docs/requirements",
     "reference/authorities",
     "reference/profiles",
+    "reference/ssp_profiles",
     "deployment/systemd",
     "deployment/nginx",
     "data/qualification",
@@ -47,6 +48,7 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     "docs/RELEASE_PACKAGING.md",
     "docs/AI_EVALUATION_GUIDE.md",
     "docs/THREAT_MODEL.md",
+    "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md",
     "scripts/install.sh",
     "scripts/upgrade.sh",
     "scripts/rollback.sh",
@@ -58,6 +60,8 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     "scripts/verify_release.sh",
     "scripts/compile_analysis_profiles.py",
     "scripts/compile_fisma_analysis_profile.py",
+    "scripts/build_ssp_profile_bundle.py",
+    "scripts/export_ssp_openapi.py",
 )
 
 CONDITIONAL_PORTAL_DIST = "portal/dist"

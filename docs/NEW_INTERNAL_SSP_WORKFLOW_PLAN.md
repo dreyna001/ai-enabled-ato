@@ -14,6 +14,12 @@ cleanup remains deferred pending deployment-data confirmation.
 - Deterministic metrics, versioned edits, contextual patches, approval
   snapshots, revision restore, profile migration, and DOCX/JSON export
 - Legacy package, analysis, and review routes are not mounted
+- Validation completed:
+  - Empty PostgreSQL database migrated through `20260727_0014`
+  - Live PostgreSQL workflow passed from evidence and screenshot intake through
+    generation, editing, agent patching, approval, and JSON/DOCX export
+  - Backend suite: 1,814 passed, 84 explicitly skipped retired/integration tests
+  - Portal suite: 129 passed; production build succeeded
 
 ## Goal
 

@@ -24,6 +24,10 @@ from ato_service.export_service import ExportMutationResult, SelfApprovalDeniedE
 from ato_service.main import create_app
 from ato_service.runtime_config import load_runtime_config_from_dict
 
+pytestmark = pytest.mark.skip(
+    reason="Retired export-approval HTTP routes are not mounted after SSP cutover."
+)
+
 APPROVAL_ID = uuid.UUID("77777777-7777-4777-8777-777777777777")
 IDEMPOTENCY_KEY = "route-idempotency-key"
 

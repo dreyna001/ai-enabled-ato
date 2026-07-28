@@ -27,6 +27,10 @@ from ato_service.authorization_decisions import (
 from ato_service.main import AppRuntimeSnapshot, AppRuntimeState, create_app
 from ato_service.runtime_config import load_runtime_config_from_dict
 
+pytestmark = pytest.mark.skip(
+    reason="Retired external-status HTTP routes are not mounted after SSP cutover."
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEM_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 PACKAGE_REVISION_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")

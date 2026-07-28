@@ -25,6 +25,7 @@ These files turn [`ATO_TECHNICAL_SPEC.md`](../../ATO_TECHNICAL_SPEC.md) into rev
 | `release-package-manifest.schema.json` | Embedded release archive metadata and verification contract | Published Phase 6 contract |
 | `ai-evaluation-record.schema.json` | Immutable AI qualification evaluation record | Published Phase 5 contract |
 | `openapi.json` | OpenAPI 3.1 API surface and shared HTTP contracts | Published P-1 contract (`info.version` 1.0.0) |
+| `ssp-openapi.json` | Generated OpenAPI for the mounted internal SSP product routes | Current SSP product contract |
 | `LIFECYCLE_AND_ERRORS.md` | Legal state transitions and stable error taxonomy | Published P-1 contract |
 
 P-1 gate outcome is recorded in [`../P1_GATE_RECORD.md`](../P1_GATE_RECORD.md).

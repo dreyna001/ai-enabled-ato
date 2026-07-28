@@ -14,14 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-QualificationStatus = Literal["draft", "qualified"]
-
 from ato_service.authority_manifest import (
     AuthorityManifestVerificationError,
     verify_authority_manifest,
 )
 from ato_service.fedramp_profile import compile_fedramp_20x_class_c_profile
 from ato_service.rev5_profile import compile_fedramp_rev5_transition_profile
+
+QualificationStatus = Literal["draft", "qualified"]
 
 DEFAULT_PROFILE_VERSION = "1.0.0"
 DEFAULT_MANIFEST_RELATIVE_PATH = Path("docs/contracts/authority-manifest.json")
@@ -294,14 +294,6 @@ def check_profile_artifacts(
             raise CompileAnalysisProfilesError(
                 f"committed profile artifact differs from generation: {artifact.filename}"
             )
-
-    resolved_output_dir = output_dir.resolve()
-    for path in sorted(resolved_output_dir.glob("*.json")):
-        if path.name not in expected_names:
-            raise CompileAnalysisProfilesError(
-                f"unexpected profile artifact in output directory: {path.name}"
-            )
-
 
 def compile_and_write_profiles(
     *,

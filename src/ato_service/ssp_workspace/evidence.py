@@ -254,7 +254,7 @@ async def ingest_workspace_evidence(
         action="ssp_evidence_uploaded",
         object_type="ssp_workspace",
         object_id=str(workspace_id),
-        outcome="success",
+        outcome="succeeded",
         reason_code=None,
         metadata={
             "evidence_artifact_id": str(artifact_id),

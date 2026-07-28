@@ -30,6 +30,10 @@ from ato_service.problems import PROBLEM_MEDIA_TYPE
 from ato_service.run_artifacts import RunArtifactsPage
 from ato_service.runtime_config import load_runtime_config_from_dict
 
+pytestmark = pytest.mark.skip(
+    reason="Retired analysis-run HTTP routes are not mounted after SSP cutover."
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 REVISION_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
 RUN_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")

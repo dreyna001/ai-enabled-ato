@@ -1330,7 +1330,7 @@
         "tests/ato_service/test_package_search_api.py::test_evaluate_refusal_blocks_authorization_requests",
         "tests/ato_service/test_downstream_contracts.py::test_chat_refuses_authorization_decision_request",
         "tests/ato_service/test_hostile_input_regression.py::test_prompt_injection_fixtures_refuse",
-        "tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration"
+        "tests/ato_service/test_db.py::test_alembic_head_is_ssp_workspace_migration"
       ],
       "verification_type": "Phase 4 Component G PostgreSQL FTS index lifecycle, bounded chat, operator rebuild command, and focused auth/refusal/injection tests; live PostgreSQL integration runs when ATO_TEST_DATABASE_URL is configured",
       "status": "implemented"
@@ -1493,7 +1493,7 @@
         "tests/ato_service/test_package_revisions.py::test_create_persists_uploading_revision_and_records_outcome",
         "tests/ato_service/test_package_revisions.py::test_confirm_rejects_incomplete_metadata_before_draft_lookup",
         "tests/ato_service/test_package_api_routes.py::test_create_package_revision_requires_nullable_fields_in_request_body",
-        "tests/ato_service/test_db.py::test_alembic_head_is_package_search_index_migration"
+        "tests/ato_service/test_db.py::test_alembic_head_is_ssp_workspace_migration"
       ],
       "verification_type": "Metadata-first create/PATCH/confirm contract with nullable pre-ready DB columns (Alembic head 20260717_0013), optimistic-concurrency metadata PATCH through uploading, parent-ready child create gate, and confirm/model fail-closed on incomplete metadata",
       "status": "implemented"

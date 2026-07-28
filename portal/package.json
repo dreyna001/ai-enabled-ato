@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "generate:api": "bash scripts/sync_openapi.sh && openapi-zod-client openapi/portal.openapi.json -o src/api/generated/portalSchemas.ts --export-schemas || echo 'OpenAPI codegen skipped; portal uses src/api/responseSchemas.ts until spec refs are codegen-safe.'",
+    "generate:api": "bash scripts/sync_openapi.sh",
     "sync:openapi": "bash scripts/sync_openapi.sh",
     "test": "vitest run",
     "test:e2e": "playwright test",

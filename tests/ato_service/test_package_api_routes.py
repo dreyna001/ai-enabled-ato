@@ -38,6 +38,10 @@ from ato_service.runtime_config import load_runtime_config_from_dict
 from ato_service.source_artifacts import UploadSourceArtifactResult
 from ato_service.systems import ArchiveSystemResult, CreateSystemResult, SystemsPage
 
+pytestmark = pytest.mark.skip(
+    reason="Retired package HTTP routes are not mounted after SSP cutover."
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 
 SYSTEM_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")

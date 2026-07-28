@@ -31,9 +31,9 @@ P1_GATE_PATH = ROOT / "docs" / "P1_GATE_RECORD.md"
 P0_GATE_PATH = ROOT / "docs" / "P0_GATE_RECORD.md"
 RELEASE_EVIDENCE_INDEX_PATH = ROOT / "docs" / "RELEASE_EVIDENCE_INDEX.md"
 P6_GATE_PATH = ROOT / "docs" / "P6_GATE_RECORD.md"
-MIGRATION_HEAD_REVISION = "20260717_0013"
+MIGRATION_HEAD_REVISION = "20260727_0014"
 MIGRATION_HEAD_PATH = (
-    ROOT / "migrations" / "versions" / "20260717_0013_defer_package_revision_metadata.py"
+    ROOT / "migrations" / "versions" / "20260727_0014_ssp_workspace_foundation.py"
 )
 RUNTIME_DEPLOYMENT_RULE_PATH = (
     ROOT / ".cursor" / "rules" / "ato-runtime-deployment-contract.mdc"
@@ -724,7 +724,7 @@ def test_runtime_deployment_contract_is_persistent_across_active_plans() -> None
         README_PATH: (
             "Every future phase must preserve the cross-cutting "
             "runtime/deployment contract",
-            "not proof of RHEL validation or production release",
+            "legacy source and migrations remain retained but unreachable",
             "RELEASE_EVIDENCE_INDEX.md",
             MIGRATION_HEAD_REVISION,
         ),
@@ -1499,7 +1499,7 @@ def test_phase6_documentation_reconciliation_contract() -> None:
         "missing docs/RELEASE_EVIDENCE_INDEX.md"
     )
     assert P6_GATE_PATH.is_file(), "missing docs/P6_GATE_RECORD.md"
-    assert MIGRATION_HEAD_PATH.is_file(), "missing defer package revision metadata migration"
+    assert MIGRATION_HEAD_PATH.is_file(), "missing SSP workspace foundation migration"
 
     release_index = RELEASE_EVIDENCE_INDEX_PATH.read_text(encoding="utf-8")
     readme = README_PATH.read_text(encoding="utf-8")
@@ -1529,11 +1529,11 @@ def test_phase6_documentation_reconciliation_contract() -> None:
         assert claim not in readme, f"README still contains stale claim: {claim}"
 
     required_readme_fragments = (
-        "ato-intake-worker",
-        "ato-analyzer-worker",
+        "Internal ISSO intake",
+        "NIST SP 800-53 Rev. 5",
         "RELEASE_EVIDENCE_INDEX.md",
         MIGRATION_HEAD_REVISION,
-        "package search",
+        "legacy package and analysis routes are not mounted",
     )
     for fragment in required_readme_fragments:
         assert fragment in readme, (
