@@ -55,6 +55,9 @@ bedrock = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"ato_service.ssp_workspace" = ["schemas/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

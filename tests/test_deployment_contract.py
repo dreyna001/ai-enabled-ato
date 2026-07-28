@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -209,6 +210,21 @@ def test_pyproject_declares_service_and_worker_entrypoints() -> None:
 def test_pyproject_declares_ruff_dev_dependency() -> None:
     text = _read(PYPROJECT)
     assert '"ruff"' in text
+
+
+def test_python_package_includes_ssp_profile_validator_schemas() -> None:
+    document = tomllib.loads(_read(PYPROJECT))
+    package_data = document["tool"]["setuptools"]["package-data"]
+    assert "schemas/*.json" in package_data["ato_service.ssp_workspace"]
+
+    schema_directory = (
+        ROOT / "src" / "ato_service" / "ssp_workspace" / "schemas"
+    )
+    assert {
+        "profile-baselines.schema.json",
+        "profile-bundle-manifest.schema.json",
+        "profile-ssp-requirements.schema.json",
+    } <= {path.name for path in schema_directory.glob("*.json")}
 
 
 def test_pyproject_declares_approved_extraction_dependencies() -> None:
