@@ -251,6 +251,63 @@ def test_contextual_patch_uses_current_revisions_and_question_allowlist() -> Non
     )["revision"] == 3
 
 
+def test_contextual_patch_supplies_omitted_envelope_boilerplate() -> None:
+    profile = _profile()
+    section_id = profile.ssp_required_items[0].item_id
+    request = ContextualEditRequest(
+        system_name="Synthetic System",
+        profile=profile,
+        source_ids=("source-1",),
+        facts=(
+            EvidenceFact(
+                fact_id="fact-1",
+                source_id="source-1",
+                text="The system owner confirmed the system purpose.",
+            ),
+        ),
+        sections=tuple(
+            SspSectionState(
+                section_id=item.item_id,
+                revision=2,
+                content="",
+            )
+            for item in profile.ssp_required_items
+        ),
+        controls=tuple(
+            ControlState(
+                control_id=control.control_id,
+                revision=2,
+                implementation_status="unknown",
+                responsibility="unknown",
+                implementation_statement="",
+            )
+            for control in profile.controls
+        ),
+        open_questions=(),
+        instruction="Apply the confirmed system purpose.",
+    )
+    response = {
+        "patches": [
+            {
+                "target_type": "ssp_section",
+                "target_id": section_id,
+                "expected_revision": 2,
+                "changes": {"content": "The system purpose was confirmed."},
+                "supporting_fact_ids": ["fact-1"],
+            }
+        ],
+        "change_summary": "Updated the confirmed system purpose.",
+    }
+
+    result = _run(generate_contextual_patch(request, lambda _: json.dumps(response)))
+
+    assert result.attempts == 1
+    assert result.repair_attempted is False
+    assert result.value.patches[0].target_id == section_id
+    assert result.value.questions_to_add == ()
+    assert result.value.question_ids_to_resolve == ()
+
+
 def test_contextual_patch_rejects_incomplete_current_state_before_model_call() -> None:
     profile = _profile()
     called = False

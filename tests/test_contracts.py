@@ -31,9 +31,9 @@ P1_GATE_PATH = ROOT / "docs" / "P1_GATE_RECORD.md"
 P0_GATE_PATH = ROOT / "docs" / "P0_GATE_RECORD.md"
 RELEASE_EVIDENCE_INDEX_PATH = ROOT / "docs" / "RELEASE_EVIDENCE_INDEX.md"
 P6_GATE_PATH = ROOT / "docs" / "P6_GATE_RECORD.md"
-MIGRATION_HEAD_REVISION = "20260727_0014"
+MIGRATION_HEAD_REVISION = "20260728_0015"
 MIGRATION_HEAD_PATH = (
-    ROOT / "migrations" / "versions" / "20260727_0014_ssp_workspace_foundation.py"
+    ROOT / "migrations" / "versions" / "20260728_0015_ssp_evidence_removal.py"
 )
 RUNTIME_DEPLOYMENT_RULE_PATH = (
     ROOT / ".cursor" / "rules" / "ato-runtime-deployment-contract.mdc"

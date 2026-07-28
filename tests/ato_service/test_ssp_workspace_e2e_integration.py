@@ -9,7 +9,11 @@ from pathlib import Path
 import pytest
 
 from ato_service.auth_context import AuthenticatedPrincipal
-from ato_service.ssp_workspace.evidence import ingest_workspace_evidence
+from ato_service.ssp_workspace.evidence import (
+    EvidenceRemovalError,
+    ingest_workspace_evidence,
+    remove_workspace_evidence,
+)
 from ato_service.ssp_workspace.profile_bundles import (
     load_profile_bundle,
     resolve_profile,
@@ -129,7 +133,43 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 workspace_id=workspace.workspace_id,
             )
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
-            await ingest_workspace_evidence(
+            screenshot = await ingest_workspace_evidence(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                expected_revision_id=revision_id,
+                filename="system-console.png",
+                media_type="image/png",
+                content=SCREENSHOT_BYTES,
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                blob_store=harness.blob_store,
+                config=harness.config,
+                audit_hmac_key=harness.hmac_key,
+            )
+            envelope = await load_workspace_envelope(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+            )
+            revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            await remove_workspace_evidence(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                evidence_artifact_id=screenshot.evidence_artifact_id,
+                expected_revision_id=revision_id,
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                audit_hmac_key=harness.hmac_key,
+            )
+            envelope = await load_workspace_envelope(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+            )
+            assert [item["display_filename"] for item in envelope["evidence"]] == [
+                "system-overview.txt"
+            ]
+
+            revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            screenshot = await ingest_workspace_evidence(
                 harness.session,
                 workspace_id=workspace.workspace_id,
                 expected_revision_id=revision_id,
@@ -200,6 +240,16 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 now=harness.now,
                 audit_hmac_key=harness.hmac_key,
             )
+            with pytest.raises(EvidenceRemovalError):
+                await remove_workspace_evidence(
+                    harness.session,
+                    workspace_id=workspace.workspace_id,
+                    evidence_artifact_id=screenshot.evidence_artifact_id,
+                    expected_revision_id=generated.revision_id,
+                    actor_id=ACTOR_ID,
+                    now=harness.now,
+                    audit_hmac_key=harness.hmac_key,
+                )
             edited = await save_section_edit(
                 harness.session,
                 workspace_id=workspace.workspace_id,

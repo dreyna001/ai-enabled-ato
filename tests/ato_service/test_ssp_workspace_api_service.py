@@ -30,6 +30,10 @@ def test_workspace_router_exposes_complete_bounded_workflow() -> None:
     assert "/ssp-profiles/import" in paths
     assert "/ssp-workspaces" in paths
     assert "/ssp-workspaces/{workspace_id}/evidence" in paths
+    assert (
+        "/ssp-workspaces/{workspace_id}/evidence/{evidence_artifact_id}"
+        in paths
+    )
     assert "/ssp-workspaces/{workspace_id}/generate" in paths
     assert (
         "/ssp-workspaces/{workspace_id}/agent/patches/{patch_id}/apply"

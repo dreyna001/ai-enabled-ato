@@ -28,8 +28,10 @@ from ato_service.auth_context import (
 from ato_service.blobs import BlobStore, BlobStoreError
 from ato_service.package_rbac import principal_has_role, require_any_package_role
 from ato_service.ssp_workspace.evidence import (
+    EvidenceRemovalError,
     EvidenceUploadError,
     ingest_workspace_evidence,
+    remove_workspace_evidence,
 )
 from ato_service.ssp_workspace.generation import ModelPrompt, SspGenerationError
 from ato_service.ssp_workspace.persistence import WorkspacePersistenceError
@@ -482,6 +484,48 @@ def build_ssp_workspace_router() -> APIRouter:
             TextModelConfigurationError,
             TextModelCallError,
             SspGenerationError,
+        ) as exc:
+            return _error_response(exc)
+
+    @router.delete(
+        "/ssp-workspaces/{workspace_id}/evidence/{evidence_artifact_id}"
+    )
+    async def delete_evidence(
+        workspace_id: uuid.UUID,
+        evidence_artifact_id: uuid.UUID,
+        payload: ExpectedRevisionRequest,
+        principal: Annotated[
+            AuthenticatedPrincipal, Depends(get_mutation_principal)
+        ],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session,
+                principal=principal,
+                workspace_id=workspace_id,
+                roles=("system_owner", "isso"),
+            )
+            await remove_workspace_evidence(
+                session,
+                workspace_id=workspace_id,
+                evidence_artifact_id=evidence_artifact_id,
+                expected_revision_id=payload.expected_revision_id,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(
+                    session, workspace_id=workspace_id
+                ),
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            EvidenceRemovalError,
         ) as exc:
             return _error_response(exc)
 

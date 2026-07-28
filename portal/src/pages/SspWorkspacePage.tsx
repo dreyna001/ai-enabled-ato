@@ -3,8 +3,10 @@ import {
   ClipboardCheck,
   FileStack,
   FileText,
+  FolderOpen,
   HelpCircle,
   LayoutDashboard,
+  Plus,
   ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
@@ -46,6 +48,7 @@ export type SspWorkspacePageProps =
       state: "success";
       workspace: SspWorkspace;
       actions?: SspWorkspaceActions;
+      availableWorkspaces?: Array<{ id: string; name: string }>;
       initialView?: WorkspaceView;
     };
 
@@ -76,10 +79,12 @@ function countForView(
 function SspWorkspaceSuccess({
   workspace,
   actions = {},
+  availableWorkspaces = [],
   initialView = "overview",
 }: {
   workspace: SspWorkspace;
   actions?: SspWorkspaceActions;
+  availableWorkspaces?: Array<{ id: string; name: string }>;
   initialView?: WorkspaceView;
 }) {
   const [view, setView] = useState<WorkspaceView>(initialView);
@@ -97,6 +102,11 @@ function SspWorkspaceSuccess({
   const metrics = calculateSspWorkspaceMetrics(workspace);
   const currentViewLabel =
     NAV_ITEMS.find((item) => item.id === view)?.label ?? "Workspace";
+  const evidenceRemovalAllowed =
+    workspace.sections.every((section) => section.state === "empty") &&
+    workspace.controls.every((control) => control.state === "empty") &&
+    workspace.questions.length === 0 &&
+    workspace.patches.length === 0;
 
   return (
     <div className="min-h-full bg-background">
@@ -118,20 +128,48 @@ function SspWorkspaceSuccess({
               <span className="font-mono">{workspace.revisionId}</span>
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              setAgentContext({
-                targetType: "workspace",
-                targetId: workspace.id,
-                label: workspace.name,
-              })
-            }
-          >
-            <Bot aria-hidden="true" />
-            Ask agent
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {availableWorkspaces.length > 0 && actions.onOpenWorkspace ? (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <FolderOpen className="size-4" aria-hidden="true" />
+                <span className="sr-only">Open system</span>
+                <select
+                  aria-label="Open system"
+                  className="h-9 max-w-64 rounded-md border bg-background px-3 text-sm text-foreground"
+                  value={workspace.id}
+                  onChange={(event) =>
+                    actions.onOpenWorkspace?.(event.target.value)
+                  }
+                >
+                  {availableWorkspaces.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {actions.onNewWorkspace ? (
+              <Button type="button" variant="outline" onClick={actions.onNewWorkspace}>
+                <Plus aria-hidden="true" />
+                New system
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setAgentContext({
+                  targetType: "workspace",
+                  targetId: workspace.id,
+                  label: workspace.name,
+                })
+              }
+            >
+              <Bot aria-hidden="true" />
+              Ask agent
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -187,6 +225,8 @@ function SspWorkspaceSuccess({
             <EvidencePanel
               evidence={workspace.evidence}
               onUpload={actions.onUploadEvidence}
+              onRemove={actions.onRemoveEvidence}
+              removalAllowed={evidenceRemovalAllowed}
             />
           ) : null}
           {view === "ssp" ? (
@@ -262,8 +302,10 @@ export function SspWorkspacePage(props: SspWorkspacePageProps) {
   }
   return (
     <SspWorkspaceSuccess
+      key={props.workspace.id}
       workspace={props.workspace}
       actions={props.actions}
+      availableWorkspaces={props.availableWorkspaces}
       initialView={props.initialView}
     />
   );

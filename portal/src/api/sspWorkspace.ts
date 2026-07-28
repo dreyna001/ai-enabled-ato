@@ -313,7 +313,7 @@ async function workspaceMutation(
   session: SessionInfo,
   workspaceId: string,
   path: string,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "DELETE",
   body?: Record<string, unknown>,
 ): Promise<SspWorkspace> {
   const result = await apiRequest(
@@ -386,6 +386,20 @@ export async function uploadSspEvidence(
     },
   );
   return mapWorkspaceEnvelope(result);
+}
+
+export function removeSspEvidence(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  artifactId: string,
+): Promise<SspWorkspace> {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    `/evidence/${encodeURIComponent(artifactId)}`,
+    "DELETE",
+    { expected_revision_id: workspace.revisionId },
+  );
 }
 
 export async function askSspAgent(

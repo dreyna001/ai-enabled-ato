@@ -49,7 +49,7 @@ an editable SSP, control implementation statements, and tracked questions.
 - **First profile:** Agency FISMA — NIST SP 800-53 Rev. 5, with Low, Moderate, and High baselines stored as an immutable local bundle
 - **Portal:** `/ssp` is the default and only product workflow
 - **API:** `/api/v1/ssp-*` plus health and OIDC session routes; legacy package and analysis routes are not mounted
-- **Alembic head:** `20260727_0014`
+- **Alembic head:** `20260728_0015`
 - **Portability:** identity, model, storage, database, scanner, and secrets remain deployment configuration; agency content is supplied by versioned local bundles
 - **Not claimed:** control assessment, SAP, SAR, POA&M management, authorization decision, continuous monitoring, or FedRAMP profiles
 - **Cutover safety:** legacy source and migrations remain retained but unreachable until an operator confirms that no live deployment depends on them

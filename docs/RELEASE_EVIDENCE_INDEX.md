@@ -2,7 +2,7 @@
 
 **Status:** Phase 6 integration and release gate (2026-07-14); upload-first intake **P0–P7** doc reconciliation (2026-07-17); **metadata-first create** doc reconciliation (2026-07-21)  
 **Repository tip:** snapshot at Phase 6 reconciliation; branch name is historical (`cursor/phase-6-integration-and-release-gate-f4f1`)  
-**Alembic head:** `20260727_0014` (`migrations/versions/20260727_0014_ssp_workspace_foundation.py`) — internal SSP workspace foundation; prior package migrations remain retained for compatibility
+**Alembic head:** `20260728_0015` (`migrations/versions/20260728_0015_ssp_evidence_removal.py`) — auditable pre-analysis evidence removal; prior package migrations remain retained for compatibility
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
 
@@ -54,7 +54,7 @@ This note does **not** claim full product release or close any hard stop. Dev mo
 | Focused contract/operator/release suite | **219 passed** |
 | Non-integration regression (`-m "not integration"`) | **1619 passed**, 1 skipped, 20 deselected |
 | Ruff (`ruff check .`) | **0 errors** |
-| Alembic heads | **single head `20260727_0014`** |
+| Alembic heads | **single head `20260728_0015`** |
 | Portal vitest | **22 passed** |
 | Portal production build | **PASS** |
 | Playwright mocked rendering/authz | **6 passed** |
@@ -80,7 +80,7 @@ Historical doc-reconciliation record (unchanged gate record [`P6_GATE_RECORD.md`
 | --- | --- | --- |
 | Drill catalog and dispatch | [`src/ato_operator/drill_catalog.py`](../src/ato_operator/drill_catalog.py), [`drill_handlers.py`](../src/ato_operator/drill_handlers.py) | Dry-run default; hard-stop claims never close from mocks |
 | Drill record persistence | [`src/ato_operator/drill_records.py`](../src/ato_operator/drill_records.py) | Append-only under operator-supplied root |
-| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260727_0014` |
+| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260728_0015` |
 | Audit chain verify | [`src/ato_operator/audit_verify.py`](../src/ato_operator/audit_verify.py) | Requires live PostgreSQL for full chain walk |
 
 Live customer validation drills on RHEL hosts: **environment-not-run**.
@@ -95,9 +95,9 @@ Live customer validation drills on RHEL hosts: **environment-not-run**.
 
 | Check | Path | Expected head |
 | --- | --- | --- |
-| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260727_0014` |
-| Head assertion tests | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | `20260727_0014` |
-| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260727_0014` |
+| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260728_0015` |
+| Head assertion tests | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | `20260728_0015` |
+| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260728_0015` |
 
 ## Release package verification
 

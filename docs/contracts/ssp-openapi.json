@@ -1549,6 +1549,99 @@
         ]
       }
     },
+    "/ssp-workspaces/{workspace_id}/evidence/{evidence_artifact_id}": {
+      "delete": {
+        "operationId": "delete_evidence_api_v1_ssp_workspaces__workspace_id__evidence__evidence_artifact_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Evidence",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
     "/ssp-workspaces/{workspace_id}/exports/{export_format}": {
       "get": {
         "operationId": "get_export_api_v1_ssp_workspaces__workspace_id__exports__export_format__get",

@@ -258,7 +258,10 @@ async def load_workspace_envelope(
         (
             await session.execute(
                 select(SspEvidenceArtifact)
-                .where(SspEvidenceArtifact.workspace_id == workspace_id)
+                .where(
+                    SspEvidenceArtifact.workspace_id == workspace_id,
+                    SspEvidenceArtifact.removed_at.is_(None),
+                )
                 .order_by(SspEvidenceArtifact.uploaded_at.desc())
             )
         ).scalars()
@@ -729,6 +732,7 @@ async def approve_workspace_revision(
         await session.execute(
             select(SspEvidenceArtifact.evidence_artifact_id).where(
                 SspEvidenceArtifact.workspace_id == workspace_id,
+                SspEvidenceArtifact.removed_at.is_(None),
                 SspEvidenceArtifact.status.in_(("uploaded", "processing")),
             )
         )

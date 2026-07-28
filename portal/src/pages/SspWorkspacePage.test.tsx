@@ -191,4 +191,84 @@ describe("SspWorkspacePage", () => {
     });
     expect(screen.queryByText("ISSO approved")).not.toBeInTheDocument();
   });
+
+  it("opens another system and starts a new-system flow from the workspace header", () => {
+    const onOpenWorkspace = vi.fn();
+    const onNewWorkspace = vi.fn();
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspaceFixture()}
+        availableWorkspaces={[
+          { id: "workspace-1", name: "Grants Intake Management" },
+          { id: "workspace-2", name: "Case Review System" },
+        ]}
+        actions={{ onOpenWorkspace, onNewWorkspace }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Open system"), {
+      target: { value: "workspace-2" },
+    });
+    expect(onOpenWorkspace).toHaveBeenCalledWith("workspace-2");
+
+    fireEvent.click(screen.getByRole("button", { name: "New system" }));
+    expect(onNewWorkspace).toHaveBeenCalledOnce();
+  });
+
+  it("confirms evidence removal before analysis starts", () => {
+    const onRemoveEvidence = vi.fn();
+    const workspace = workspaceFixture();
+    workspace.sections = workspace.sections.map((section) => ({
+      ...section,
+      content: "",
+      state: "empty",
+      satisfiedRequirementIds: [],
+      evidenceLinks: [],
+    }));
+    workspace.controls = workspace.controls.map((control) => ({
+      ...control,
+      statement: "",
+      state: "empty",
+      evidenceLinks: [],
+      unresolvedReason: null,
+    }));
+    workspace.questions = [];
+    workspace.patches = [];
+
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspace}
+        initialView="evidence"
+        actions={{ onRemoveEvidence }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove architecture.png" }),
+    );
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove evidence" }));
+    expect(onRemoveEvidence).toHaveBeenCalledWith("artifact-1");
+  });
+
+  it("does not allow evidence removal after analysis has started", () => {
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspaceFixture()}
+        initialView="evidence"
+        actions={{ onRemoveEvidence: vi.fn() }}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Remove architecture.png" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Evidence cannot be removed after analysis has started."),
+    ).toBeInTheDocument();
+  });
 });

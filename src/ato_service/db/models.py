@@ -2185,6 +2185,8 @@ class SspEvidenceArtifact(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     failure_code: Mapped[str | None] = mapped_column(String(128))
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    removed_by: Mapped[str | None] = mapped_column(String(255))
 
     __table_args__ = (
         UniqueConstraint(
@@ -2238,6 +2240,12 @@ class SspEvidenceArtifact(Base):
         CheckConstraint(
             "char_length(uploaded_by) >= 1",
             name="ck_ssp_evidence_artifacts_uploaded_by_min_length",
+        ),
+        CheckConstraint(
+            "(removed_at IS NULL AND removed_by IS NULL) OR "
+            "(removed_at IS NOT NULL AND removed_by IS NOT NULL "
+            "AND char_length(removed_by) >= 1)",
+            name="ck_ssp_evidence_artifacts_removal_fields",
         ),
         ck.regex_check(
             "failure_code",

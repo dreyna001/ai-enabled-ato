@@ -8,14 +8,14 @@ cleanup remains deferred pending deployment-data confirmation.
 - Backend product boundary: `src/ato_service/ssp_workspace/`
 - Portal product route: `/ssp`
 - API product routes: `/api/v1/ssp-*`
-- Database migration: `20260727_0014`
+- Database migration: `20260728_0015`
 - Built-in offline profile: NIST SP 800-53 Rev. 5.2.0 with Low, Moderate, and
   High baselines
 - Deterministic metrics, versioned edits, contextual patches, approval
   snapshots, revision restore, profile migration, and DOCX/JSON export
 - Legacy package, analysis, and review routes are not mounted
 - Validation completed:
-  - Empty PostgreSQL database migrated through `20260727_0014`
+  - Empty PostgreSQL database migrated through `20260728_0015`
   - Live PostgreSQL workflow passed from evidence and screenshot intake through
     generation, editing, agent patching, approval, and JSON/DOCX export
   - Backend suite: 1,814 passed, 84 explicitly skipped retired/integration tests

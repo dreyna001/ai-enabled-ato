@@ -9,6 +9,7 @@ import {
   generateSspWorkspace,
   listSspProfiles,
   listSspWorkspaces,
+  removeSspEvidence,
   rejectSspPatch,
   saveSspControl,
   saveSspSection,
@@ -24,11 +25,13 @@ import { formatApiError } from "@/utils/formatApiError";
 
 export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
   const [workspace, setWorkspace] = useState<SspWorkspace | null>(null);
+  const [workspaces, setWorkspaces] = useState<SspWorkspace[]>([]);
   const [profiles, setProfiles] = useState<SspProfile[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [newSystemName, setNewSystemName] = useState("");
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [impactLevel, setImpactLevel] =
     useState<"low" | "moderate" | "high">("moderate");
 
@@ -39,7 +42,12 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
         listSspWorkspaces(),
         listSspProfiles(),
       ]);
-      setWorkspace(workspaceRows[0] ?? null);
+      setWorkspaces(workspaceRows);
+      setWorkspace((current) =>
+        workspaceRows.find((item) => item.id === current?.id) ??
+        workspaceRows[0] ??
+        null,
+      );
       setProfiles(profileRows);
       setError("");
       setState("ready");
@@ -58,7 +66,11 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
       if (!workspace || busy) return;
       setBusy(true);
       try {
-        setWorkspace(await operation(workspace));
+        const updated = await operation(workspace);
+        setWorkspace(updated);
+        setWorkspaces((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
+        );
         setError("");
       } catch (caught) {
         setError(formatApiError(caught));
@@ -74,7 +86,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
     return <SspWorkspacePage state="error" message={error} onRetry={() => void load()} />;
   }
 
-  if (!workspace) {
+  if (!workspace || creatingWorkspace) {
     const activeProfile = profiles.find((item) => item.status === "active");
     return (
       <Card className="mx-auto max-w-xl">
@@ -100,6 +112,12 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
                 )
                 .then((created) => {
                   setWorkspace(created);
+                  setWorkspaces((current) => [
+                    created,
+                    ...current.filter((item) => item.id !== created.id),
+                  ]);
+                  setCreatingWorkspace(false);
+                  setNewSystemName("");
                   setError("");
                 })
                 .catch((caught) => setError(formatApiError(caught)))
@@ -144,6 +162,20 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             >
               Create workspace
             </Button>
+            {workspace ? (
+              <Button
+                className="ml-2"
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setCreatingWorkspace(false);
+                  setError("");
+                }}
+              >
+                Cancel
+              </Button>
+            ) : null}
           </form>
         </CardContent>
       </Card>
@@ -160,8 +192,24 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
       <SspWorkspacePage
         state="success"
         workspace={workspace}
+        availableWorkspaces={workspaces.map((item) => ({
+          id: item.id,
+          name: item.name,
+        }))}
         actions={{
           onRetry: () => void load(),
+          onOpenWorkspace: (workspaceId) => {
+            const selected = workspaces.find((item) => item.id === workspaceId);
+            if (selected) {
+              setWorkspace(selected);
+              setError("");
+            }
+          },
+          onNewWorkspace: () => {
+            setCreatingWorkspace(true);
+            setNewSystemName("");
+            setError("");
+          },
           onUploadEvidence: (files) => {
             if (busy) return;
             setBusy(true);
@@ -171,10 +219,17 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
                 current = await uploadSspEvidence(session, current, file);
               }
               setWorkspace(current);
+              setWorkspaces((items) =>
+                items.map((item) => (item.id === current.id ? current : item)),
+              );
             })()
               .catch((caught) => setError(formatApiError(caught)))
               .finally(() => setBusy(false));
           },
+          onRemoveEvidence: (artifactId) =>
+            void run((current) =>
+              removeSspEvidence(session, current, artifactId),
+            ),
           onGenerate: () => void run((current) => generateSspWorkspace(session, current)),
           onSaveSection: (change) =>
             void run((current) => saveSspSection(session, current, change)),

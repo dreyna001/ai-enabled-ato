@@ -588,7 +588,7 @@ def test_create_session_factory_does_not_connect() -> None:
 def test_alembic_head_is_ssp_workspace_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260727_0014"
+    assert script.get_current_head() == "20260728_0015"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:

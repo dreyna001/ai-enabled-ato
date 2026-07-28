@@ -50,7 +50,7 @@ def _session() -> MagicMock:
 
 def test_migration_is_single_head_and_declares_workspace_tables() -> None:
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    assert script.get_current_head() == "20260727_0014"
+    assert script.get_current_head() == "20260728_0015"
     source = MIGRATION.read_text(encoding="utf-8")
     for table in (
         "ssp_profile_versions",
@@ -75,6 +75,8 @@ def test_direct_evidence_has_storage_and_extraction_contract() -> None:
         "size_bytes",
         "detected_format",
         "extracted_segments",
+        "removed_at",
+        "removed_by",
     } <= set(table.c.keys())
     ddl = str(CreateTable(table).compile(dialect=postgresql.dialect()))
     assert "ck_ssp_evidence_artifacts_storage_key_matches_sha256" in ddl

@@ -215,7 +215,7 @@ async def generate_contextual_patch(
 
     def parse(raw_text: str) -> PatchResult:
         return parse_patch_response(
-            raw_text,
+            _normalize_patch_envelope(raw_text),
             allowed_section_ids=section_ids,
             allowed_control_ids=control_ids,
             allowed_fact_ids=fact_ids,
@@ -228,6 +228,20 @@ async def generate_contextual_patch(
         user=_patch_user_prompt(request, instruction=instruction),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
+
+
+def _normalize_patch_envelope(raw_text: str) -> str:
+    """Supply deterministic boilerplate that models commonly omit."""
+    try:
+        payload = json.loads(raw_text)
+    except (json.JSONDecodeError, TypeError):
+        return raw_text
+    if not isinstance(payload, dict):
+        return raw_text
+    payload.setdefault("schema_version", PATCH_SCHEMA_VERSION)
+    payload.setdefault("questions_to_add", [])
+    payload.setdefault("question_ids_to_resolve", [])
+    return _canonical_json(payload)
 
 
 async def _invoke_with_one_repair(

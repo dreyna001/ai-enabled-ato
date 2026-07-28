@@ -277,6 +277,7 @@ async def _validate_evidence_references(
     result = await session.execute(
         select(SspEvidenceArtifact.evidence_artifact_id).where(
             SspEvidenceArtifact.workspace_id == workspace_id,
+            SspEvidenceArtifact.removed_at.is_(None),
             SspEvidenceArtifact.evidence_artifact_id.in_(expected),
         )
     )

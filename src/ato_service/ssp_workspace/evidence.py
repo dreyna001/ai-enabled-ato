@@ -17,12 +17,18 @@ from ato_service.extraction.router import extract_content
 from ato_service.extraction.types import ExtractionContext, VisionPolicy
 from ato_service.runtime_config import RuntimeConfig
 from ato_service.ssp_workspace.contracts import (
+    ControlState,
     EvidenceLink,
     FactContent,
     Provenance,
     RevisionContent,
+    SectionState,
 )
-from ato_service.ssp_workspace.persistence import save_revision
+from ato_service.ssp_workspace.persistence import (
+    StaleWorkspaceRevisionError,
+    WorkspaceNotFoundError,
+    save_revision,
+)
 from ato_service.ssp_workspace.vision import (
     VisionConfigurationError,
     VisionExtractionError,
@@ -33,6 +39,10 @@ from ato_service.ssp_workspace.vision import (
 
 class EvidenceUploadError(ValueError):
     error_code = "evidence_upload_failed"
+
+
+class EvidenceRemovalError(ValueError):
+    error_code = "illegal_state_transition"
 
 
 async def ingest_workspace_evidence(
@@ -106,6 +116,67 @@ async def ingest_workspace_evidence(
         )
     ).scalar_one_or_none()
     if duplicate is not None:
+        if duplicate.removed_at is not None:
+            duplicate.removed_at = None
+            duplicate.removed_by = None
+            restored_facts = tuple(
+                FactContent(
+                    key=str(segment["fact_key"]),
+                    value=segment["text"],
+                    provenance=Provenance.EXTRACTED,
+                    evidence=(
+                        EvidenceLink(
+                            artifact_id=duplicate.evidence_artifact_id,
+                            locator=dict(segment["locator"]),
+                        ),
+                    ),
+                )
+                for segment in duplicate.extracted_segments
+                if all(
+                    key in segment
+                    for key in ("fact_key", "text", "locator")
+                )
+                and isinstance(segment["locator"], dict)
+            )
+            if restored_facts:
+                current = RevisionContent.model_validate(revision.content)
+                fact_by_key = {item.key: item for item in current.facts}
+                for fact in restored_facts:
+                    fact_by_key[fact.key] = fact
+                await save_revision(
+                    session,
+                    workspace_id=workspace_id,
+                    content=current.model_copy(
+                        update={
+                            "facts": tuple(
+                                fact_by_key[key] for key in sorted(fact_by_key)
+                            )
+                        }
+                    ),
+                    created_by=actor_id,
+                    now=now,
+                    expected_revision_id=expected_revision_id,
+                )
+            await append_audit_event(
+                session,
+                hmac_key=audit_hmac_key,
+                actor_type="user",
+                actor_id=actor_id,
+                action="ssp_evidence_restored",
+                object_type="ssp_workspace",
+                object_id=str(workspace_id),
+                outcome="succeeded",
+                reason_code=None,
+                metadata={
+                    "evidence_artifact_id": str(
+                        duplicate.evidence_artifact_id
+                    ),
+                    "sha256": duplicate.sha256,
+                    "fact_count": len(restored_facts),
+                },
+                occurred_at=now,
+            )
+            await session.flush()
         return duplicate
 
     artifact_id = uuid.uuid4()
@@ -228,6 +299,8 @@ async def ingest_workspace_evidence(
         uploaded_at=now,
         processed_at=now,
         failure_code=failure_code,
+        removed_at=None,
+        removed_by=None,
     )
     session.add(artifact)
     await session.flush()
@@ -261,6 +334,134 @@ async def ingest_workspace_evidence(
             "sha256": stored.sha256,
             "status": status,
             "fact_count": len(facts),
+        },
+        occurred_at=now,
+    )
+    return artifact
+
+
+async def remove_workspace_evidence(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    evidence_artifact_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> Any:
+    """Hide one artifact and remove its extracted facts before analysis begins."""
+
+    from ato_service.db.models import (
+        SspAgentPatch,
+        SspEvidenceArtifact,
+        SspWorkspace,
+        SspWorkspaceRevision,
+    )
+
+    workspace = (
+        await session.execute(
+            select(SspWorkspace)
+            .where(SspWorkspace.workspace_id == workspace_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if workspace is None:
+        raise WorkspaceNotFoundError("workspace not found")
+    if workspace.current_revision_id != expected_revision_id:
+        raise StaleWorkspaceRevisionError("workspace revision changed")
+    revision = (
+        await session.execute(
+            select(SspWorkspaceRevision).where(
+                SspWorkspaceRevision.revision_id == expected_revision_id,
+                SspWorkspaceRevision.workspace_id == workspace_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if revision is None:
+        raise WorkspaceNotFoundError("workspace revision not found")
+
+    content = RevisionContent.model_validate(revision.content)
+    analysis_started = (
+        any(item.state is not SectionState.EMPTY for item in content.sections)
+        or any(item.state is not ControlState.EMPTY for item in content.controls)
+        or bool(content.questions)
+        or (
+            await session.execute(
+                select(SspAgentPatch.patch_id).where(
+                    SspAgentPatch.workspace_id == workspace_id
+                )
+            )
+        ).first()
+        is not None
+    )
+    if analysis_started:
+        raise EvidenceRemovalError(
+            "evidence can be removed only before generation or agent analysis"
+        )
+
+    artifact = (
+        await session.execute(
+            select(SspEvidenceArtifact)
+            .where(
+                SspEvidenceArtifact.workspace_id == workspace_id,
+                SspEvidenceArtifact.evidence_artifact_id == evidence_artifact_id,
+                SspEvidenceArtifact.removed_at.is_(None),
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if artifact is None:
+        raise WorkspaceNotFoundError("active evidence artifact not found")
+
+    def without_artifact(links: tuple[EvidenceLink, ...]) -> tuple[EvidenceLink, ...]:
+        return tuple(
+            link for link in links if link.artifact_id != evidence_artifact_id
+        )
+
+    retained_facts: list[FactContent] = []
+    for fact in content.facts:
+        links = without_artifact(fact.evidence)
+        if not links and fact.evidence:
+            continue
+        retained_facts.append(fact.model_copy(update={"evidence": links}))
+    updated = content.model_copy(
+        update={
+            "facts": tuple(retained_facts),
+            "sections": tuple(
+                item.model_copy(update={"evidence": without_artifact(item.evidence)})
+                for item in content.sections
+            ),
+            "controls": tuple(
+                item.model_copy(update={"evidence": without_artifact(item.evidence)})
+                for item in content.controls
+            ),
+        }
+    )
+    await save_revision(
+        session,
+        workspace_id=workspace_id,
+        content=updated,
+        created_by=actor_id,
+        now=now,
+        expected_revision_id=expected_revision_id,
+    )
+    artifact.removed_at = now
+    artifact.removed_by = actor_id
+    await session.flush()
+    await append_audit_event(
+        session,
+        hmac_key=audit_hmac_key,
+        actor_type="user",
+        actor_id=actor_id,
+        action="ssp_evidence_removed",
+        object_type="ssp_workspace",
+        object_id=str(workspace_id),
+        outcome="succeeded",
+        reason_code=None,
+        metadata={
+            "evidence_artifact_id": str(evidence_artifact_id),
+            "sha256": artifact.sha256,
         },
         occurred_at=now,
     )

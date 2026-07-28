@@ -858,7 +858,7 @@ def test_install_script_supports_dry_run_contract_validation(install_text: str) 
     assert "--dry-run" in install_text
     assert "run_install_dry_run" in install_text
     assert "validate_migration_head_contract" in install_text
-    assert 'EXPECTED_MIGRATION_HEAD="20260727_0014"' in install_text
+    assert 'EXPECTED_MIGRATION_HEAD="20260728_0015"' in install_text
     assert "--dry-run cannot be combined with --migrate" in install_text
 
 
@@ -888,7 +888,7 @@ def test_install_script_dry_run_succeeds_without_root() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "Install dry-run complete" in result.stdout
-    assert "20260727_0014" in result.stdout
+    assert "20260728_0015" in result.stdout
 
 
 @requires_bash

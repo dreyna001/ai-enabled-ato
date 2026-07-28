@@ -1,5 +1,12 @@
-import { FileUp, Image, LoaderCircle, TriangleAlert } from "lucide-react";
-import { useRef } from "react";
+import {
+  FileUp,
+  Image,
+  LoaderCircle,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
+import { useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,11 +29,17 @@ function stateVariant(state: EvidenceArtifact["state"]) {
 export function EvidencePanel({
   evidence,
   onUpload,
+  onRemove,
+  removalAllowed = false,
 }: {
   evidence: EvidenceArtifact[];
   onUpload?: (files: File[]) => void;
+  onRemove?: (artifactId: string) => void;
+  removalAllowed?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pendingRemoval, setPendingRemoval] =
+    useState<EvidenceArtifact | null>(null);
 
   return (
     <div className="space-y-4">
@@ -109,15 +122,50 @@ export function EvidencePanel({
                       ) : null}
                     </div>
                   </div>
-                  <Badge variant={stateVariant(artifact.state)}>
-                    {evidenceStateLabel(artifact.state)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={stateVariant(artifact.state)}>
+                      {evidenceStateLabel(artifact.state)}
+                    </Badge>
+                    {removalAllowed && onRemove ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Remove ${artifact.name}`}
+                        onClick={() => setPendingRemoval(artifact)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
+          {evidence.length > 0 && !removalAllowed ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Evidence cannot be removed after analysis has started.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title="Remove evidence?"
+        description={
+          pendingRemoval
+            ? `Remove "${pendingRemoval.name}" from this workspace?`
+            : ""
+        }
+        confirmLabel="Remove evidence"
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (!pendingRemoval) return;
+          onRemove?.(pendingRemoval.id);
+          setPendingRemoval(null);
+        }}
+      />
     </div>
   );
 }
