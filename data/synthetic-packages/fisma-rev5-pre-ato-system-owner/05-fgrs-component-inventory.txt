@@ -1,0 +1,8 @@
+Component | Purpose | Version | Quantity | Connectivity
+fgrs-web | Web application | 3.4.2 | 3 | Internal ingress
+fgrs-api | Application API | 3.4.2 | 3 | Private service
+fgrs-worker | Background processing | 3.4.2 | 2 | Private service
+postgresql | Managed relational database | 16 | HA pair | Private subnet
+object-storage | Supporting document storage | Managed | Regional | Private endpoint
+central-log-forwarder | Audit and operational log forwarding | Agency managed | 2 | Shared service
+secret-service | Runtime secret delivery | Agency managed | Regional | Shared service

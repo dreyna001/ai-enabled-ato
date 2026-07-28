@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0.0",
+  "package_id": "fgrs-pre-ato-system-owner-1.0",
+  "system_name": "Federal Grants Review System",
+  "system_identifier": "FGRS-PRD",
+  "synthetic": true,
+  "purpose": "Lowest-common-denominator SSP and control generation evaluation",
+  "files": [
+    {
+      "filename": "01-fgrs-product-and-architecture.docx",
+      "sha256": "0387bd164be36d3d6ec55f2e6e9b425f57bf1893b5dfe4f0ab65e46891f5dea3",
+      "size_bytes": 193553
+    },
+    {
+      "filename": "02-fgrs-production-operations-guide.docx",
+      "sha256": "128d273416a143dbe176ed80b5457d5f0f3e09b646e48f95324389a19d8515d5",
+      "size_bytes": 95138
+    },
+    {
+      "filename": "03-fgrs-user-access-procedures.docx",
+      "sha256": "ab138d3a760d33f7829b195d2f6ccb6ffd18ba00eec1108eb752d3c923bed50d",
+      "size_bytes": 38239
+    },
+    {
+      "filename": "04-fgrs-production-config.json",
+      "sha256": "42a8cb995b6d45ff7db6433600bce25002f53d391756e539d72545e665852718",
+      "size_bytes": 1495
+    },
+    {
+      "filename": "05-fgrs-component-inventory.txt",
+      "sha256": "90c9f99eaab82a22f41d14780d343bb5d27da6568e82f7b0848d19f808e81661",
+      "size_bytes": 580
+    },
+    {
+      "filename": "README.md",
+      "sha256": "21614ce5c362ce4a9f845db1db9d642ae7ae9e1aaee05d9e459896627eca53a6",
+      "size_bytes": 942
+    },
+    {
+      "filename": "diagram-01-production-architecture.png",
+      "sha256": "1c55844e536577281de6c7fb7e81989d96ccc6851ddbb1c207a8145accdabdf2",
+      "size_bytes": 87832
+    },
+    {
+      "filename": "diagram-02-business-data-flow.png",
+      "sha256": "acd44c215722797a4287dc5c7b36ba7e4bdf6b1235b76a4574ce9cc2724c64eb",
+      "size_bytes": 84086
+    },
+    {
+      "filename": "diagram-03-operations-flow.png",
+      "sha256": "7e4978bb6c51289f3d689aaeb91e3d1694ad679e4737686df1465d8600e1c944",
+      "size_bytes": 65064
+    }
+  ]
+}

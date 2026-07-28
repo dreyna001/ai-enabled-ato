@@ -1,0 +1,58 @@
+{
+  "application": {
+    "environment": "production",
+    "name": "Federal Grants Review System",
+    "release": "3.4.2",
+    "short_name": "FGRS",
+    "system_identifier": "FGRS-PRD"
+  },
+  "backup": {
+    "daily_retention_days": 35,
+    "database_frequency": "nightly",
+    "monthly_retention_months": 12,
+    "point_in_time_recovery": true,
+    "recovery_point_hours": 24,
+    "recovery_time_hours": 8,
+    "restore_test_frequency": "quarterly"
+  },
+  "encryption": {
+    "backup_at_rest": "separate_agency_managed_key",
+    "database_at_rest": "agency_managed_key",
+    "minimum_tls": "1.2",
+    "object_storage_at_rest": "agency_managed_key"
+  },
+  "hosting": {
+    "deployment_type": "managed_kubernetes",
+    "network_exposure": "agency_internal_only",
+    "platform": "agency_enterprise_cloud",
+    "replicas": {
+      "api": 3,
+      "web": 3,
+      "worker": 2
+    }
+  },
+  "integrations": [
+    "agency_identity_provider",
+    "application_intake_service",
+    "agency_siem",
+    "agency_email_relay",
+    "agency_vulnerability_scanner",
+    "agency_backup_vault"
+  ],
+  "logging": {
+    "archive_days": 365,
+    "destination": "agency_siem",
+    "forwarding_target_minutes": 5,
+    "searchable_days": 90,
+    "sensitive_value_logging": false
+  },
+  "secrets_included": false,
+  "session": {
+    "absolute_timeout_hours": 12,
+    "failed_attempt_threshold": 5,
+    "idle_timeout_minutes": 15,
+    "lockout_minutes": 30,
+    "maximum_concurrent_sessions": 2
+  },
+  "synthetic": true
+}
