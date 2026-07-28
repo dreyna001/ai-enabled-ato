@@ -151,13 +151,17 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
   const facts = content.facts;
   const satisfied = new Set(envelope.satisfied_requirement_ids);
   const latestApproval = envelope.approvals[0];
+  const categorizationConfirmed =
+    factValue(facts, "system.categorization_status") === "confirmed";
 
   return {
     id: envelope.workspace_id,
     name: envelope.system.display_name,
     purpose: factValue(facts, "system.purpose"),
     hosting: factValue(facts, "system.hosting_model"),
-    impactLevel: envelope.profile.impact_level ?? "",
+    impactLevel: categorizationConfirmed
+      ? envelope.profile.impact_level ?? ""
+      : "",
     provisionalImpactLevel: envelope.profile.provisional_impact_level,
     categorization: {
       confidentiality: factValue(facts, "system.confidentiality_impact") as
@@ -187,16 +191,14 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
         facts,
         "system.availability_impact_rationale",
       ),
-      confirmed:
-        factValue(facts, "system.categorization_status") === "confirmed" ||
-        envelope.profile.impact_level !== null,
+      confirmed: categorizationConfirmed,
     },
     authorizationPath: factValue(facts, "system.authorization_path"),
     profile: {
       id: envelope.profile.profile_version_id,
       name: envelope.profile.profile_id,
       version: envelope.profile.version,
-      baseline: envelope.profile.impact_level
+      baseline: categorizationConfirmed && envelope.profile.impact_level
         ? (envelope.profile.impact_level.charAt(0).toUpperCase() +
             envelope.profile.impact_level.slice(1)) as
             | "Low"

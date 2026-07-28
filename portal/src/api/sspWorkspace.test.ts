@@ -25,6 +25,13 @@ describe("mapWorkspaceEnvelope", () => {
         content: {
           facts: [
             {
+              key: "system.categorization_status",
+              value: "confirmed",
+              provenance: "isso_entered",
+              evidence: [],
+              state: "active",
+            },
+            {
               key: "system.purpose",
               value: "Manages internal cases.",
               provenance: "isso_entered",
