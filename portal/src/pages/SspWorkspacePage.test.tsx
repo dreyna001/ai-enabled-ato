@@ -130,6 +130,26 @@ describe("SspWorkspacePage", () => {
     expect(screen.getByText("How often are privileged roles reviewed?")).toBeInTheDocument();
   });
 
+  it("shows generation progress and disables repeated generation", () => {
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspaceFixture()}
+        generationPending
+        actions={{ onGenerate: vi.fn() }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Generating documents…" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("status"),
+    ).toHaveTextContent(
+      "Analyzing evidence and drafting supported SSP content.",
+    );
+  });
+
   it("opens the agent in the selected control context and forwards the instruction", () => {
     const onAskAgent = vi.fn();
     render(

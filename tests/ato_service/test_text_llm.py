@@ -83,7 +83,7 @@ def test_openai_example_loads_and_builds_client_with_api_key_file(
 
     assert isinstance(client, OpenAICompatibleTextClient)
     assert client.provider == "openai_compatible"
-    assert client.model_name == "gpt-4o-mini"
+    assert client.model_name == "gpt-4.1"
 
 
 def test_bedrock_example_resolves_settings_without_endpoint_url(tmp_path: Path) -> None:
@@ -144,6 +144,38 @@ def test_openai_client_posts_chat_completion(tmp_path: Path) -> None:
     posted = http_client.post.call_args.kwargs["json"]
     assert posted["model"] == "gpt-4o-mini"
     assert posted["messages"][-1]["content"] == "hello"
+
+
+def test_internal_openai_compatible_client_can_omit_authorization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _dev_config(
+        ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS=True,
+        TEXT_MODEL_PROVIDER="openai_compatible",
+        TEXT_MODEL_ENDPOINT_URL="http://127.0.0.1:11434/v1",
+        TEXT_MODEL_NAME="operator-local-model",
+        TEXT_MODEL_PROFILE_ID="local-openai-compatible-8k",
+        TEXT_MODEL_AUTH_MODE="none",
+        TEXT_MODEL_ENDPOINT_PROFILE="internal_openai_compatible",
+    )
+    client = build_text_model_client(config)
+    response = httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": "local-ok"}}]},
+        request=httpx.Request("POST", "http://127.0.0.1:11434/v1/chat/completions"),
+    )
+
+    with patch("ato_service.text_llm.httpx.Client") as client_cls:
+        http_client = MagicMock()
+        http_client.__enter__.return_value = http_client
+        http_client.post.return_value = response
+        client_cls.return_value = http_client
+
+        assert client.complete([ChatMessage(role="user", content="hello")]) == "local-ok"
+
+    headers = http_client.post.call_args.kwargs["headers"]
+    assert "Authorization" not in headers
 
 
 def test_openai_client_raises_on_invalid_response_shape() -> None:

@@ -152,14 +152,16 @@ $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/test_deploymen
 
 Configuration precedence, production paths, capability flags, and text LLM setup: [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md). Operator install flow: [`deployment/README.md`](deployment/README.md).
 
-## Text LLM (OpenAI or Bedrock)
+## Text LLM (local, OpenAI, or Bedrock)
 
-Set `TEXT_MODEL_PROVIDER` in runtime JSON to choose the text-model backend:
+Set `TEXT_MODEL_PROVIDER`, transport-specific model ID, and
+`TEXT_MODEL_PROFILE_ID`. Provider-neutral limits come from the single catalog at
+`src/ato_service/text_model_catalog.json`.
 
 | Provider | Use when | Required JSON | Secrets |
 | --- | --- | --- | --- |
-| `openai_compatible` (default) | Local OpenAI or any OpenAI-compatible endpoint | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME` | Dev: `ATO_TEXT_MODEL_API_KEY_FILE`. Prod: `TEXT_MODEL_CREDENTIAL_REFERENCE` |
-| `aws_bedrock` | Work environments using AWS Bedrock | `AWS_REGION`, `TEXT_MODEL_NAME` (Bedrock model ID) | Standard AWS credential chain (`AWS_PROFILE`, env keys, or instance role). Install `pip install -e ".[bedrock]"` |
+| `openai_compatible` (default) | OpenAI or any local/on-prem OpenAI-compatible endpoint | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME`, `TEXT_MODEL_PROFILE_ID` | API key, or `TEXT_MODEL_AUTH_MODE=none` for approved internal endpoints |
+| `aws_bedrock` | Enterprise AWS Bedrock | `AWS_REGION`, `TEXT_MODEL_NAME`, `TEXT_MODEL_PROFILE_ID` | Standard AWS credential chain. Install `pip install -e ".[bedrock]"` |
 
 Start from an example config:
 
@@ -172,6 +174,9 @@ $env:ATO_TEXT_MODEL_API_KEY_FILE = 'C:\secure\openai-api-key.txt'
 pip install -e ".[bedrock]"
 Copy-Item deployment\config\runtime-config.dev_local.bedrock.example.json deployment\config\runtime-config.dev_local.json
 $env:AWS_PROFILE = 'your-profile'
+
+# Loopback local model
+Copy-Item deployment\config\runtime-config.dev_local.local.example.json deployment\config\runtime-config.dev_local.json
 ```
 
 Point the service at the config, then call `ato_service.text_llm.build_text_model_client()`. Full steps and a Python example are in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#text-llm-openai-or-bedrock).

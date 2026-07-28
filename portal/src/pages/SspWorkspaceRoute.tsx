@@ -30,6 +30,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [generationPending, setGenerationPending] = useState(false);
   const [newSystemName, setNewSystemName] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [impactLevel, setImpactLevel] =
@@ -196,6 +197,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           id: item.id,
           name: item.name,
         }))}
+        generationPending={generationPending}
         actions={{
           onRetry: () => void load(),
           onOpenWorkspace: (workspaceId) => {
@@ -230,7 +232,12 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             void run((current) =>
               removeSspEvidence(session, current, artifactId),
             ),
-          onGenerate: () => void run((current) => generateSspWorkspace(session, current)),
+          onGenerate: () => {
+            if (busy) return;
+            setGenerationPending(true);
+            void run((current) => generateSspWorkspace(session, current))
+              .finally(() => setGenerationPending(false));
+          },
           onSaveSection: (change) =>
             void run((current) => saveSspSection(session, current, change)),
           onSaveControl: (change) =>

@@ -60,6 +60,8 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | --- | --- | --- |
 | `VISION_MODEL_ENABLED` | **Optional capability** | Only current optional model capability. Defaults to off when absent in `dev_local`. Required boolean in `onprem_production`. When `true`, schema requires vision endpoint URL, name, context tokens, and profile; production further restricts profile to qualified external/internal OpenAI-compatible values and may require `VISION_MODEL_CREDENTIAL_REFERENCE` and allowlist entries. |
 | `TEXT_MODEL_PROVIDER` | **Text LLM backend** | `openai_compatible` (default) uses `TEXT_MODEL_ENDPOINT_URL` plus `TEXT_MODEL_CREDENTIAL_REFERENCE` or dev-only `ATO_TEXT_MODEL_API_KEY` / `ATO_TEXT_MODEL_API_KEY_FILE`. `aws_bedrock` uses `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, and the standard AWS credential chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or instance role). Install Bedrock support with `pip install -e ".[bedrock]"`. |
+| `TEXT_MODEL_PROFILE_ID` | **Model capability limits** | Selects one provider-neutral entry from `src/ato_service/text_model_catalog.json`. The catalog is the single source for application context, maximum output, and timeout. Direct limit overrides are rejected when a profile is selected. |
+| `TEXT_MODEL_AUTH_MODE` | **OpenAI-compatible authentication** | `api_key` by default. `none` is accepted only for an `internal_openai_compatible` endpoint, such as an approved loopback local model. Bedrock always uses the AWS credential chain. |
 | `TEXT_MODEL_TEMPERATURE` | **Text LLM sampling** | Optional number `0..2`, default `0`. Applied to OpenAI-compatible and Bedrock text clients. |
 | `CONTEXT_UTILIZATION_TARGET` | **Model input budget cap** | Optional number `(0, 1]`, default `0.70`. Caps input context utilization before packing evidence; configured output tokens plus a fixed 2,048 instruction/schema reserve always remain available. `1.0` preserves legacy reserve-only budgeting. |
 | `TEXT_MODEL_ENDPOINT_POLICY_APPROVED` | **Routing approval** | Optional boolean, default `false`. Explicit operator approval for the configured text-model endpoint profile on redacted/customer routes. Selecting an endpoint alone does not approve the route. |
@@ -230,8 +232,14 @@ Set `TEXT_MODEL_PROVIDER` in runtime JSON:
 
 | Value | Backend | Required settings | Secrets |
 | --- | --- | --- | --- |
-| `openai_compatible` | OpenAI-compatible HTTP API | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME`, timeout/retry limits | `config.local.env` (`ATO_TEXT_MODEL_API_KEY`) for local dev, or `TEXT_MODEL_CREDENTIAL_REFERENCE` in production |
-| `aws_bedrock` | AWS Bedrock Converse API | `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, timeout/retry limits | AWS credential chain only (`AWS_PROFILE`, standard AWS env vars, or instance role) |
+| `openai_compatible` | OpenAI or a local/on-prem OpenAI-compatible HTTP API | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME`, `TEXT_MODEL_PROFILE_ID` | API key unless an approved internal endpoint uses `TEXT_MODEL_AUTH_MODE=none` |
+| `aws_bedrock` | AWS Bedrock Converse API | `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, `TEXT_MODEL_PROFILE_ID` | AWS credential chain only (`AWS_PROFILE`, standard AWS env vars, or instance role) |
+
+### Model capability catalog
+
+Edit `src/ato_service/text_model_catalog.json` when qualifying a new model. Each entry records the model family, provider context window, application context cap, output cap, timeout, qualification status, and evidence URL.
+
+Transport remains deployment-specific. The same catalog profile may be selected through OpenAI-compatible HTTP, Bedrock, or a local OpenAI-compatible server when the underlying model family and limits match.
 
 Install Bedrock support when needed:
 
@@ -245,6 +253,7 @@ pip install -e ".[bedrock]"
 | --- | --- |
 | [`deployment/config/runtime-config.dev_local.openai.example.json`](../deployment/config/runtime-config.dev_local.openai.example.json) | Local OpenAI-compatible demo |
 | [`deployment/config/runtime-config.dev_local.bedrock.example.json`](../deployment/config/runtime-config.dev_local.bedrock.example.json) | Local or work Bedrock demo |
+| [`deployment/config/runtime-config.dev_local.local.example.json`](../deployment/config/runtime-config.dev_local.local.example.json) | Loopback local-model demo |
 
 Copy one example to your active dev config, for example:
 

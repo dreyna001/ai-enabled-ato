@@ -156,7 +156,7 @@ async def generate_initial_ssp(
 
     def parse(raw_text: str) -> GenerationResult:
         return parse_generation_response(
-            raw_text,
+            _normalize_generation_envelope(raw_text),
             allowed_section_ids=section_ids,
             allowed_control_ids=control_ids,
             allowed_fact_ids=fact_ids,
@@ -167,6 +167,33 @@ async def generate_initial_ssp(
         user=_initial_user_prompt(request),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
+
+
+def _normalize_generation_envelope(raw_text: str) -> str:
+    """Supply only safe empty defaults for omitted response boilerplate."""
+    try:
+        payload = json.loads(raw_text)
+    except (json.JSONDecodeError, TypeError):
+        return raw_text
+    if not isinstance(payload, dict):
+        return raw_text
+    payload.setdefault("schema_version", GENERATION_SCHEMA_VERSION)
+    payload.setdefault("sections", [])
+    payload.setdefault("controls", [])
+    payload.setdefault("questions", [])
+    sections = payload["sections"]
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            content = section.get("content")
+            if isinstance(content, list) and all(
+                isinstance(item, str) for item in content
+            ):
+                section["content"] = "\n".join(
+                    f"- {item}" for item in content
+                )
+    return _canonical_json(payload)
 
 
 async def generate_contextual_patch(
@@ -332,8 +359,11 @@ def _initial_user_prompt(request: InitialGenerationRequest) -> str:
         facts=request.facts,
     )
     payload["task"] = (
-        "Draft every listed SSP section and control implementation statement. "
-        "Ask targeted open questions for missing information."
+        "Return only SSP sections and control implementation statements that "
+        "the supplied evidence supports. Omit unsupported sections and controls. "
+        "Keep supported narratives concise and implementation-specific. Add a "
+        "small deduplicated set of targeted questions for material information "
+        "gaps; do not create one question per control."
     )
     payload["output_contract"] = {
         "schema_version": GENERATION_SCHEMA_VERSION,

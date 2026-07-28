@@ -49,6 +49,7 @@ export type SspWorkspacePageProps =
       workspace: SspWorkspace;
       actions?: SspWorkspaceActions;
       availableWorkspaces?: Array<{ id: string; name: string }>;
+      generationPending?: boolean;
       initialView?: WorkspaceView;
     };
 
@@ -80,11 +81,13 @@ function SspWorkspaceSuccess({
   workspace,
   actions = {},
   availableWorkspaces = [],
+  generationPending = false,
   initialView = "overview",
 }: {
   workspace: SspWorkspace;
   actions?: SspWorkspaceActions;
   availableWorkspaces?: Array<{ id: string; name: string }>;
+  generationPending?: boolean;
   initialView?: WorkspaceView;
 }) {
   const [view, setView] = useState<WorkspaceView>(initialView);
@@ -217,6 +220,7 @@ function SspWorkspaceSuccess({
               workspace={workspace}
               metrics={metrics}
               onGenerate={actions.onGenerate}
+              generationPending={generationPending}
               onNavigate={setView}
               onOpenAgent={setAgentContext}
             />
@@ -306,6 +310,7 @@ export function SspWorkspacePage(props: SspWorkspacePageProps) {
       workspace={props.workspace}
       actions={props.actions}
       availableWorkspaces={props.availableWorkspaces}
+      generationPending={props.generationPending}
       initialView={props.initialView}
     />
   );

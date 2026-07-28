@@ -62,6 +62,7 @@ class TextModelSettings:
     timeout_seconds: int
     max_retries: int
     temperature: float
+    auth_mode: str = "api_key"
     endpoint_url: str | None = None
     aws_region: str | None = None
 
@@ -95,6 +96,7 @@ def resolve_text_model_settings(config: RuntimeConfig) -> TextModelSettings:
     timeout_seconds = _positive_int(document, "TEXT_MODEL_TIMEOUT_SECONDS", default=30)
     max_retries = _non_negative_int(document, "TEXT_MODEL_MAX_RETRIES", default=2)
     temperature = _temperature(document)
+    auth_mode = str(document.get("TEXT_MODEL_AUTH_MODE", "api_key"))
 
     if provider == "aws_bedrock":
         return TextModelSettings(
@@ -104,6 +106,7 @@ def resolve_text_model_settings(config: RuntimeConfig) -> TextModelSettings:
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,
             temperature=temperature,
+            auth_mode="aws_credentials",
             aws_region=_required_string(document, "AWS_REGION"),
         )
 
@@ -114,6 +117,7 @@ def resolve_text_model_settings(config: RuntimeConfig) -> TextModelSettings:
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
         temperature=temperature,
+        auth_mode=auth_mode,
         endpoint_url=_required_string(document, "TEXT_MODEL_ENDPOINT_URL"),
     )
 
@@ -133,7 +137,11 @@ def build_text_model_client(config: RuntimeConfig) -> TextModelClient:
     return OpenAICompatibleTextClient(
         endpoint_url=settings.endpoint_url or "",
         model_name=settings.model_name,
-        api_key=_resolve_openai_api_key(config),
+        api_key=(
+            _resolve_openai_api_key(config)
+            if settings.auth_mode == "api_key"
+            else None
+        ),
         max_output_tokens=settings.max_output_tokens,
         timeout_seconds=settings.timeout_seconds,
         max_retries=settings.max_retries,
@@ -251,7 +259,7 @@ def _read_secret_file(path: Path) -> str:
 class OpenAICompatibleTextClient:
     endpoint_url: str
     model_name: str
-    api_key: str
+    api_key: str | None
     max_output_tokens: int
     timeout_seconds: int
     max_retries: int
@@ -266,10 +274,9 @@ class OpenAICompatibleTextClient:
     ) -> str:
         payload_messages = _build_openai_messages(messages, system=system)
         request_url = urljoin(self.endpoint_url.rstrip("/") + "/", "chat/completions")
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         body = {
             "model": self.model_name,
             "messages": payload_messages,

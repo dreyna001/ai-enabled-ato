@@ -51,6 +51,10 @@
     "TEXT_MODEL_NAME": {
       "$ref": "#/$defs/modelName"
     },
+    "TEXT_MODEL_PROFILE_ID": {
+      "$ref": "#/$defs/boundedIdentifier",
+      "$comment": "Selects provider-neutral context, output, and timeout limits from the bundled text-model catalog. When set, direct TEXT_MODEL_CONTEXT_TOKENS, TEXT_MODEL_MAX_OUTPUT_TOKENS, and TEXT_MODEL_TIMEOUT_SECONDS values are rejected."
+    },
     "TEXT_MODEL_CONTEXT_TOKENS": {
       "$ref": "#/$defs/positiveInteger"
     },
@@ -67,6 +71,15 @@
     },
     "TEXT_MODEL_ENDPOINT_PROFILE": {
       "$ref": "#/$defs/endpointProfile"
+    },
+    "TEXT_MODEL_AUTH_MODE": {
+      "type": "string",
+      "enum": [
+        "api_key",
+        "none"
+      ],
+      "default": "api_key",
+      "$comment": "Authentication for OpenAI-compatible endpoints. none is allowed only for explicitly approved internal endpoints; external OpenAI requires api_key. Bedrock always uses the AWS credential chain."
     },
     "TEXT_MODEL_CREDENTIAL_REFERENCE": {
       "$ref": "#/$defs/credentialReference"

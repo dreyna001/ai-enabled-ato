@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "runtime_profile": "dev_local",
+  "STORAGE_DATA_PATH": "/data/ato-storage",
+  "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": true,
+  "IDENTITY_PROVIDER_MODE": "oidc",
+  "OIDC_ISSUER_URL": "http://127.0.0.1:8001/dev-oidc",
+  "OIDC_AUDIENCE": "ato-portal-dev",
+  "OIDC_GROUPS_CLAIM": "groups",
+  "OIDC_GROUP_ROLE_MAPPING": {
+    "system_owner": ["owners"],
+    "viewer": ["viewers"]
+  },
+  "SINGLE_USER_MODE_ENABLED": true,
+  "OIDC_CLIENT_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "oidc-client-secret"
+  },
+  "PORTAL_PUBLIC_ORIGIN": "http://localhost:5173",
+  "DATABASE_DSN_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "database-dsn"
+  },
+  "AUDIT_HMAC_KEY_CREDENTIAL_REFERENCE": {
+    "source": "systemd_credential",
+    "identifier": "audit-hmac-key"
+  },
+  "TEXT_MODEL_PROVIDER": "openai_compatible",
+  "TEXT_MODEL_ENDPOINT_URL": "http://127.0.0.1:11434/v1",
+  "TEXT_MODEL_NAME": "operator-local-model",
+  "TEXT_MODEL_PROFILE_ID": "local-openai-compatible-8k",
+  "TEXT_MODEL_AUTH_MODE": "none",
+  "TEXT_MODEL_MAX_RETRIES": 2,
+  "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
+  "TEXT_MODEL_TEMPERATURE": 0,
+  "CONTEXT_UTILIZATION_TARGET": 0.7,
+  "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": true,
+  "CUI_MODEL_BOUNDARY_APPROVED": true,
+  "FISMA_ANALYSIS_PROFILE_FILE_REFERENCE": {
+    "path": "/opt/ato-analyzer/reference/profiles/fisma-agency-security-moderate-draft.json",
+    "expected_sha256": "a36201ede546aeb45e938690974990dd7ebc1016ab702639d0e8595fcd6ea23f"
+  }
+}

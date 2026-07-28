@@ -108,6 +108,11 @@ _DEFAULT_CHAT_RATE_LIMIT = {"max_requests": 30, "window_seconds": 60}
 _DEFAULT_CHAT_INPUT_LIMIT = {"value": 4000, "unit": "characters"}
 _DEFAULT_TEXT_MODEL_CONTEXT_TOKENS = 8192
 _DEFAULT_TEXT_MODEL_MAX_OUTPUT_TOKENS = 1024
+_TEXT_MODEL_PROFILE_LIMIT_FIELDS = (
+    "TEXT_MODEL_CONTEXT_TOKENS",
+    "TEXT_MODEL_MAX_OUTPUT_TOKENS",
+    "TEXT_MODEL_TIMEOUT_SECONDS",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +282,49 @@ def _validate_runtime_document(document: dict[str, Any]) -> None:
 
     _validate_runtime_limit_ceilings(document)
     _validate_runtime_semantics(document)
+
+
+def _materialize_text_model_profile(document: dict[str, Any]) -> dict[str, Any]:
+    """Resolve catalog-owned model limits into the runtime document."""
+    profile_id = document.get("TEXT_MODEL_PROFILE_ID")
+    if profile_id is None:
+        return dict(document)
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise RuntimeConfigValidationError(
+            "TEXT_MODEL_PROFILE_ID must be a non-empty string"
+        )
+    from ato_service.text_model_catalog import (
+        TextModelCatalogError,
+        resolve_text_model_capability_profile,
+    )
+
+    try:
+        profile = resolve_text_model_capability_profile(profile_id.strip())
+    except TextModelCatalogError as exc:
+        raise RuntimeConfigValidationError(str(exc)) from exc
+
+    catalog_limits = {
+        "TEXT_MODEL_CONTEXT_TOKENS": profile.application_context_tokens,
+        "TEXT_MODEL_MAX_OUTPUT_TOKENS": profile.max_output_tokens,
+        "TEXT_MODEL_TIMEOUT_SECONDS": profile.timeout_seconds,
+    }
+    conflicting = [
+        field_name
+        for field_name in _TEXT_MODEL_PROFILE_LIMIT_FIELDS
+        if field_name in document
+        and document[field_name] != catalog_limits[field_name]
+    ]
+    if conflicting:
+        joined = ", ".join(conflicting)
+        raise RuntimeConfigValidationError(
+            "catalog-selected model profiles own their limits; remove direct "
+            f"runtime values for {joined}"
+        )
+
+    resolved = dict(document)
+    resolved["TEXT_MODEL_PROFILE_ID"] = profile.profile_id
+    resolved.update(catalog_limits)
+    return resolved
 
 
 def _looks_like_ip_literal(hostname: str) -> bool:
@@ -513,9 +561,21 @@ def _validate_loopback_http_consistency(document: dict[str, Any]) -> None:
 
 
 def _validate_text_model_credentials(document: dict[str, Any]) -> None:
-    if document.get("runtime_profile") != "onprem_production":
-        return
+    auth_mode = document.get("TEXT_MODEL_AUTH_MODE", "api_key")
+    if auth_mode not in {"api_key", "none"}:
+        raise RuntimeConfigValidationError(
+            "TEXT_MODEL_AUTH_MODE must be api_key or none"
+        )
     if document.get("TEXT_MODEL_PROVIDER", "openai_compatible") == "aws_bedrock":
+        return
+    if auth_mode == "none" and document.get(
+        "TEXT_MODEL_ENDPOINT_PROFILE"
+    ) != "internal_openai_compatible":
+        raise RuntimeConfigValidationError(
+            "TEXT_MODEL_AUTH_MODE none is allowed only for "
+            "TEXT_MODEL_ENDPOINT_PROFILE internal_openai_compatible"
+        )
+    if document.get("runtime_profile") != "onprem_production":
         return
     if document.get("TEXT_MODEL_ENDPOINT_PROFILE") != "external_openai":
         return
@@ -882,11 +942,14 @@ def load_runtime_config_from_dict(
     base_dir: Path | None = None,
 ) -> RuntimeConfig:
     """Validate a runtime configuration document and resolve storage paths."""
-    _validate_runtime_document(document)
-    _scan_for_secrets(document)
+    resolved_document = _materialize_text_model_profile(document)
+    _validate_runtime_document(resolved_document)
+    _scan_for_secrets(resolved_document)
 
-    runtime_profile = document["runtime_profile"]
-    raw_storage_path = document.get("STORAGE_DATA_PATH", _DEFAULT_DEV_STORAGE_PATH)
+    runtime_profile = resolved_document["runtime_profile"]
+    raw_storage_path = resolved_document.get(
+        "STORAGE_DATA_PATH", _DEFAULT_DEV_STORAGE_PATH
+    )
     if not isinstance(raw_storage_path, str):
         raise RuntimeConfigPathError("STORAGE_DATA_PATH must be a string")
 
@@ -898,12 +961,12 @@ def load_runtime_config_from_dict(
 
     from ato_service.package_rbac import configure_package_role_groups
 
-    configure_package_role_groups(document)
+    configure_package_role_groups(resolved_document)
 
     return RuntimeConfig(
         runtime_profile=runtime_profile,
         storage_data_path=storage_data_path,
-        document=document,
+        document=resolved_document,
     )
 
 

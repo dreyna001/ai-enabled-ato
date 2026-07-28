@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "runtime_profile": "dev_local",
+  "STORAGE_DATA_PATH": "/data/ato-storage",
+  "ALLOW_LOOPBACK_HTTP_INTERNAL_ENDPOINTS": true,
+  "TEXT_MODEL_PROVIDER": "openai_compatible",
+  "TEXT_MODEL_ENDPOINT_URL": "http://127.0.0.1:11434/v1",
+  "TEXT_MODEL_NAME": "operator-local-model",
+  "TEXT_MODEL_PROFILE_ID": "local-openai-compatible-8k",
+  "TEXT_MODEL_AUTH_MODE": "none",
+  "TEXT_MODEL_MAX_RETRIES": 2,
+  "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
+  "TEXT_MODEL_TEMPERATURE": 0.0,
+  "CONTEXT_UTILIZATION_TARGET": 0.7,
+  "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": false,
+  "CUI_MODEL_BOUNDARY_APPROVED": false
+}

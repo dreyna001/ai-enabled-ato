@@ -127,6 +127,44 @@ def test_initial_generation_repairs_one_schema_failure() -> None:
     assert "validation_error" in repair_payload
 
 
+def test_initial_generation_supplies_omitted_envelope_boilerplate() -> None:
+    payload = _valid_generation_payload()
+    payload.pop("schema_version")
+    payload.pop("questions")
+
+    result = _run(
+        generate_initial_ssp(
+            _initial_request(),
+            lambda _: json.dumps(payload),
+        )
+    )
+
+    assert result.attempts == 1
+    assert result.repair_attempted is False
+    assert result.value.sections
+    assert result.value.controls
+    assert result.value.questions == ()
+
+
+def test_initial_generation_normalizes_string_list_section_content() -> None:
+    payload = _valid_generation_payload()
+    payload["sections"][0]["content"] = [  # type: ignore[index]
+        "PostgreSQL database",
+        "Application service",
+    ]
+
+    result = _run(
+        generate_initial_ssp(
+            _initial_request(),
+            lambda _: json.dumps(payload),
+        )
+    )
+
+    assert result.value.sections[0].content == (
+        "- PostgreSQL database\n- Application service"
+    )
+
+
 def test_unknown_grounding_id_fails_closed_without_repair() -> None:
     payload = _valid_generation_payload()
     payload["sections"][0]["supporting_fact_ids"] = ["fabricated-fact"]  # type: ignore[index]

@@ -26,11 +26,12 @@ local deploy (API on 8001).
 Options:
   --openai     Use OpenAI-compatible text model (default)
   --bedrock    Use AWS Bedrock text model (no OpenAI API key)
+  --local      Use a loopback OpenAI-compatible local model
   -h, --help   Show this help
 
 Environment:
   ATO_LOCAL_ENV_FILE           Source env file (default: <repo>/config.local.env)
-  ATO_WSL_PORTAL_TEXT_MODEL    openai or bedrock (default: openai)
+  ATO_WSL_PORTAL_TEXT_MODEL    openai, bedrock, or local (default: openai)
 EOF
 }
 
@@ -48,6 +49,10 @@ while [[ $# -gt 0 ]]; do
       TEXT_MODEL_MODE="bedrock"
       shift
       ;;
+    --local)
+      TEXT_MODEL_MODE="local"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -59,8 +64,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$TEXT_MODEL_MODE" in
-  openai|bedrock) ;;
-  *) err "ATO_WSL_PORTAL_TEXT_MODEL must be openai or bedrock (got: $TEXT_MODEL_MODE)" ;;
+  openai|bedrock|local) ;;
+  *) err "ATO_WSL_PORTAL_TEXT_MODEL must be openai, bedrock, or local (got: $TEXT_MODEL_MODE)" ;;
 esac
 
 [[ "$(id -u)" -eq 0 ]] || err "Run as root (sudo bash scripts/wsl-portal-enable.sh)"
@@ -80,6 +85,9 @@ select_runtime_config() {
       ;;
     bedrock)
       echo "$REPO_DIR/deployment/config/runtime-config.wsl_portal.bedrock.json"
+      ;;
+    local)
+      echo "$REPO_DIR/deployment/config/runtime-config.wsl_portal.local.json"
       ;;
   esac
 }
@@ -174,7 +182,7 @@ fi
 
 if [[ "$TEXT_MODEL_MODE" == "openai" ]]; then
   install_openai_local_env_file
-else
+elif [[ "$TEXT_MODEL_MODE" == "bedrock" ]]; then
   install_bedrock_local_env_file
   install_bedrock_dependencies
 fi
@@ -230,6 +238,10 @@ case "$TEXT_MODEL_MODE" in
     ;;
   bedrock)
     info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + AWS Bedrock text model)"
+    info "Analyzer worker enabled for targeted/model-assisted runs (use Start Targeted Run in portal)"
+    ;;
+  local)
+    info "Portal API enabled on http://127.0.0.1:8001 (dev OIDC + sessions + loopback local text model)"
     info "Analyzer worker enabled for targeted/model-assisted runs (use Start Targeted Run in portal)"
     ;;
 esac

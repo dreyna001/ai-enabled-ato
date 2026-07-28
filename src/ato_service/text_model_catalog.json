@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "profiles": {
+    "openai-gpt-4.1": {
+      "model_family": "gpt-4.1",
+      "context_window_tokens": 1047576,
+      "application_context_tokens": 131072,
+      "max_output_tokens": 32768,
+      "timeout_seconds": 180,
+      "qualification_status": "documented",
+      "evidence_url": "https://developers.openai.com/api/docs/models/gpt-4.1"
+    },
+    "anthropic-claude-3-haiku": {
+      "model_family": "claude-3-haiku",
+      "context_window_tokens": 200000,
+      "application_context_tokens": 32768,
+      "max_output_tokens": 4096,
+      "timeout_seconds": 180,
+      "qualification_status": "provisional",
+      "evidence_url": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-3-haiku.html"
+    },
+    "anthropic-claude-sonnet-4": {
+      "model_family": "claude-sonnet-4",
+      "context_window_tokens": 200000,
+      "application_context_tokens": 131072,
+      "max_output_tokens": 32768,
+      "timeout_seconds": 180,
+      "qualification_status": "documented_limits_application_cap_pending_eval",
+      "evidence_url": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4.html"
+    },
+    "local-openai-compatible-8k": {
+      "model_family": "operator-supplied-local-model",
+      "context_window_tokens": 8192,
+      "application_context_tokens": 8192,
+      "max_output_tokens": 1024,
+      "timeout_seconds": 180,
+      "qualification_status": "operator_validation_required",
+      "evidence_url": null
+    }
+  }
+}

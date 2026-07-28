@@ -865,6 +865,20 @@ def test_bedrock_provider_skips_text_endpoint_allowlist_validation(
     assert "TEXT_MODEL_ENDPOINT_URL" not in config.document
 
 
+def test_rejects_no_auth_for_external_openai_endpoint(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeConfigValidationError, match="AUTH_MODE none"):
+        load_runtime_config_from_dict(
+            _minimal_dev_document(
+                TEXT_MODEL_PROVIDER="openai_compatible",
+                TEXT_MODEL_ENDPOINT_URL="https://api.openai.com/v1",
+                TEXT_MODEL_NAME="gpt-4.1",
+                TEXT_MODEL_AUTH_MODE="none",
+                TEXT_MODEL_ENDPOINT_PROFILE="external_openai",
+            ),
+            base_dir=tmp_path,
+        )
+
+
 def test_onprem_bedrock_accepts_config_without_text_endpoint_url(
     production_native_path: None,
 ) -> None:

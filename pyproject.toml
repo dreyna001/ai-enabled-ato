@@ -56,6 +56,7 @@ bedrock = [
 where = ["src"]
 
 [tool.setuptools.package-data]
+"ato_service" = ["text_model_catalog.json"]
 "ato_service.ssp_workspace" = ["schemas/*.json"]
 
 [tool.pytest.ini_options]

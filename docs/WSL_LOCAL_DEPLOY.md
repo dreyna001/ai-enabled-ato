@@ -12,11 +12,21 @@ For a full walkthrough of portal screens, workflow stages, LLM usage, validation
 checks, and ATO artifacts produced at each step, see
 [`PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md).
 
-**LLM in WSL:** Bedrock or OpenAI is configured by `wsl-portal-enable.sh`, not
-by hosting a local model. **Start Deterministic Run** never calls an LLM
+**LLM in WSL:** Bedrock, OpenAI, or a loopback OpenAI-compatible local model is
+selected by `wsl-portal-enable.sh`. **Start Deterministic Run** never calls an LLM
 (`llm_call_count=0` by design). For model-assisted sufficiency matrix runs, use
 **Start Targeted Run** after selecting items in Change Analysis. Package chat
 and intake normalization also use the configured remote model when routing allows.
+
+```bash
+sudo bash scripts/wsl-portal-enable.sh --openai
+sudo bash scripts/wsl-portal-enable.sh --bedrock
+sudo bash scripts/wsl-portal-enable.sh --local
+```
+
+`--local` expects an OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1`.
+Set its model ID and capability profile in
+`deployment/config/runtime-config.wsl_portal.local.json`.
 
 ## Prerequisites
 
@@ -184,6 +194,17 @@ must be installed into `/etc/ato-analyzer/credentials/ato-local.env` via
 `config.local.env` (see `config.local.env.bedrock.example`), not only `~/.aws/`.
 Portal OIDC works without AWS env assignments; Bedrock model calls require them.
 
+### Loopback local model
+
+Start an OpenAI-compatible server on `127.0.0.1:11434`, then:
+
+```bash
+sudo bash scripts/wsl-portal-enable.sh --local
+```
+
+Set `TEXT_MODEL_NAME` and `TEXT_MODEL_PROFILE_ID` in
+`deployment/config/runtime-config.wsl_portal.local.json` for the served model.
+
 ### OpenAI API key (`config.local.env`)
 
 1. Copy [`config.local.env.example`](../config.local.env.example) to `config.local.env` at the repository root (`config.local.env` is gitignored).
@@ -235,7 +256,7 @@ Upload `data/synthetic-packages/fisma-demo-portal/agency-security-plan-excerpt.j
 - nginx TLS edge
 - Production OIDC (dev OIDC issuer on loopback only)
 - Production malware scanner / customer extraction (HS-005)
-- Hosting a local LLM (use Bedrock or OpenAI via `wsl-portal-enable.sh`)
+- Installing or managing the local LLM server itself
 - Customer-production package uploads (synthetic/redacted dev paths only in this slice)
 - Vision model calls
 - HS-001 authority manifest closure (`/health/ready` may stay degraded until then)

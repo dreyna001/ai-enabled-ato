@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FileText,
+  LoaderCircle,
   ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -44,12 +45,14 @@ export function WorkspaceOverview({
   workspace,
   metrics,
   onGenerate,
+  generationPending = false,
   onNavigate,
   onOpenAgent,
 }: {
   workspace: SspWorkspace;
   metrics: SspWorkspaceMetrics;
   onGenerate?: () => void;
+  generationPending?: boolean;
   onNavigate: (view: "evidence" | "ssp" | "controls" | "questions" | "review") => void;
   onOpenAgent: (context: AgentContext) => void;
 }) {
@@ -128,12 +131,33 @@ export function WorkspaceOverview({
           <CardContent className="space-y-2">
             <Button
               className="mb-2 w-full"
-              disabled={!onGenerate || metrics.processedEvidence === 0}
+              disabled={
+                !onGenerate ||
+                metrics.processedEvidence === 0 ||
+                generationPending
+              }
               onClick={onGenerate}
             >
-              <Bot aria-hidden="true" />
-              Generate or update documents
+              {generationPending ? (
+                <LoaderCircle
+                  className="animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Bot aria-hidden="true" />
+              )}
+              {generationPending
+                ? "Generating documents…"
+                : "Generate or update documents"}
             </Button>
+            {generationPending ? (
+              <p
+                className="pb-2 text-xs text-muted-foreground"
+                role="status"
+              >
+                Analyzing evidence and drafting supported SSP content.
+              </p>
+            ) : null}
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-sm border p-3 text-left hover:bg-muted/40"
