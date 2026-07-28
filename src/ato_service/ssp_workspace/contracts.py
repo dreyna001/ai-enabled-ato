@@ -140,7 +140,9 @@ class SectionContent(StrictContract):
 
 
 class ControlContent(StrictContract):
-    control_id: str = Field(pattern=r"^[A-Z]{2,4}-[0-9]+(?:\([0-9]+\))*$")
+    control_id: str = Field(
+        pattern=r"^[A-Z]{2,4}-[0-9]+(?:\([0-9]+\)|(?:\.[0-9]+)+)?$"
+    )
     title: str = Field(min_length=1, max_length=500)
     implementation_status: str | None = Field(default=None, max_length=64)
     implementation_statement: str = Field(default="", max_length=100_000)

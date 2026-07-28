@@ -79,6 +79,19 @@ def test_revision_hash_changes_when_content_changes() -> None:
     assert revision_content_sha256(first) != revision_content_sha256(second)
 
 
+@pytest.mark.parametrize("control_id", ("AC-11.1", "AC-11(1)"))
+def test_control_content_accepts_oscal_and_display_enhancement_ids(
+    control_id: str,
+) -> None:
+    control = ControlContent(
+        control_id=control_id,
+        title="Session Lock",
+        state=ControlState.EMPTY,
+    )
+
+    assert control.control_id == control_id
+
+
 def test_agent_generated_fact_requires_evidence() -> None:
     with pytest.raises(ValidationError, match="require evidence"):
         FactContent(
