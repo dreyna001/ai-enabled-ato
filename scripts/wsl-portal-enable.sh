@@ -84,6 +84,11 @@ select_runtime_config() {
   esac
 }
 
+install_local_env_file() {
+  install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
+  sed -i 's/\r$//' "$LOCAL_ENV_DEST"
+}
+
 install_openai_local_env_file() {
   if [[ -f "$LOCAL_ENV_DEST" ]] && ! [[ -f "$LOCAL_ENV_SOURCE" ]]; then
     info "Keeping existing $LOCAL_ENV_DEST (no config.local.env in repo)"
@@ -93,7 +98,7 @@ install_openai_local_env_file() {
     || err "Missing $LOCAL_ENV_SOURCE. Copy config.local.env.example to config.local.env and set ATO_TEXT_MODEL_API_KEY=your-key"
   grep -Eq '^[[:space:]]*ATO_TEXT_MODEL_API_KEY=.+$' "$LOCAL_ENV_SOURCE" \
     || err "$LOCAL_ENV_SOURCE must set a non-empty ATO_TEXT_MODEL_API_KEY=... line"
-  install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
+  install_local_env_file
   info "Installed local env secrets from $(basename "$LOCAL_ENV_SOURCE")"
 }
 
@@ -104,7 +109,7 @@ local_env_has_assignments() {
 
 install_bedrock_local_env_file() {
   if local_env_has_assignments; then
-    install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
+    install_local_env_file
     info "Installed AWS/local env secrets from $(basename "$LOCAL_ENV_SOURCE")"
     return 0
   fi

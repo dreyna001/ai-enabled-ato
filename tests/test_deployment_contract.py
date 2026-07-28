@@ -434,6 +434,7 @@ def test_wsl_portal_enable_script_installs_local_env_file() -> None:
     assert "ato-local.env" in text
     assert "install_openai_local_env_file" in text
     assert "install_bedrock_local_env_file" in text
+    assert "sed -i 's/\\r$//'" in text
     assert "ATO_TEXT_MODEL_API_KEY" in text
     assert "--bedrock" in text
     assert "ato-analyzer-worker.wsl-local.service" in text
