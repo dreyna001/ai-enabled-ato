@@ -8,7 +8,6 @@ import {
   downloadSspExport,
   generateSspWorkspace,
   listSspProfiles,
-  listSspSystems,
   listSspWorkspaces,
   rejectSspPatch,
   saveSspControl,
@@ -19,18 +18,16 @@ import {
 import { SspWorkspacePage } from "@/pages/SspWorkspacePage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SessionInfo, System } from "@/types";
+import type { SessionInfo } from "@/types";
 import type { SspWorkspace } from "@/sspWorkspaceTypes";
 import { formatApiError } from "@/utils/formatApiError";
 
 export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
   const [workspace, setWorkspace] = useState<SspWorkspace | null>(null);
-  const [systems, setSystems] = useState<System[]>([]);
   const [profiles, setProfiles] = useState<SspProfile[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [selectedSystemId, setSelectedSystemId] = useState("");
   const [newSystemName, setNewSystemName] = useState("");
   const [impactLevel, setImpactLevel] =
     useState<"low" | "moderate" | "high">("moderate");
@@ -38,13 +35,11 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const [workspaceRows, systemRows, profileRows] = await Promise.all([
+      const [workspaceRows, profileRows] = await Promise.all([
         listSspWorkspaces(),
-        listSspSystems(),
         listSspProfiles(),
       ]);
       setWorkspace(workspaceRows[0] ?? null);
-      setSystems(systemRows.filter((item) => !item.archived_at));
       setProfiles(profileRows);
       setError("");
       setState("ready");
@@ -92,15 +87,9 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             onSubmit={(event) => {
               event.preventDefault();
               const name = newSystemName.trim();
-              const existingSystem = systems.find(
-                (item) => item.system_id === selectedSystemId,
-              );
-              if ((!existingSystem && !name) || !activeProfile || busy) return;
+              if (!name || !activeProfile || busy) return;
               setBusy(true);
-              void (existingSystem
-                ? Promise.resolve(existingSystem)
-                : createSspSystem(session, name)
-              )
+              void createSspSystem(session, name)
                 .then((system) =>
                   createSspWorkspace(
                     session,
@@ -117,28 +106,10 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
                 .finally(() => setBusy(false));
             }}
           >
-            {systems.length > 0 ? (
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Existing system</span>
-                <select
-                  className="w-full rounded-sm border bg-background px-3 py-2"
-                  value={selectedSystemId}
-                  onChange={(event) => setSelectedSystemId(event.target.value)}
-                >
-                  <option value="">Create a new system</option>
-                  {systems.map((system) => (
-                    <option key={system.system_id} value={system.system_id}>
-                      {system.display_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
             <label className="block text-sm">
               <span className="mb-1 block font-medium">System name</span>
               <input
                 className="w-full rounded-sm border bg-background px-3 py-2"
-                disabled={Boolean(selectedSystemId)}
                 value={newSystemName}
                 onChange={(event) => setNewSystemName(event.target.value)}
               />
@@ -166,7 +137,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             <Button
               disabled={
                 busy ||
-                (!selectedSystemId && !newSystemName.trim()) ||
+                !newSystemName.trim() ||
                 !activeProfile
               }
               type="submit"
