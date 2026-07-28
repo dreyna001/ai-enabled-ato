@@ -28,6 +28,16 @@ function workspace(id: string, name: string): SspWorkspace {
     purpose: "",
     hosting: "",
     impactLevel: "Moderate",
+    provisionalImpactLevel: "moderate",
+    categorization: {
+      confidentiality: "moderate",
+      integrity: "moderate",
+      availability: "moderate",
+      confidentialityRationale: "Confirmed rationale.",
+      integrityRationale: "Confirmed rationale.",
+      availabilityRationale: "Confirmed rationale.",
+      confirmed: true,
+    },
     authorizationPath: "",
     profile: {
       id: "profile-1",
@@ -74,6 +84,7 @@ describe("SspWorkspaceRoute", () => {
     const systemName = await screen.findByLabelText("System name");
     expect(systemName).toBeEnabled();
     expect(screen.queryByLabelText("Existing system")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Impact level")).not.toBeInTheDocument();
 
     fireEvent.change(systemName, { target: { value: "New agency system" } });
 

@@ -14,6 +14,7 @@ describe("mapWorkspaceEnvelope", () => {
         version: "5.2.0-1",
         status: "active",
         impact_level: "moderate",
+        provisional_impact_level: "moderate",
       },
       current_revision: {
         revision_id: "10000000-0000-4000-8000-000000000004",
@@ -90,5 +91,7 @@ describe("mapWorkspaceEnvelope", () => {
       "system.purpose",
     ]);
     expect(workspace.controls[0]?.id).toBe("AC-1");
+    expect(workspace.impactLevel).toBe("moderate");
+    expect(workspace.categorization.confirmed).toBe(true);
   });
 });

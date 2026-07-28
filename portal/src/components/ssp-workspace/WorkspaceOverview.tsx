@@ -16,8 +16,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { AgentContext, SspWorkspace } from "@/sspWorkspaceTypes";
+import type {
+  AgentContext,
+  CategorizationChange,
+  SspWorkspace,
+} from "@/sspWorkspaceTypes";
 import type { SspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
+import { SystemCategorizationPanel } from "./SystemCategorizationPanel";
 
 function MetricCard({
   label,
@@ -48,6 +53,7 @@ export function WorkspaceOverview({
   generationPending = false,
   onNavigate,
   onOpenAgent,
+  onSaveCategorization,
 }: {
   workspace: SspWorkspace;
   metrics: SspWorkspaceMetrics;
@@ -55,6 +61,7 @@ export function WorkspaceOverview({
   generationPending?: boolean;
   onNavigate: (view: "evidence" | "ssp" | "controls" | "questions" | "review") => void;
   onOpenAgent: (context: AgentContext) => void;
+  onSaveCategorization?: (change: CategorizationChange) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -109,7 +116,9 @@ export function WorkspaceOverview({
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Impact level</dt>
-                <dd className="mt-1">{workspace.impactLevel || "Not yet confirmed"}</dd>
+                <dd className="mt-1 capitalize">
+                  {workspace.impactLevel || "Not yet confirmed"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Authorization path</dt>
@@ -221,6 +230,12 @@ export function WorkspaceOverview({
           </CardContent>
         </Card>
       </div>
+
+      <SystemCategorizationPanel
+        categorization={workspace.categorization}
+        provisionalImpactLevel={workspace.provisionalImpactLevel}
+        onSave={onSaveCategorization}
+      />
     </div>
   );
 }

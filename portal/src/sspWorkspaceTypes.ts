@@ -7,6 +7,7 @@ export type ControlStatementState =
   | "reviewed";
 export type QuestionState = "open" | "answered" | "dismissed";
 export type AgentPatchState = "proposed" | "applied" | "rejected" | "stale";
+export type ImpactLevel = "low" | "moderate" | "high";
 
 export type EvidenceLink = {
   id: string;
@@ -77,7 +78,17 @@ export type ProfileSummary = {
   id: string;
   name: string;
   version: string;
-  baseline: "Low" | "Moderate" | "High";
+  baseline: "Low" | "Moderate" | "High" | "Unconfirmed";
+};
+
+export type SystemCategorization = {
+  confidentiality: ImpactLevel | "";
+  integrity: ImpactLevel | "";
+  availability: ImpactLevel | "";
+  confidentialityRationale: string;
+  integrityRationale: string;
+  availabilityRationale: string;
+  confirmed: boolean;
 };
 
 export type SspWorkspace = {
@@ -86,6 +97,8 @@ export type SspWorkspace = {
   purpose: string;
   hosting: string;
   impactLevel: string;
+  provisionalImpactLevel: ImpactLevel;
+  categorization: SystemCategorization;
   authorizationPath: string;
   profile: ProfileSummary;
   revisionId: string;
@@ -121,6 +134,8 @@ export type QuestionAnswer = {
   answer: string;
 };
 
+export type CategorizationChange = Omit<SystemCategorization, "confirmed">;
+
 export type SspWorkspaceActions = {
   onRetry?: () => void;
   onCreateWorkspace?: () => void;
@@ -132,6 +147,7 @@ export type SspWorkspaceActions = {
   onSaveSection?: (change: SspSectionChange) => void;
   onSaveControl?: (change: ControlStatementChange) => void;
   onAnswerQuestion?: (change: QuestionAnswer) => void;
+  onSaveCategorization?: (change: CategorizationChange) => void;
   onAskAgent?: (context: AgentContext, message: string) => void;
   onApplyPatch?: (patchId: string) => void;
   onRejectPatch?: (patchId: string) => void;

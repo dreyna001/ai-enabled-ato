@@ -223,6 +223,7 @@ function SspWorkspaceSuccess({
               generationPending={generationPending}
               onNavigate={setView}
               onOpenAgent={setAgentContext}
+              onSaveCategorization={actions.onSaveCategorization}
             />
           ) : null}
           {view === "evidence" ? (

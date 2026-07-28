@@ -9,6 +9,16 @@ function workspaceFixture(): SspWorkspace {
     purpose: "Manage federal grant applications.",
     hosting: "Agency-owned cloud",
     impactLevel: "Moderate",
+    provisionalImpactLevel: "moderate",
+    categorization: {
+      confidentiality: "moderate",
+      integrity: "moderate",
+      availability: "moderate",
+      confidentialityRationale: "Confirmed rationale.",
+      integrityRationale: "Confirmed rationale.",
+      availabilityRationale: "Confirmed rationale.",
+      confirmed: true,
+    },
     authorizationPath: "Agency ATO",
     profile: {
       id: "nist-rev5",

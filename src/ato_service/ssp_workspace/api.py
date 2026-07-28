@@ -59,6 +59,7 @@ from ato_service.ssp_workspace.service import (
     reject_proposed_patch,
     render_approved_export,
     restore_workspace_revision,
+    save_system_categorization,
     save_control_edit,
     save_question_answer,
     save_section_edit,
@@ -77,7 +78,6 @@ class CreateWorkspaceRequest(BaseModel):
 
     system_id: uuid.UUID
     profile_version_id: uuid.UUID
-    impact_level: str = Field(pattern=r"^(low|moderate|high)$")
 
 
 class CreateSspSystemRequest(BaseModel):
@@ -115,6 +115,15 @@ class EditControlRequest(ExpectedRevisionRequest):
 
 class AnswerQuestionRequest(ExpectedRevisionRequest):
     answer: str = Field(min_length=1, max_length=20_000)
+
+
+class SaveCategorizationRequest(ExpectedRevisionRequest):
+    confidentiality: str = Field(pattern=r"^(low|moderate|high)$")
+    integrity: str = Field(pattern=r"^(low|moderate|high)$")
+    availability: str = Field(pattern=r"^(low|moderate|high)$")
+    confidentiality_rationale: str = Field(min_length=1, max_length=4_000)
+    integrity_rationale: str = Field(min_length=1, max_length=4_000)
+    availability_rationale: str = Field(min_length=1, max_length=4_000)
 
 
 class ProposePatchRequest(ExpectedRevisionRequest):
@@ -375,7 +384,7 @@ def build_ssp_workspace_router() -> APIRouter:
                 session,
                 system_id=payload.system_id,
                 profile_version_id=payload.profile_version_id,
-                impact_level=payload.impact_level,
+                impact_level=None,
                 actor_id=principal.actor_id,
                 now=_utc_now(),
                 audit_hmac_key=audit_hmac_key,
@@ -385,6 +394,48 @@ def build_ssp_workspace_router() -> APIRouter:
             )
             return JSONResponse(status_code=201, content=envelope)
         except (AuthorizationDeniedError, WorkspacePersistenceError, ProfileBundleError) as exc:
+            return _error_response(exc)
+
+    @router.post("/ssp-workspaces/{workspace_id}/categorization")
+    async def post_categorization(
+        workspace_id: uuid.UUID,
+        payload: SaveCategorizationRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session,
+                principal=principal,
+                workspace_id=workspace_id,
+                roles=("isso",),
+            )
+            await save_system_categorization(
+                session,
+                workspace_id=workspace_id,
+                expected_revision_id=payload.expected_revision_id,
+                confidentiality=payload.confidentiality,
+                integrity=payload.integrity,
+                availability=payload.availability,
+                confidentiality_rationale=payload.confidentiality_rationale,
+                integrity_rationale=payload.integrity_rationale,
+                availability_rationale=payload.availability_rationale,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(
+                    session, workspace_id=workspace_id
+                ),
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            ValueError,
+        ) as exc:
             return _error_response(exc)
 
     @router.get("/ssp-workspaces/{workspace_id}")

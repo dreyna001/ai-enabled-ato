@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -98,6 +99,35 @@ def test_initial_generation_builds_grounded_prompt_and_accepts_valid_output() ->
 
     assert result.attempts == 1
     assert result.repair_attempted is False
+
+
+def test_unconfirmed_generation_returns_grounded_categorization_proposal() -> None:
+    prompts: list[ModelPrompt] = []
+    payload = _valid_generation_payload()
+    payload["categorization"] = {
+        "confidentiality": "moderate",
+        "integrity": "moderate",
+        "availability": "low",
+        "confidentiality_rationale": "Disclosure could cause serious harm.",
+        "integrity_rationale": "Incorrect records could cause serious harm.",
+        "availability_rationale": "Short outages can be handled manually.",
+        "supporting_fact_ids": ["fact-1"],
+    }
+
+    def model(prompt: ModelPrompt) -> str:
+        prompts.append(prompt)
+        return json.dumps(payload)
+
+    result = _run(
+        generate_initial_ssp(
+            replace(_initial_request(), categorization_confirmed=False),
+            model,
+        )
+    )
+
+    prompt = json.loads(prompts[0].user)
+    assert prompt["profile"]["system_categorization_status"] == "unconfirmed"
+    assert result.value.categorization.confidentiality == "moderate"
     assert result.value.sections[0].supporting_fact_ids == ("fact-1",)
     prompt_payload = json.loads(prompts[0].user)
     assert prompt_payload["evidence_facts"] == [

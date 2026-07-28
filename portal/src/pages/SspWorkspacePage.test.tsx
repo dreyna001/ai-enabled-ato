@@ -16,6 +16,16 @@ function workspaceFixture(): SspWorkspace {
     purpose: "Manage federal grant applications.",
     hosting: "Agency-owned cloud",
     impactLevel: "Moderate",
+    provisionalImpactLevel: "moderate",
+    categorization: {
+      confidentiality: "moderate",
+      integrity: "moderate",
+      availability: "low",
+      confidentialityRationale: "Disclosure could cause serious mission harm.",
+      integrityRationale: "Incorrect grant data could cause serious mission harm.",
+      availabilityRationale: "Short outages can be handled manually.",
+      confirmed: true,
+    },
     authorizationPath: "Agency ATO",
     profile: {
       id: "nist-rev5",
@@ -168,6 +178,61 @@ describe("SspWorkspacePage", () => {
     expect(onAnswerQuestion).toHaveBeenCalledWith({
       questionId: "question-1",
       answer: "Dana Holloway, Director, Office of Grants Operations",
+    });
+  });
+
+  it("calculates and confirms categorization after intake", () => {
+    const onSaveCategorization = vi.fn();
+    const workspace = workspaceFixture();
+    workspace.impactLevel = "";
+    workspace.profile.baseline = "Unconfirmed";
+    workspace.categorization = {
+      confidentiality: "",
+      integrity: "",
+      availability: "",
+      confidentialityRationale: "",
+      integrityRationale: "",
+      availabilityRationale: "",
+      confirmed: false,
+    };
+
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspace}
+        actions={{ onSaveCategorization }}
+      />,
+    );
+
+    for (const [label, value] of [
+      ["Confidentiality impact", "moderate"],
+      ["Integrity impact", "low"],
+      ["Availability impact", "high"],
+    ]) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.change(screen.getByLabelText("Confidentiality rationale"), {
+      target: { value: "Disclosure could cause serious harm." },
+    });
+    fireEvent.change(screen.getByLabelText("Integrity rationale"), {
+      target: { value: "Incorrect data could cause limited harm." },
+    });
+    fireEvent.change(screen.getByLabelText("Availability rationale"), {
+      target: { value: "An outage could stop time-critical grant payments." },
+    });
+
+    expect(screen.getByText("high")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm categorization" }),
+    );
+    expect(onSaveCategorization).toHaveBeenCalledWith({
+      confidentiality: "moderate",
+      integrity: "low",
+      availability: "high",
+      confidentialityRationale: "Disclosure could cause serious harm.",
+      integrityRationale: "Incorrect data could cause limited harm.",
+      availabilityRationale:
+        "An outage could stop time-critical grant payments.",
     });
   });
 

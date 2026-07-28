@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ato_service.ssp_workspace.api import build_ssp_workspace_router
+from ato_service.ssp_workspace.api import (
+    CreateWorkspaceRequest,
+    build_ssp_workspace_router,
+)
 from ato_service.ssp_workspace.contracts import (
     EvidenceLink,
     ProfileRequirement,
@@ -15,7 +18,11 @@ from ato_service.ssp_workspace.profiles import (
     serialize_profile_bundle,
 )
 from ato_service.ssp_workspace.profile_bundles import load_profile_bundle
-from ato_service.ssp_workspace.service import _effective_metric_facts
+from ato_service.ssp_workspace.profile_bundles import resolve_profile
+from ato_service.ssp_workspace.service import (
+    _effective_metric_facts,
+    _impact_profile_diff,
+)
 import uuid
 
 
@@ -35,6 +42,7 @@ def test_workspace_router_exposes_complete_bounded_workflow() -> None:
         in paths
     )
     assert "/ssp-workspaces/{workspace_id}/generate" in paths
+    assert "/ssp-workspaces/{workspace_id}/categorization" in paths
     assert (
         "/ssp-workspaces/{workspace_id}/agent/patches/{patch_id}/apply"
         in paths
@@ -46,6 +54,35 @@ def test_workspace_router_exposes_complete_bounded_workflow() -> None:
     )
     assert "/ssp-workspaces/{workspace_id}/migrate-profile" in paths
     assert "/ssp-workspaces/{workspace_id}/exports/{export_format}" in paths
+
+
+def test_workspace_creation_does_not_require_impact_level() -> None:
+    request = CreateWorkspaceRequest.model_validate(
+        {
+            "system_id": str(uuid.uuid4()),
+            "profile_version_id": str(uuid.uuid4()),
+        }
+    )
+
+    assert request.model_dump().keys() == {"system_id", "profile_version_id"}
+
+
+def test_categorization_change_diffs_control_baselines() -> None:
+    bundle = load_profile_bundle(
+        PROJECT_ROOT
+        / "reference"
+        / "ssp_profiles"
+        / "synthetic-fisma-rev5-1.0.0"
+    )
+
+    diff = _impact_profile_diff(
+        resolve_profile(bundle, "low"),
+        resolve_profile(bundle, "moderate"),
+    )
+
+    assert diff.impact_level == "moderate"
+    assert diff.added_control_ids
+    assert diff.removed_control_ids == ()
 
 
 def test_stored_builtin_profile_round_trips_without_semantic_loss() -> None:

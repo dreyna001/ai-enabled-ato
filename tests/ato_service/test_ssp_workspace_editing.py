@@ -24,6 +24,7 @@ from ato_service.ssp_workspace.editing import (
 )
 from ato_service.ssp_workspace.generation_contracts import (
     GeneratedControl,
+    GeneratedCategorization,
     GeneratedQuestion,
     GeneratedSection,
     GenerationResult,
@@ -128,6 +129,34 @@ def test_generation_populates_objects_and_deduplicates_questions() -> None:
     assert first.controls[0].state is ControlState.GENERATED
     assert len(first.questions) == 1
     assert len(second.questions) == 1
+
+
+def test_generation_stores_grounded_categorization_as_unconfirmed_proposal() -> None:
+    result = GenerationResult(
+        sections=(),
+        controls=(),
+        questions=(),
+        categorization=GeneratedCategorization(
+            confidentiality="moderate",
+            integrity="moderate",
+            availability="low",
+            confidentiality_rationale="Disclosure could cause serious harm.",
+            integrity_rationale="Incorrect records could cause serious harm.",
+            availability_rationale="Short outages can be handled manually.",
+            supporting_fact_ids=("system.purpose",),
+        ),
+    )
+
+    updated = merge_generation(_content(), result)
+    facts = {fact.key: fact for fact in updated.facts}
+
+    assert facts["system.confidentiality_impact"].value == "moderate"
+    assert (
+        facts["system.confidentiality_impact"].provenance
+        is Provenance.AGENT_GENERATED
+    )
+    assert facts["system.confidentiality_impact"].evidence[0].artifact_id == ARTIFACT_ID
+    assert "system.impact_level" not in facts
 
 
 def test_generation_does_not_leave_owner_question_when_owner_is_populated() -> None:

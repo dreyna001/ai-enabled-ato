@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from ato_service.ssp_workspace.contracts import (
     ControlState,
     EvidenceLink,
+    FactContent,
+    Provenance,
     QuestionContent,
     QuestionState,
     RevisionContent,
@@ -82,6 +84,37 @@ def merge_generation(
             unresolved_reason=None if has_statement else "Information is not available.",
         )
 
+    categorization_confirmed = any(
+        (
+            fact.key == "system.categorization_status"
+            and fact.value == "confirmed"
+        )
+        or fact.key in {"system.impact_level", "impact_level"}
+        for fact in facts.values()
+    )
+    if result.categorization is not None and not categorization_confirmed:
+        proposal = result.categorization
+        evidence = _evidence_for_facts(proposal.supporting_fact_ids, facts)
+        proposed_values = {
+            "system.confidentiality_impact": proposal.confidentiality,
+            "system.integrity_impact": proposal.integrity,
+            "system.availability_impact": proposal.availability,
+            "system.confidentiality_impact_rationale": (
+                proposal.confidentiality_rationale
+            ),
+            "system.integrity_impact_rationale": proposal.integrity_rationale,
+            "system.availability_impact_rationale": (
+                proposal.availability_rationale
+            ),
+        }
+        for key, value in proposed_values.items():
+            facts[key] = FactContent(
+                key=key,
+                value=value,
+                provenance=Provenance.AGENT_GENERATED,
+                evidence=evidence,
+            )
+
     questions = _resolve_direct_section_questions(
         questions,
         sections=sections,
@@ -109,7 +142,7 @@ def merge_generation(
         )
 
     return RevisionContent(
-        facts=content.facts,
+        facts=tuple(facts[key] for key in sorted(facts)),
         sections=tuple(sections[key] for key in sorted(sections)),
         controls=tuple(controls[key] for key in sorted(controls)),
         questions=tuple(

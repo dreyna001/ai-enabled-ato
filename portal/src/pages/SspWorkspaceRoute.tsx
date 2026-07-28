@@ -12,6 +12,7 @@ import {
   listSspWorkspaces,
   removeSspEvidence,
   rejectSspPatch,
+  saveSspCategorization,
   saveSspControl,
   saveSspSection,
   uploadSspEvidence,
@@ -34,8 +35,6 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
   const [generationPending, setGenerationPending] = useState(false);
   const [newSystemName, setNewSystemName] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
-  const [impactLevel, setImpactLevel] =
-    useState<"low" | "moderate" | "high">("moderate");
 
   const load = useCallback(async () => {
     setState("loading");
@@ -109,7 +108,6 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
                     session,
                     system,
                     activeProfile.profile_version_id,
-                    impactLevel,
                   ),
                 )
                 .then((created) => {
@@ -133,20 +131,6 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
                 value={newSystemName}
                 onChange={(event) => setNewSystemName(event.target.value)}
               />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium">Impact level</span>
-              <select
-                className="w-full rounded-sm border bg-background px-3 py-2"
-                value={impactLevel}
-                onChange={(event) =>
-                  setImpactLevel(event.target.value as typeof impactLevel)
-                }
-              >
-                <option value="low">Low</option>
-                <option value="moderate">Moderate</option>
-                <option value="high">High</option>
-              </select>
             </label>
             <p className="text-xs text-muted-foreground">
               {activeProfile
@@ -245,6 +229,10 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             void run((current) => saveSspControl(session, current, change)),
           onAnswerQuestion: (change) =>
             void run((current) => answerSspQuestion(session, current, change)),
+          onSaveCategorization: (change) =>
+            void run((current) =>
+              saveSspCategorization(session, current, change),
+            ),
           onAskAgent: (context, message) =>
             void run((current) =>
               askSspAgent(session, current, context, message),

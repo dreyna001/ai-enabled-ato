@@ -71,6 +71,7 @@ class InitialGenerationRequest:
     profile: ResolvedProfile
     source_ids: tuple[str, ...]
     facts: tuple[EvidenceFact, ...]
+    categorization_confirmed: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +86,7 @@ class ContextualEditRequest:
     controls: tuple[ControlState, ...]
     open_questions: tuple[OpenQuestionState, ...]
     instruction: str
+    categorization_confirmed: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +183,7 @@ def _normalize_generation_envelope(raw_text: str) -> str:
     payload.setdefault("sections", [])
     payload.setdefault("controls", [])
     payload.setdefault("questions", [])
+    payload.setdefault("categorization", None)
     sections = payload["sections"]
     if isinstance(sections, list):
         for section in sections:
@@ -357,16 +360,31 @@ def _initial_user_prompt(request: InitialGenerationRequest) -> str:
         profile=request.profile,
         source_ids=request.source_ids,
         facts=request.facts,
+        categorization_confirmed=request.categorization_confirmed,
     )
     payload["task"] = (
         "Return only SSP sections and control implementation statements that "
         "the supplied evidence supports. Omit unsupported sections and controls. "
         "Keep supported narratives concise and implementation-specific. Add a "
         "small deduplicated set of targeted questions for material information "
-        "gaps; do not create one question per control."
+        "gaps; do not create one question per control. When categorization is "
+        "unconfirmed and evidence supports all three impacts, propose grounded "
+        "confidentiality, integrity, and availability values and rationales. "
+        "Otherwise return null categorization."
     )
     payload["output_contract"] = {
         "schema_version": GENERATION_SCHEMA_VERSION,
+        "categorization": {
+            "confidentiality": "low|moderate|high",
+            "integrity": "low|moderate|high",
+            "availability": "low|moderate|high",
+            "confidentiality_rationale": "evidence-grounded rationale",
+            "integrity_rationale": "evidence-grounded rationale",
+            "availability_rationale": "evidence-grounded rationale",
+            "supporting_fact_ids": ["allowed fact_id"],
+        }
+        if not request.categorization_confirmed
+        else None,
         "sections": [
             {
                 "section_id": "allowed section id",
@@ -412,6 +430,7 @@ def _patch_user_prompt(
         profile=request.profile,
         source_ids=request.source_ids,
         facts=request.facts,
+        categorization_confirmed=request.categorization_confirmed,
     )
     payload.update(
         {
@@ -490,6 +509,7 @@ def _common_prompt_payload(
     profile: ResolvedProfile,
     source_ids: tuple[str, ...],
     facts: tuple[EvidenceFact, ...],
+    categorization_confirmed: bool,
 ) -> dict[str, object]:
     return {
         "system_name": system_name,
@@ -497,7 +517,16 @@ def _common_prompt_payload(
             "profile_id": profile.profile_id,
             "profile_version": profile.profile_version,
             "manifest_sha256": profile.manifest_sha256,
-            "impact_level": profile.impact_level,
+            "control_baseline_impact_level": profile.impact_level,
+            "system_categorization_status": (
+                "confirmed" if categorization_confirmed else "unconfirmed"
+            ),
+            "baseline_note": (
+                "The control baseline is provisional and must not be presented "
+                "as a confirmed FIPS 199 categorization."
+                if not categorization_confirmed
+                else "The FIPS 199 categorization has been confirmed."
+            ),
         },
         "ssp_sections": [
             {

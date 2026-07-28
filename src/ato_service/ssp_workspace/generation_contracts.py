@@ -28,6 +28,7 @@ ImplementationStatus = Literal[
 Responsibility = Literal["system_specific", "hybrid", "inherited", "unknown"]
 OwnerType = Literal["isso", "agency", "technical", "system_owner"]
 TargetType = Literal["ssp_section", "control"]
+ImpactLevel = Literal["low", "moderate", "high"]
 
 _IMPLEMENTATION_STATUSES = frozenset(
     {
@@ -73,10 +74,22 @@ class GeneratedQuestion:
 
 
 @dataclass(frozen=True, slots=True)
+class GeneratedCategorization:
+    confidentiality: ImpactLevel
+    integrity: ImpactLevel
+    availability: ImpactLevel
+    confidentiality_rationale: str
+    integrity_rationale: str
+    availability_rationale: str
+    supporting_fact_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class GenerationResult:
     sections: tuple[GeneratedSection, ...]
     controls: tuple[GeneratedControl, ...]
     questions: tuple[GeneratedQuestion, ...]
+    categorization: GeneratedCategorization | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,10 +134,17 @@ def parse_generation_response(
 ) -> GenerationResult:
     """Parse and validate a bounded initial-generation response."""
     payload = _parse_json_object(raw_text)
+    payload.setdefault("categorization", None)
     _require_schema_version(payload, GENERATION_SCHEMA_VERSION)
     _require_exact_keys(
         payload,
-        {"schema_version", "sections", "controls", "questions"},
+        {
+            "schema_version",
+            "sections",
+            "controls",
+            "questions",
+            "categorization",
+        },
         context="generation response",
     )
 
@@ -168,6 +188,10 @@ def parse_generation_response(
         )
         for entry in question_entries
     )
+    categorization = _parse_categorization(
+        payload.get("categorization"),
+        allowed_fact_ids=allowed_fact_ids,
+    )
     _require_unique(
         [section.section_id for section in sections],
         field_name="section_id",
@@ -184,6 +208,74 @@ def parse_generation_response(
         sections=sections,
         controls=controls,
         questions=questions,
+        categorization=categorization,
+    )
+
+
+def _parse_categorization(
+    value: Any,
+    *,
+    allowed_fact_ids: set[str] | frozenset[str],
+) -> GeneratedCategorization | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise GenerationContractError("categorization must be an object or null")
+    _require_exact_keys(
+        value,
+        {
+            "confidentiality",
+            "integrity",
+            "availability",
+            "confidentiality_rationale",
+            "integrity_rationale",
+            "availability_rationale",
+            "supporting_fact_ids",
+        },
+        context="categorization",
+    )
+    impacts = {
+        key: _allowed_text(
+            value.get(key),
+            field_name=key,
+            allowed=frozenset({"low", "moderate", "high"}),
+        )
+        for key in ("confidentiality", "integrity", "availability")
+    }
+    rationales = {
+        key: _text(
+            value.get(key),
+            field_name=key,
+            maximum=MAX_CONTENT_LENGTH,
+        )
+        for key in (
+            "confidentiality_rationale",
+            "integrity_rationale",
+            "availability_rationale",
+        )
+    }
+    if any(not rationale for rationale in rationales.values()):
+        raise GenerationContractError(
+            "categorization rationales must be non-empty"
+        )
+    fact_ids = _allowed_fact_ids(
+        value.get("supporting_fact_ids"),
+        allowed_fact_ids=allowed_fact_ids,
+    )
+    if not fact_ids:
+        raise GenerationContractError(
+            "categorization requires supporting facts",
+            failure_kind="source_binding",
+            repairable=False,
+        )
+    return GeneratedCategorization(
+        confidentiality=impacts["confidentiality"],  # type: ignore[arg-type]
+        integrity=impacts["integrity"],  # type: ignore[arg-type]
+        availability=impacts["availability"],  # type: ignore[arg-type]
+        confidentiality_rationale=rationales["confidentiality_rationale"],
+        integrity_rationale=rationales["integrity_rationale"],
+        availability_rationale=rationales["availability_rationale"],
+        supporting_fact_ids=fact_ids,
     )
 
 

@@ -62,7 +62,7 @@ from ato_service.ssp_workspace.persistence import (
     save_revision,
 )
 from ato_service.ssp_workspace.profiles import resolve_stored_profile
-from ato_service.ssp_workspace.profile_bundles import diff_profiles
+from ato_service.ssp_workspace.profile_bundles import ProfileDiff, diff_profiles
 
 
 class AgentPatchNotFoundError(ValueError):
@@ -86,7 +86,7 @@ async def create_initialized_workspace(
     *,
     system_id: uuid.UUID,
     profile_version_id: uuid.UUID,
-    impact_level: str,
+    impact_level: str | None,
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
@@ -110,7 +110,8 @@ async def create_initialized_workspace(
         from ato_service.ssp_workspace.persistence import ProfileVersionNotFoundError
 
         raise ProfileVersionNotFoundError("profile version is not active")
-    profile = resolve_stored_profile(profile_row, impact_level)
+    working_impact_level = impact_level or "moderate"
+    profile = resolve_stored_profile(profile_row, working_impact_level)
     system = (
         await session.execute(select(System).where(System.system_id == system_id))
     ).scalar_one()
@@ -139,8 +140,12 @@ async def create_initialized_workspace(
                 provenance=Provenance.ISSO_ENTERED,
             ),
             FactContent(
-                key="system.impact_level",
-                value=impact_level,
+                key=(
+                    "system.impact_level"
+                    if impact_level is not None
+                    else "system.provisional_impact_level"
+                ),
+                value=working_impact_level,
                 provenance=Provenance.ISSO_ENTERED,
             ),
             *(
@@ -311,7 +316,7 @@ async def load_workspace_envelope(
         evidence_link_count=evidence_link_count,
     )
     metric_document = asdict(metrics)
-    impact_level = _impact_level(content)
+    impact_level = _confirmed_impact_level(content)
     return {
         "workspace_id": str(workspace.workspace_id),
         "system_id": str(workspace.system_id),
@@ -329,6 +334,7 @@ async def load_workspace_envelope(
             "version": profile_row.version,
             "status": profile_row.status,
             "impact_level": impact_level,
+            "provisional_impact_level": _impact_level(content),
         },
         "current_revision": (
             {
@@ -512,6 +518,7 @@ async def generate_workspace_draft(
                 )
             ),
             facts=_generation_facts(content),
+            categorization_confirmed=_confirmed_impact_level(content) is not None,
         ),
         model,
     )
@@ -596,6 +603,7 @@ async def propose_agent_patch(
                 and item.target_type != "fact"
             ),
             instruction=instruction,
+            categorization_confirmed=_confirmed_impact_level(content) is not None,
         ),
         model,
     )
@@ -874,6 +882,8 @@ async def migrate_workspace_profile(
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
+    categorization: dict[str, str] | None = None,
+    audit_action: str = "ssp_profile_migrated",
 ) -> tuple[Any, Any]:
     """Create a new working revision reconciled to an active profile version."""
 
@@ -913,10 +923,16 @@ async def migrate_workspace_profile(
     new_profile = resolve_stored_profile(new_profile_row, impact_level)
     if old_profile.profile_id != new_profile.profile_id:
         raise ValueError("profile migration requires the same profile_id")
-    profile_diff = diff_profiles(old_profile, new_profile)
+    profile_diff = (
+        _impact_profile_diff(old_profile, new_profile)
+        if old_profile.profile_version == new_profile.profile_version
+        and old_profile.impact_level != new_profile.impact_level
+        else diff_profiles(old_profile, new_profile)
+    )
     content = RevisionContent.model_validate(current.content)
     old_sections = {item.key: item for item in content.sections}
     old_controls = {item.control_id: item for item in content.controls}
+    new_control_ids = {item.control_id for item in new_profile.controls}
     facts = {item.key: item for item in content.facts}
     for key, value in (
         ("profile_id", new_profile.profile_id),
@@ -928,6 +944,14 @@ async def migrate_workspace_profile(
             value=value,
             provenance=Provenance.ISSO_ENTERED,
         )
+    if categorization is not None:
+        facts.pop("system.provisional_impact_level", None)
+        for key, value in categorization.items():
+            facts[key] = FactContent(
+                key=key,
+                value=value,
+                provenance=Provenance.ISSO_ENTERED,
+            )
     migrated = replace(
         content,
         facts=tuple(facts[key] for key in sorted(facts)),
@@ -952,6 +976,14 @@ async def migrate_workspace_profile(
             )
             for item in new_profile.controls
         ),
+        questions=tuple(
+            question.model_copy(update={"state": QuestionState.DISMISSED})
+            if question.state is QuestionState.OPEN
+            and question.target_type == "control"
+            and question.target_key not in new_control_ids
+            else question
+            for question in content.questions
+        ),
     )
     workspace.profile_version_id = profile_version_id
     saved = await _save_edited_revision(
@@ -962,13 +994,74 @@ async def migrate_workspace_profile(
         actor_id=actor_id,
         now=now,
         audit_hmac_key=audit_hmac_key,
-        action="ssp_profile_migrated",
+        action=audit_action,
         metadata={
             "old_profile_version": old_profile.profile_version,
             "new_profile_version": new_profile.profile_version,
+            "old_impact_level": old_profile.impact_level,
+            "new_impact_level": new_profile.impact_level,
         },
     )
     return saved, profile_diff
+
+
+async def save_system_categorization(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+    confidentiality: str,
+    integrity: str,
+    availability: str,
+    confidentiality_rationale: str,
+    integrity_rationale: str,
+    availability_rationale: str,
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> tuple[Any, Any]:
+    """Confirm FIPS 199 impacts and reconcile the selected control baseline."""
+
+    from ato_service.db.models import SspWorkspace
+
+    impacts = (confidentiality, integrity, availability)
+    if any(value not in {"low", "moderate", "high"} for value in impacts):
+        raise ValueError("categorization impacts must be low, moderate, or high")
+    rationales = (
+        confidentiality_rationale.strip(),
+        integrity_rationale.strip(),
+        availability_rationale.strip(),
+    )
+    if any(not value for value in rationales):
+        raise ValueError("categorization rationale is required for each impact")
+    workspace = (
+        await session.execute(
+            select(SspWorkspace).where(SspWorkspace.workspace_id == workspace_id)
+        )
+    ).scalar_one()
+    rank = {"low": 0, "moderate": 1, "high": 2}
+    overall = max(impacts, key=rank.__getitem__)
+    categorization = {
+        "system.categorization_status": "confirmed",
+        "system.confidentiality_impact": confidentiality,
+        "system.integrity_impact": integrity,
+        "system.availability_impact": availability,
+        "system.confidentiality_impact_rationale": rationales[0],
+        "system.integrity_impact_rationale": rationales[1],
+        "system.availability_impact_rationale": rationales[2],
+    }
+    return await migrate_workspace_profile(
+        session,
+        workspace_id=workspace_id,
+        profile_version_id=workspace.profile_version_id,
+        impact_level=overall,
+        expected_revision_id=expected_revision_id,
+        actor_id=actor_id,
+        now=now,
+        audit_hmac_key=audit_hmac_key,
+        categorization=categorization,
+        audit_action="ssp_categorization_confirmed",
+    )
 
 
 async def _save_edited_revision(
@@ -1076,6 +1169,20 @@ def _generation_facts(content: RevisionContent) -> tuple[EvidenceFact, ...]:
 
 
 def _impact_level(content: RevisionContent) -> str:
+    confirmed = _confirmed_impact_level(content)
+    if confirmed is not None:
+        return confirmed
+    for fact in content.facts:
+        if fact.key == "system.provisional_impact_level" and fact.value in {
+            "low",
+            "moderate",
+            "high",
+        }:
+            return str(fact.value)
+    raise ValueError("workspace is missing a valid impact_level fact")
+
+
+def _confirmed_impact_level(content: RevisionContent) -> str | None:
     for fact in content.facts:
         if fact.key in {"system.impact_level", "impact_level"} and fact.value in {
             "low",
@@ -1083,7 +1190,24 @@ def _impact_level(content: RevisionContent) -> str:
             "high",
         }:
             return str(fact.value)
-    raise ValueError("workspace is missing a valid impact_level fact")
+    return None
+
+
+def _impact_profile_diff(old: Any, new: Any) -> ProfileDiff:
+    old_controls = {control.control_id for control in old.controls}
+    new_controls = {control.control_id for control in new.controls}
+    return ProfileDiff(
+        old_profile_version=old.profile_version,
+        new_profile_version=new.profile_version,
+        impact_level=new.impact_level,
+        added_control_ids=tuple(sorted(new_controls - old_controls)),
+        removed_control_ids=tuple(sorted(old_controls - new_controls)),
+        changed_control_ids=(),
+        added_ssp_item_ids=(),
+        removed_ssp_item_ids=(),
+        changed_ssp_item_ids=(),
+        source_version_changes=(),
+    )
 
 
 def _metric_requirements(profile_row: Any) -> tuple[ProfileRequirement, ...]:

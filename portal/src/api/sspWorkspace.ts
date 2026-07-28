@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SessionInfo, System } from "@/types";
 import type {
   AgentContext,
+  CategorizationChange,
   ControlStatementChange,
   QuestionAnswer,
   SspSectionChange,
@@ -40,7 +41,8 @@ const envelopeSchema = z.object({
     profile_id: z.string(),
     version: z.string(),
     status: z.string(),
-    impact_level: z.enum(["low", "moderate", "high"]),
+    impact_level: z.enum(["low", "moderate", "high"]).nullable(),
+    provisional_impact_level: z.enum(["low", "moderate", "high"]),
   }),
   current_revision: z.object({
     revision_id: z.string().uuid(),
@@ -155,16 +157,52 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
     name: envelope.system.display_name,
     purpose: factValue(facts, "system.purpose"),
     hosting: factValue(facts, "system.hosting_model"),
-    impactLevel: envelope.profile.impact_level,
+    impactLevel: envelope.profile.impact_level ?? "",
+    provisionalImpactLevel: envelope.profile.provisional_impact_level,
+    categorization: {
+      confidentiality: factValue(facts, "system.confidentiality_impact") as
+        | "low"
+        | "moderate"
+        | "high"
+        | "",
+      integrity: factValue(facts, "system.integrity_impact") as
+        | "low"
+        | "moderate"
+        | "high"
+        | "",
+      availability: factValue(facts, "system.availability_impact") as
+        | "low"
+        | "moderate"
+        | "high"
+        | "",
+      confidentialityRationale: factValue(
+        facts,
+        "system.confidentiality_impact_rationale",
+      ),
+      integrityRationale: factValue(
+        facts,
+        "system.integrity_impact_rationale",
+      ),
+      availabilityRationale: factValue(
+        facts,
+        "system.availability_impact_rationale",
+      ),
+      confirmed:
+        factValue(facts, "system.categorization_status") === "confirmed" ||
+        envelope.profile.impact_level !== null,
+    },
     authorizationPath: factValue(facts, "system.authorization_path"),
     profile: {
       id: envelope.profile.profile_version_id,
       name: envelope.profile.profile_id,
       version: envelope.profile.version,
-      baseline: (
-        envelope.profile.impact_level.charAt(0).toUpperCase() +
-        envelope.profile.impact_level.slice(1)
-      ) as "Low" | "Moderate" | "High",
+      baseline: envelope.profile.impact_level
+        ? (envelope.profile.impact_level.charAt(0).toUpperCase() +
+            envelope.profile.impact_level.slice(1)) as
+            | "Low"
+            | "Moderate"
+            | "High"
+        : "Unconfirmed",
     },
     revisionId: revision.revision_id,
     revisionUpdatedAt: revision.created_at,
@@ -296,7 +334,6 @@ export async function createSspWorkspace(
   session: SessionInfo,
   system: System,
   profileVersionId: string,
-  impactLevel: "low" | "moderate" | "high",
 ): Promise<SspWorkspace> {
   const result = await apiRequest("/ssp-workspaces", envelopeSchema, {
     method: "POST",
@@ -304,10 +341,31 @@ export async function createSspWorkspace(
     body: JSON.stringify({
       system_id: system.system_id,
       profile_version_id: profileVersionId,
-      impact_level: impactLevel,
     }),
   });
   return mapWorkspaceEnvelope(result);
+}
+
+export function saveSspCategorization(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  change: CategorizationChange,
+) {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    "/categorization",
+    "POST",
+    {
+      expected_revision_id: workspace.revisionId,
+      confidentiality: change.confidentiality,
+      integrity: change.integrity,
+      availability: change.availability,
+      confidentiality_rationale: change.confidentialityRationale,
+      integrity_rationale: change.integrityRationale,
+      availability_rationale: change.availabilityRationale,
+    },
+  );
 }
 
 async function workspaceMutation(
