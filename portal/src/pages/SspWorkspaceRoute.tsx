@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  answerSspQuestion,
   applySspPatch,
   approveSspWorkspace,
   askSspAgent,
@@ -242,6 +243,8 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             void run((current) => saveSspSection(session, current, change)),
           onSaveControl: (change) =>
             void run((current) => saveSspControl(session, current, change)),
+          onAnswerQuestion: (change) =>
+            void run((current) => answerSspQuestion(session, current, change)),
           onAskAgent: (context, message) =>
             void run((current) =>
               askSspAgent(session, current, context, message),

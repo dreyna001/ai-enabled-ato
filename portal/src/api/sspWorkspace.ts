@@ -3,6 +3,7 @@ import type { SessionInfo, System } from "@/types";
 import type {
   AgentContext,
   ControlStatementChange,
+  QuestionAnswer,
   SspSectionChange,
   SspWorkspace,
 } from "@/sspWorkspaceTypes";
@@ -363,6 +364,23 @@ export function saveSspControl(
       implementation_statement: change.statement,
       implementation_status: change.implementationStatus,
       responsibility: change.responsibility,
+    },
+  );
+}
+
+export function answerSspQuestion(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  change: QuestionAnswer,
+) {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    `/questions/${encodeURIComponent(change.questionId)}/answer`,
+    "POST",
+    {
+      expected_revision_id: workspace.revisionId,
+      answer: change.answer,
     },
   );
 }

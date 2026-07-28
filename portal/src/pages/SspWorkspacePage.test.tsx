@@ -130,6 +130,47 @@ describe("SspWorkspacePage", () => {
     expect(screen.getByText("How often are privileged roles reviewed?")).toBeInTheDocument();
   });
 
+  it("resolves a simple question with direct text instead of an agent call", () => {
+    const onAnswerQuestion = vi.fn();
+    const workspace = workspaceFixture();
+    workspace.sections[0] = {
+      ...workspace.sections[0],
+      id: "system.owner",
+      title: "System Owner",
+      content: "Dana Holloway, Director, Office of Grants Operations",
+    };
+    workspace.questions[0] = {
+      ...workspace.questions[0],
+      targetType: "ssp_section",
+      targetId: "system.owner",
+      prompt: "Who is the current system owner for FGRS?",
+    };
+
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspace}
+        initialView="questions"
+        actions={{ onAnswerQuestion }}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText(
+        "Answer Who is the current system owner for FGRS?",
+      ),
+    ).toHaveValue("Dana Holloway, Director, Office of Grants Operations");
+    expect(
+      screen.queryByRole("button", { name: "Resolve with agent" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save answer" }));
+    expect(onAnswerQuestion).toHaveBeenCalledWith({
+      questionId: "question-1",
+      answer: "Dana Holloway, Director, Office of Grants Operations",
+    });
+  });
+
   it("shows generation progress and disables repeated generation", () => {
     render(
       <SspWorkspacePage

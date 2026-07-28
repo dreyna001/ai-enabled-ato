@@ -13,6 +13,7 @@ from ato_service.ssp_workspace.contracts import (
     QuestionContent,
     QuestionState,
     RevisionContent,
+    SectionContent,
     SectionState,
 )
 from ato_service.ssp_workspace.generation_contracts import (
@@ -21,6 +22,15 @@ from ato_service.ssp_workspace.generation_contracts import (
 )
 
 _QUESTION_NAMESPACE = uuid.UUID("c2d1fae7-5965-477f-867d-41279b8f989d")
+_DIRECT_ANSWER_SECTION_KEYS = frozenset(
+    {
+        "system.name",
+        "system.identifier",
+        "system.owner",
+        "system.isso",
+        "system.impact_level",
+    }
+)
 
 
 class WorkspaceEditError(ValueError):
@@ -72,10 +82,20 @@ def merge_generation(
             unresolved_reason=None if has_statement else "Information is not available.",
         )
 
+    questions = _resolve_direct_section_questions(
+        questions,
+        sections=sections,
+    )
     existing_question_keys = {
         _question_identity(question): question for question in questions.values()
     }
     for generated in result.questions:
+        if _direct_section_answer(
+            target_type=generated.target_type,
+            target_key=generated.target_id,
+            sections=sections,
+        ):
+            continue
         if generated.question_key in existing_question_keys:
             continue
         question_id = uuid.uuid5(_QUESTION_NAMESPACE, generated.question_key)
@@ -197,7 +217,21 @@ def edit_section(
                 content=text,
                 state=SectionState.EDITED if text.strip() else SectionState.EMPTY,
             )
-            return _updated(content, sections=tuple(sections))
+            questions = {
+                str(question.question_id): question
+                for question in content.questions
+            }
+            questions = _resolve_direct_section_questions(
+                questions,
+                sections={item.key: item for item in sections},
+            )
+            return _updated(
+                content,
+                sections=tuple(sections),
+                questions=tuple(
+                    questions[key] for key in sorted(questions)
+                ),
+            )
     raise WorkspaceEditError(f"unknown SSP section: {section_key}")
 
 
@@ -241,16 +275,91 @@ def answer_question(
     normalized = answer.strip()
     if not normalized:
         raise WorkspaceEditError("answer cannot be empty")
-    questions = list(content.questions)
-    for index, question in enumerate(questions):
-        if question.question_id == question_id:
-            questions[index] = _updated(
+    selected = next(
+        (
+            question
+            for question in content.questions
+            if question.question_id == question_id
+        ),
+        None,
+    )
+    if selected is None:
+        raise WorkspaceEditError(f"unknown question: {question_id}")
+
+    sections = list(content.sections)
+    if (
+        selected.target_type == "ssp_section"
+        and selected.target_key in _DIRECT_ANSWER_SECTION_KEYS
+    ):
+        for index, section in enumerate(sections):
+            if section.key == selected.target_key:
+                sections[index] = _updated(
+                    section,
+                    content=normalized,
+                    state=SectionState.EDITED,
+                )
+                break
+        else:
+            raise WorkspaceEditError(
+                f"unknown SSP section: {selected.target_key}"
+            )
+
+    questions = tuple(
+        _updated(
+            question,
+            state=QuestionState.ANSWERED,
+            answer=normalized,
+        )
+        if question.state is QuestionState.OPEN
+        and question.target_type == selected.target_type
+        and question.target_key == selected.target_key
+        else question
+        for question in content.questions
+    )
+    return _updated(
+        content,
+        sections=tuple(sections),
+        questions=questions,
+    )
+
+
+def _direct_section_answer(
+    *,
+    target_type: str,
+    target_key: str,
+    sections: Mapping[str, SectionContent],
+) -> str | None:
+    if target_type != "ssp_section" or target_key not in _DIRECT_ANSWER_SECTION_KEYS:
+        return None
+    section = sections.get(target_key)
+    if section is None:
+        return None
+    content = section.content.strip()
+    return content or None
+
+
+def _resolve_direct_section_questions(
+    questions: Mapping[str, QuestionContent],
+    *,
+    sections: Mapping[str, SectionContent],
+) -> dict[str, QuestionContent]:
+    resolved: dict[str, QuestionContent] = {}
+    for key, question in questions.items():
+        answer = _direct_section_answer(
+            target_type=question.target_type,
+            target_key=question.target_key,
+            sections=sections,
+        )
+        resolved[key] = (
+            _updated(
                 question,
                 state=QuestionState.ANSWERED,
-                answer=normalized,
+                answer=answer,
             )
-            return _updated(content, questions=tuple(questions))
-    raise WorkspaceEditError(f"unknown question: {question_id}")
+            if question.state is QuestionState.OPEN and answer
+            else question
+        )
+    return resolved
 
 
 def _evidence_for_facts(

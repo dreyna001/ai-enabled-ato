@@ -66,6 +66,32 @@ def _content() -> RevisionContent:
     )
 
 
+def _owner_content() -> RevisionContent:
+    return RevisionContent(
+        facts=(
+            FactContent(
+                key="system.owner",
+                value="Dana Holloway",
+                provenance=Provenance.EXTRACTED,
+                evidence=(
+                    EvidenceLink(
+                        artifact_id=ARTIFACT_ID,
+                        locator={"page": 1},
+                    ),
+                ),
+            ),
+        ),
+        sections=(
+            SectionContent(
+                key="system.owner",
+                title="System Owner",
+                content="",
+                state=SectionState.EMPTY,
+            ),
+        ),
+    )
+
+
 def test_generation_populates_objects_and_deduplicates_questions() -> None:
     result = GenerationResult(
         sections=(
@@ -102,6 +128,72 @@ def test_generation_populates_objects_and_deduplicates_questions() -> None:
     assert first.controls[0].state is ControlState.GENERATED
     assert len(first.questions) == 1
     assert len(second.questions) == 1
+
+
+def test_generation_does_not_leave_owner_question_when_owner_is_populated() -> None:
+    result = GenerationResult(
+        sections=(
+            GeneratedSection(
+                section_id="system.owner",
+                content="Dana Holloway, Director",
+                supporting_fact_ids=("system.owner",),
+            ),
+        ),
+        controls=(),
+        questions=(
+            GeneratedQuestion(
+                question_key="owner_question",
+                target_type="ssp_section",
+                target_id="system.owner",
+                question="Who is the current system owner?",
+                owner_type="system_owner",
+            ),
+        ),
+    )
+
+    updated = merge_generation(_owner_content(), result)
+
+    assert updated.sections[0].content == "Dana Holloway, Director"
+    assert updated.questions == ()
+
+
+def test_owner_answer_updates_section_and_resolves_duplicate_questions() -> None:
+    result = GenerationResult(
+        sections=(),
+        controls=(),
+        questions=(
+            GeneratedQuestion(
+                question_key="owner_current",
+                target_type="ssp_section",
+                target_id="system.owner",
+                question="Who is the current system owner?",
+                owner_type="system_owner",
+            ),
+            GeneratedQuestion(
+                question_key="owner_official",
+                target_type="ssp_section",
+                target_id="system.owner",
+                question="Who is the official system owner?",
+                owner_type="system_owner",
+            ),
+        ),
+    )
+    content = merge_generation(_owner_content(), result)
+
+    answered = answer_question(
+        content,
+        question_id=content.questions[0].question_id,
+        answer="Dana Holloway, Director, Office of Grants Operations",
+    )
+
+    assert answered.sections[0].content == (
+        "Dana Holloway, Director, Office of Grants Operations"
+    )
+    assert answered.sections[0].state is SectionState.EDITED
+    assert all(
+        question.state is QuestionState.ANSWERED
+        for question in answered.questions
+    )
 
 
 def test_manual_section_is_not_overwritten_by_generation() -> None:

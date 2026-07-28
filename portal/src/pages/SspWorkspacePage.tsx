@@ -254,7 +254,8 @@ function SspWorkspaceSuccess({
           {view === "questions" ? (
             <QuestionsPanel
               questions={workspace.questions}
-              onOpenAgent={setAgentContext}
+              sections={workspace.sections}
+              onAnswer={actions.onAnswerQuestion}
             />
           ) : null}
           {view === "review" ? (

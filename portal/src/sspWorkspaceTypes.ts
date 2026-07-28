@@ -116,6 +116,11 @@ export type ControlStatementChange = {
   statement: string;
 };
 
+export type QuestionAnswer = {
+  questionId: string;
+  answer: string;
+};
+
 export type SspWorkspaceActions = {
   onRetry?: () => void;
   onCreateWorkspace?: () => void;
@@ -126,6 +131,7 @@ export type SspWorkspaceActions = {
   onGenerate?: () => void;
   onSaveSection?: (change: SspSectionChange) => void;
   onSaveControl?: (change: ControlStatementChange) => void;
+  onAnswerQuestion?: (change: QuestionAnswer) => void;
   onAskAgent?: (context: AgentContext, message: string) => void;
   onApplyPatch?: (patchId: string) => void;
   onRejectPatch?: (patchId: string) => void;

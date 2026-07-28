@@ -1,4 +1,5 @@
-import { Bot } from "lucide-react";
+import { Save } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,23 +9,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { AgentContext, WorkspaceQuestion } from "@/sspWorkspaceTypes";
+import type {
+  QuestionAnswer,
+  SspSection,
+  WorkspaceQuestion,
+} from "@/sspWorkspaceTypes";
 
 export function QuestionsPanel({
   questions,
-  onOpenAgent,
+  sections,
+  onAnswer,
 }: {
   questions: WorkspaceQuestion[];
-  onOpenAgent: (context: AgentContext) => void;
+  sections: SspSection[];
+  onAnswer?: (change: QuestionAnswer) => void;
 }) {
   const openQuestions = questions.filter((question) => question.state === "open");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Open questions</CardTitle>
         <CardDescription>
-          Currently identified gaps. New evidence or edits may identify more.
+          Enter confirmed information directly. No agent call is required.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -37,9 +45,9 @@ export function QuestionsPanel({
             {openQuestions.map((question) => (
               <li
                 key={question.id}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-sm border p-4"
+                className="space-y-3 rounded-sm border p-4"
               >
-                <div className="max-w-3xl">
+                <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="warning">Open</Badge>
                     <span className="font-mono text-xs text-muted-foreground">
@@ -51,20 +59,61 @@ export function QuestionsPanel({
                   </div>
                   <p className="mt-2 text-sm">{question.prompt}</p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    onOpenAgent({
-                      targetType: question.targetType,
-                      targetId: question.targetId,
-                      label: `${question.targetId} · unresolved question`,
-                    })
-                  }
-                >
-                  <Bot aria-hidden="true" />
-                  Resolve with agent
-                </Button>
+                <label className="block text-sm">
+                  <span className="sr-only">
+                    Answer {question.prompt}
+                  </span>
+                  <textarea
+                    aria-label={`Answer ${question.prompt}`}
+                    className="min-h-20 w-full resize-y rounded-sm border bg-background px-3 py-2"
+                    value={
+                      drafts[question.id] ??
+                      sections.find(
+                        (section) =>
+                          question.targetType === "ssp_section" &&
+                          section.id === question.targetId,
+                      )?.content ??
+                      ""
+                    }
+                    onChange={(event) =>
+                      setDrafts((current) => ({
+                        ...current,
+                        [question.id]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={
+                      !onAnswer ||
+                      !(
+                        drafts[question.id] ??
+                        sections.find(
+                          (section) =>
+                            question.targetType === "ssp_section" &&
+                            section.id === question.targetId,
+                        )?.content ??
+                        ""
+                      ).trim()
+                    }
+                    onClick={() => {
+                      const answer =
+                        drafts[question.id] ??
+                        sections.find(
+                          (section) =>
+                            question.targetType === "ssp_section" &&
+                            section.id === question.targetId,
+                        )?.content ??
+                        "";
+                      onAnswer?.({ questionId: question.id, answer });
+                    }}
+                  >
+                    <Save aria-hidden="true" />
+                    Save answer
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
