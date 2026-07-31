@@ -29,7 +29,7 @@ START_SERVICE=false
 RUN_SMOKE=false
 RUN_MIGRATE=false
 DRY_RUN=false
-EXPECTED_MIGRATION_HEAD="20260728_0015"
+EXPECTED_MIGRATION_HEAD="20260728_0016"
 
 PRODUCTION_SYSTEMD_UNITS=(
     "ato-api.service"
@@ -267,7 +267,9 @@ install_runtime_config_example() {
 }
 
 install_database_dsn_credential_layout() {
-    ensure_dir "$CREDENTIALS_DIR" "root:root" 700
+    # Group traverse (710) lets the ato service user reach group-readable secrets
+    # such as ato-local.env without listing other root-only credential files.
+    ensure_dir "$CREDENTIALS_DIR" "root:$SVC_USER" 710
     reject_non_regular_existing_file "$DATABASE_DSN_CREDENTIAL_PATH"
     if [[ -f "$DATABASE_DSN_CREDENTIAL_PATH" ]]; then
         info "Database DSN credential file exists: $DATABASE_DSN_CREDENTIAL_PATH (contents not modified)"

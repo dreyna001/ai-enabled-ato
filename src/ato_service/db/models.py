@@ -2588,3 +2588,135 @@ class SspApprovalSnapshot(Base):
         ),
         Index("ix_ssp_approval_snapshots_workspace_id", "workspace_id"),
     )
+
+
+class SspAgencyDocxRender(Base):
+    """Bounded agency template render bound to one approved workspace revision."""
+
+    __tablename__ = "ssp_agency_docx_renders"
+
+    render_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    profile_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_profile_versions.profile_version_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_revision_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    template_storage_key: Mapped[str] = mapped_column(String(67), nullable=False)
+    template_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    template_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mapping_plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    review_result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    output_storage_key: Mapped[str] = mapped_column(String(67), nullable=False)
+    output_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_by: Mapped[str | None] = mapped_column(String(255))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "profile_version_id",
+            "source_revision_id",
+            "template_sha256",
+            name="uq_ssp_agency_docx_renders_workspace_profile_revision_template",
+        ),
+        ForeignKeyConstraint(
+            ["source_revision_id", "workspace_id"],
+            [
+                "ssp_workspace_revisions.revision_id",
+                "ssp_workspace_revisions.workspace_id",
+            ],
+            ondelete="RESTRICT",
+            name="fk_ssp_agency_docx_renders_source_revision_workspace",
+        ),
+        ck.enum_check(
+            "status",
+            ev.SSP_AGENCY_DOCX_RENDER_STATUS_VALUES,
+            constraint_name="ck_ssp_agency_docx_renders_status",
+        ),
+        ck.sha256_check(
+            "source_revision_sha256",
+            constraint_name="ck_ssp_agency_docx_renders_source_revision_sha256",
+        ),
+        ck.sha256_check(
+            "template_sha256",
+            constraint_name="ck_ssp_agency_docx_renders_template_sha256",
+        ),
+        ck.sha256_check(
+            "output_sha256",
+            constraint_name="ck_ssp_agency_docx_renders_output_sha256",
+        ),
+        ck.regex_check(
+            "template_storage_key",
+            ck.STORAGE_KEY_REGEX,
+            constraint_name="ck_ssp_agency_docx_renders_template_storage_key",
+        ),
+        ck.regex_check(
+            "output_storage_key",
+            ck.STORAGE_KEY_REGEX,
+            constraint_name="ck_ssp_agency_docx_renders_output_storage_key",
+        ),
+        CheckConstraint(
+            "split_part(template_storage_key, '/', 2) = template_sha256",
+            name="ck_ssp_agency_docx_renders_template_storage_key_matches_sha256",
+        ),
+        CheckConstraint(
+            "split_part(output_storage_key, '/', 2) = output_sha256",
+            name="ck_ssp_agency_docx_renders_output_storage_key_matches_sha256",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(mapping_plan) = 'object'",
+            name="ck_ssp_agency_docx_renders_mapping_plan_object",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(review_result) = 'object'",
+            name="ck_ssp_agency_docx_renders_review_result_object",
+        ),
+        CheckConstraint(
+            "(status IN ('awaiting_approval', 'review_failed') "
+            "AND resolved_by IS NULL AND resolved_at IS NULL) OR "
+            "(status IN ('approved', 'rejected') "
+            "AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL)",
+            name="ck_ssp_agency_docx_renders_status_fields",
+        ),
+        CheckConstraint(
+            "char_length(template_filename) >= 1",
+            name="ck_ssp_agency_docx_renders_template_filename_min_length",
+        ),
+        CheckConstraint(
+            "char_length(created_by) >= 1",
+            name="ck_ssp_agency_docx_renders_created_by_min_length",
+        ),
+        CheckConstraint(
+            "(resolved_by IS NULL AND resolved_at IS NULL) OR "
+            "(resolved_by IS NOT NULL AND resolved_at IS NOT NULL "
+            "AND char_length(resolved_by) >= 1)",
+            name="ck_ssp_agency_docx_renders_resolution_fields",
+        ),
+        Index("ix_ssp_agency_docx_renders_workspace_id", "workspace_id"),
+        Index(
+            "ix_ssp_agency_docx_renders_workspace_status_created",
+            "workspace_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_ssp_agency_docx_renders_workspace_template_profile",
+            "workspace_id",
+            "template_sha256",
+            "profile_version_id",
+        ),
+    )

@@ -8,6 +8,7 @@
     "schema_version",
     "profile_id",
     "profile_version",
+    "nist_control_catalog_release",
     "display_name",
     "sources",
     "files"
@@ -23,8 +24,14 @@
     },
     "profile_version": {
       "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
       "maxLength": 64
+    },
+    "nist_control_catalog_release": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "\\S"
     },
     "display_name": {
       "type": "string",

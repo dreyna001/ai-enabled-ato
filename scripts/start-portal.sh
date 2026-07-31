@@ -4,8 +4,8 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PORTAL_DIR="$(cd "$SCRIPT_DIR/../portal" && pwd)"
-readonly PORTAL_HOST="${PORTAL_HOST:-127.0.0.1}"
-readonly PORTAL_PORT="${PORTAL_PORT:-5173}"
+readonly PORTAL_HOST="${PORTAL_HOST:-0.0.0.0}"
+readonly PORTAL_PORT="${PORTAL_PORT:-5174}"
 export VITE_DEV_API_TARGET="${VITE_DEV_API_TARGET:-http://127.0.0.1:8001}"
 
 command -v npm >/dev/null 2>&1 || {

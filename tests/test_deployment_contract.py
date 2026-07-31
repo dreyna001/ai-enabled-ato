@@ -410,10 +410,10 @@ def test_wsl_portal_bedrock_runtime_config_declares_bedrock_text_model() -> None
     assert '"OIDC_GROUPS_CLAIM": "groups"' in text
     assert '"OIDC_GROUP_ROLE_MAPPING"' in text
     assert '"SINGLE_USER_MODE_ENABLED": true' in text
-    assert '"PORTAL_PUBLIC_ORIGIN": "http://localhost:5173"' in text
+    assert '"PORTAL_PUBLIC_ORIGIN": "http://localhost:5174"' in text
     assert '"TEXT_MODEL_PROVIDER": "aws_bedrock"' in text
     assert '"AWS_REGION": "us-east-1"' in text
-    assert '"TEXT_MODEL_NAME": "anthropic.claude-3-haiku-20240307-v1:0"' in text
+    assert '"TEXT_MODEL_NAME": "us.anthropic.claude-sonnet-4-20250514-v1:0"' in text
     assert '"TEXT_MODEL_ENDPOINT_URL"' not in text
     assert '"TEXT_MODEL_CREDENTIAL_REFERENCE"' not in text
 
@@ -858,7 +858,7 @@ def test_install_script_supports_dry_run_contract_validation(install_text: str) 
     assert "--dry-run" in install_text
     assert "run_install_dry_run" in install_text
     assert "validate_migration_head_contract" in install_text
-    assert 'EXPECTED_MIGRATION_HEAD="20260728_0015"' in install_text
+    assert 'EXPECTED_MIGRATION_HEAD="20260728_0016"' in install_text
     assert "--dry-run cannot be combined with --migrate" in install_text
 
 
@@ -888,7 +888,7 @@ def test_install_script_dry_run_succeeds_without_root() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "Install dry-run complete" in result.stdout
-    assert "20260728_0015" in result.stdout
+    assert "20260728_0016" in result.stdout
 
 
 @requires_bash

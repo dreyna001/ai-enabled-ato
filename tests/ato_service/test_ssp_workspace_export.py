@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from io import BytesIO
+import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from docx import Document
@@ -13,6 +16,14 @@ from ato_service.ssp_workspace.export import (
     WorkspaceExportValidationError,
     build_workspace_docx_export,
     build_workspace_json_export,
+)
+from ato_service.ssp_workspace.oscal_export import (
+    OscalSspExportError,
+    build_draft_oscal_ssp_json_export,
+)
+from ato_service.ssp_workspace.service import (
+    ApprovalNotFoundError,
+    render_approved_export,
 )
 
 
@@ -141,3 +152,133 @@ def test_export_rejects_invalid_content_hash() -> None:
         match="content_sha256",
     ):
         build_workspace_docx_export(snapshot, include_open_questions=False)
+
+
+def test_oscal_json_export_is_schema_valid_draft() -> None:
+    payload = json.loads(
+        build_draft_oscal_ssp_json_export(
+            _snapshot(),
+            include_open_questions=True,
+        )
+    )
+
+    assert "system-security-plan" in payload
+    assert payload["system-security-plan"]["metadata"]["oscal-version"]
+
+
+def test_render_approved_export_requires_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _missing_approval(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise ApprovalNotFoundError("approved revision not found")
+
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service._approved_export_snapshot",
+        _missing_approval,
+    )
+
+    with pytest.raises(ApprovalNotFoundError):
+        asyncio.run(
+            render_approved_export(
+                AsyncMock(),
+                workspace_id=uuid.uuid4(),
+                revision_id=uuid.uuid4(),
+                export_format="oscal-json",
+                include_open_questions=True,
+            )
+        )
+
+
+def test_render_approved_export_delegates_oscal_json_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _snapshot()
+    delegated: list[tuple[dict[str, object], bool]] = []
+
+    async def _approved_snapshot(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return snapshot
+
+    def _oscal_export(
+        approved_snapshot: dict[str, object],
+        *,
+        include_open_questions: bool,
+    ) -> bytes:
+        delegated.append((approved_snapshot, include_open_questions))
+        return b"{}\n"
+
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service._approved_export_snapshot",
+        _approved_snapshot,
+    )
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service.build_draft_oscal_ssp_json_export",
+        _oscal_export,
+    )
+
+    result = asyncio.run(
+        render_approved_export(
+            AsyncMock(),
+            workspace_id=uuid.uuid4(),
+            revision_id=uuid.uuid4(),
+            export_format="oscal-json",
+            include_open_questions=False,
+        )
+    )
+
+    assert result == b"{}\n"
+    assert delegated == [(snapshot, False)]
+
+
+def test_render_approved_export_rejects_unsupported_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _approved_snapshot(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return _snapshot()
+
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service._approved_export_snapshot",
+        _approved_snapshot,
+    )
+
+    with pytest.raises(ValueError, match="export_format must be json, docx, or oscal-json"):
+        asyncio.run(
+            render_approved_export(
+                AsyncMock(),
+                workspace_id=uuid.uuid4(),
+                revision_id=uuid.uuid4(),
+                export_format="yaml",
+                include_open_questions=True,
+            )
+        )
+
+
+def test_render_approved_export_surfaces_oscal_validation_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _approved_snapshot(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return _snapshot()
+
+    def _oscal_failure(
+        _snapshot: dict[str, object],
+        *,
+        include_open_questions: bool,
+    ) -> bytes:
+        raise OscalSspExportError("schema validation failed for draft OSCAL export")
+
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service._approved_export_snapshot",
+        _approved_snapshot,
+    )
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service.build_draft_oscal_ssp_json_export",
+        _oscal_failure,
+    )
+
+    with pytest.raises(OscalSspExportError):
+        asyncio.run(
+            render_approved_export(
+                AsyncMock(),
+                workspace_id=uuid.uuid4(),
+                revision_id=uuid.uuid4(),
+                export_format="oscal-json",
+                include_open_questions=True,
+            )
+        )

@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AgencyTemplatePanel } from "@/components/ssp-workspace/AgencyTemplatePanel";
 import type {
   SspWorkspace,
   SspWorkspaceActions,
@@ -34,15 +35,28 @@ function ReviewCheck({
 export function ReviewExportPanel({
   workspace,
   metrics,
+  actionsBusy = false,
   onApprove,
   onExport,
+  onUploadAgencyTemplate,
+  onPreviewAgencyRender,
+  onApproveAgencyRender,
+  onRejectAgencyRender,
+  onDownloadAgencyRender,
 }: {
   workspace: SspWorkspace;
   metrics: SspWorkspaceMetrics;
+  actionsBusy?: boolean;
   onApprove?: SspWorkspaceActions["onApprove"];
   onExport?: SspWorkspaceActions["onExport"];
+  onUploadAgencyTemplate?: SspWorkspaceActions["onUploadAgencyTemplate"];
+  onPreviewAgencyRender?: SspWorkspaceActions["onPreviewAgencyRender"];
+  onApproveAgencyRender?: SspWorkspaceActions["onApproveAgencyRender"];
+  onRejectAgencyRender?: SspWorkspaceActions["onRejectAgencyRender"];
+  onDownloadAgencyRender?: SspWorkspaceActions["onDownloadAgencyRender"];
 }) {
   return (
+    <div className="space-y-4">
     <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
       <Card>
         <CardHeader>
@@ -136,6 +150,20 @@ export function ReviewExportPanel({
             <Download aria-hidden="true" />
             Export structured JSON
           </Button>
+          <div className="space-y-1">
+            <Button
+              className="w-full justify-start"
+              variant="outline"
+              disabled={!onExport || !metrics.approved}
+              onClick={() => onExport?.("oscal-json")}
+            >
+              <Download aria-hidden="true" />
+              Export draft OSCAL JSON
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Schema-checked draft; not qualified/customer-ready.
+            </p>
+          </div>
           {!metrics.approved ? (
             <p className="text-xs text-muted-foreground">
               Approve the current content before exporting its immutable snapshot.
@@ -143,6 +171,17 @@ export function ReviewExportPanel({
           ) : null}
         </CardContent>
       </Card>
+    </div>
+    <AgencyTemplatePanel
+      workspace={workspace}
+      approved={metrics.approved}
+      actionsBusy={actionsBusy}
+      onUploadAgencyTemplate={onUploadAgencyTemplate}
+      onPreviewAgencyRender={onPreviewAgencyRender}
+      onApproveAgencyRender={onApproveAgencyRender}
+      onRejectAgencyRender={onRejectAgencyRender}
+      onDownloadAgencyRender={onDownloadAgencyRender}
+    />
     </div>
   );
 }

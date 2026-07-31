@@ -45,7 +45,7 @@ OWNER = AuthenticatedPrincipal(
     actor_id="dev-portal-user",
     groups=("owners",),
     csrf_token="c" * 32,
-    allowed_origins=("http://localhost:5173",),
+    allowed_origins=("http://localhost:5174",),
 )
 
 
@@ -265,7 +265,7 @@ async def _seed_demo(
             "chat_answer_preview": answer[:240],
             "search_hits": str(len(search_page.items)),
             "portal_url": (
-                f"http://localhost:5173/workflow/systems/{system_id}/revisions/{revision_id}"
+                f"http://localhost:5174/workflow/systems/{system_id}/revisions/{revision_id}"
             ),
         }
 

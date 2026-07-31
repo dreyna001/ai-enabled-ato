@@ -25,7 +25,7 @@ def load_local_env_file(
 ) -> bool:
     """Load allowed dev secret keys from an env file without overriding existing env."""
     env_path = _resolve_local_env_path(path, project_root=project_root)
-    if env_path is None or not env_path.is_file():
+    if env_path is None or not _local_env_file_readable(env_path):
         return False
 
     for key, value in _parse_env_file(env_path).items():
@@ -35,6 +35,13 @@ def load_local_env_file(
             continue
         os.environ[key] = value
     return True
+
+
+def _local_env_file_readable(env_path: Path) -> bool:
+    try:
+        return env_path.is_file()
+    except OSError:
+        return False
 
 
 def _resolve_local_env_path(

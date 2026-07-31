@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cache
 import hashlib
 import json
+import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 from zipfile import BadZipFile, ZipFile, ZipInfo
@@ -28,6 +29,7 @@ _MAX_MEMBER_BYTES = 10_485_760
 _MAX_ARCHIVE_BYTES = 52_428_800
 _MAX_ARCHIVE_MEMBERS = 64
 _MAX_COMPRESSION_RATIO = 200
+_NIST_RELEASE_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 
 
 class ProfileBundleError(ValueError):
@@ -54,6 +56,7 @@ class ProfileManifest:
     schema_version: str
     profile_id: str
     profile_version: str
+    nist_control_catalog_release: str
     display_name: str
     sources: tuple[ProfileSource, ...]
     files: tuple[ProfileBundleFile, ...]
@@ -68,14 +71,103 @@ class ProfileControl:
     catalog_pointer: str
 
 
+_DEFAULT_IMPLEMENTATION_STATUSES: tuple[str, ...] = (
+    "implemented",
+    "partially_implemented",
+    "planned",
+    "not_implemented",
+    "not_applicable",
+    "unknown",
+)
+_DEFAULT_RESPONSIBILITIES: tuple[str, ...] = (
+    "system_specific",
+    "hybrid",
+    "inherited",
+    "unknown",
+)
+_DEFAULT_QUESTION_OWNER_TYPES: tuple[str, ...] = (
+    "isso",
+    "agency",
+    "technical",
+    "system_owner",
+)
+
+CoverageKind = Literal["ssp_item", "controls"]
+
+
+@dataclass(frozen=True, slots=True)
+class ControlResponsePolicy:
+    """Profile-defined control response enums and agent evidence rules."""
+
+    implementation_statuses: tuple[str, ...]
+    responsibilities: tuple[str, ...]
+    question_owner_types: tuple[str, ...]
+    evidence_required_for_agent_statement: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ImplementationStatementDeterministicPolicy:
+    """Profile-owned deterministic statement enforcement flags."""
+
+    reject_oscal_parameter_insert_syntax: bool
+    require_question_for_unresolved_parameterized_controls: bool
+    require_evidence_for_agent_non_unknown_claims: bool
+    require_statement_gap_or_question_before_approval: bool
+    semantic_quality_findings_are_advisory: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ImplementationStatementAgentInstructions:
+    """Profile-owned agent drafting and review instructions."""
+
+    statement_content: tuple[str, ...]
+    organization_defined_parameters: tuple[str, ...]
+    inherited_and_hybrid_responsibility: tuple[str, ...]
+    semantic_review: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ImplementationStatementAuthorityRef:
+    source_id: str
+    requirement_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ImplementationStatementPolicy:
+    """Versioned control implementation statement policy bound to the profile."""
+
+    policy_version: str
+    deterministic: ImplementationStatementDeterministicPolicy
+    agent_instructions: ImplementationStatementAgentInstructions
+    authority_refs: tuple[ImplementationStatementAuthorityRef, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StandardCoverage:
+    source_id: str
+    requirement_id: str
+    title: str
+    coverage_kind: CoverageKind
+    item_ids: tuple[str, ...]
+    required: bool
+
+
 @dataclass(frozen=True, slots=True)
 class SspRequiredItem:
+    """SSP outline item policy.
+
+    ``min_length`` applies to ``value_type='string'`` as minimum trimmed character
+    count, and to ``value_type='string_list'`` as the minimum number of list entries.
+    """
+
     item_id: str
     title: str
     value_type: Literal["string", "string_list"]
     min_length: int | None
     allowed_values: tuple[str, ...]
     evidence_required_for_agent: bool
+    required: bool = True
+    standard_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +180,9 @@ class ProfileBundle:
     moderate_control_ids: tuple[str, ...]
     high_control_ids: tuple[str, ...]
     ssp_required_items: tuple[SspRequiredItem, ...]
+    control_response: ControlResponsePolicy
+    standard_coverage: tuple[StandardCoverage, ...]
+    implementation_statement_policy: ImplementationStatementPolicy
 
     def control_ids_for(self, impact_level: ImpactLevel) -> tuple[str, ...]:
         if impact_level == "low":
@@ -105,11 +200,15 @@ class ProfileBundle:
 class ResolvedProfile:
     profile_id: str
     profile_version: str
+    nist_control_catalog_release: str
     manifest_sha256: str
     impact_level: ImpactLevel
     sources: tuple[ProfileSource, ...]
     controls: tuple[ProfileControl, ...]
     ssp_required_items: tuple[SspRequiredItem, ...]
+    control_response: ControlResponsePolicy
+    standard_coverage: tuple[StandardCoverage, ...]
+    implementation_statement_policy: ImplementationStatementPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +230,9 @@ class ProfileDiff:
     removed_ssp_item_ids: tuple[str, ...]
     changed_ssp_item_ids: tuple[str, ...]
     source_version_changes: tuple[SourceVersionChange, ...]
+    implementation_statement_policy_changed: bool = False
+    old_implementation_statement_policy_version: str | None = None
+    new_implementation_statement_policy_version: str | None = None
 
 
 def load_profile_bundle(path: Path) -> ProfileBundle:
@@ -182,7 +284,15 @@ def load_profile_bundle(path: Path) -> ProfileBundle:
         documents["baselines"],
         catalog_controls=catalog_controls,
     )
-    ssp_required_items = _load_ssp_requirements(documents["ssp_requirements"])
+    (
+        ssp_required_items,
+        control_response,
+        standard_coverage,
+        implementation_statement_policy,
+    ) = _load_ssp_requirements(
+        documents["ssp_requirements"],
+        manifest_sources=manifest.sources,
+    )
 
     return ProfileBundle(
         manifest=manifest,
@@ -191,6 +301,9 @@ def load_profile_bundle(path: Path) -> ProfileBundle:
         moderate_control_ids=control_ids_by_level["moderate"],
         high_control_ids=control_ids_by_level["high"],
         ssp_required_items=ssp_required_items,
+        control_response=control_response,
+        standard_coverage=standard_coverage,
+        implementation_statement_policy=implementation_statement_policy,
     )
 
 
@@ -206,11 +319,15 @@ def resolve_profile(
     return ResolvedProfile(
         profile_id=bundle.manifest.profile_id,
         profile_version=bundle.manifest.profile_version,
+        nist_control_catalog_release=bundle.manifest.nist_control_catalog_release,
         manifest_sha256=bundle.manifest.sha256,
         impact_level=impact_level,
         sources=bundle.manifest.sources,
         controls=tuple(controls_by_id[control_id] for control_id in selected_ids),
         ssp_required_items=bundle.ssp_required_items,
+        control_response=bundle.control_response,
+        standard_coverage=bundle.standard_coverage,
+        implementation_statement_policy=bundle.implementation_statement_policy,
     )
 
 
@@ -233,6 +350,10 @@ def diff_profiles(old: ResolvedProfile, new: ResolvedProfile) -> ProfileDiff:
 
     old_sources = {source.source_id: source.version for source in old.sources}
     new_sources = {source.source_id: source.version for source in new.sources}
+
+    policy_changed = _statement_policy_semantics(
+        old.implementation_statement_policy
+    ) != _statement_policy_semantics(new.implementation_statement_policy)
 
     return ProfileDiff(
         old_profile_version=old.profile_version,
@@ -266,11 +387,42 @@ def diff_profiles(old: ResolvedProfile, new: ResolvedProfile) -> ProfileDiff:
             for source_id in sorted(set(old_sources) | set(new_sources))
             if old_sources.get(source_id) != new_sources.get(source_id)
         ),
+        implementation_statement_policy_changed=policy_changed,
+        old_implementation_statement_policy_version=(
+            old.implementation_statement_policy.policy_version
+            if policy_changed
+            else None
+        ),
+        new_implementation_statement_policy_version=(
+            new.implementation_statement_policy.policy_version
+            if policy_changed
+            else None
+        ),
     )
 
 
 def _control_semantics(control: ProfileControl) -> tuple[str, str]:
     return control.title, control.requirement_text
+
+
+def _statement_policy_semantics(
+    policy: ImplementationStatementPolicy,
+) -> tuple[Any, ...]:
+    deterministic = policy.deterministic
+    instructions = policy.agent_instructions
+    return (
+        policy.policy_version,
+        deterministic.reject_oscal_parameter_insert_syntax,
+        deterministic.require_question_for_unresolved_parameterized_controls,
+        deterministic.require_evidence_for_agent_non_unknown_claims,
+        deterministic.require_statement_gap_or_question_before_approval,
+        deterministic.semantic_quality_findings_are_advisory,
+        instructions.statement_content,
+        instructions.organization_defined_parameters,
+        instructions.inherited_and_hybrid_responsibility,
+        instructions.semantic_review,
+        tuple((ref.source_id, ref.requirement_ids) for ref in policy.authority_refs),
+    )
 
 
 def _resolve_local_bundle_path(path: Path) -> Path:
@@ -475,10 +627,27 @@ def _build_manifest(
     if _MANIFEST_NAME in paths:
         raise ProfileBundleError("manifest.json cannot checksum itself")
 
+    nist_control_catalog_release = document["nist_control_catalog_release"]
+    for source in sources:
+        if source.source_id != "nist-sp-800-53":
+            continue
+        if not (
+            _NIST_RELEASE_PATTERN.fullmatch(nist_control_catalog_release)
+            and _NIST_RELEASE_PATTERN.fullmatch(source.version)
+        ):
+            continue
+        if source.version != nist_control_catalog_release:
+            raise ProfileBundleError(
+                "nist_control_catalog_release must match the nist-sp-800-53 "
+                f"source version; expected {source.version!r}, got "
+                f"{nist_control_catalog_release!r}"
+            )
+
     return ProfileManifest(
         schema_version=document["schema_version"],
         profile_id=document["profile_id"],
         profile_version=document["profile_version"],
+        nist_control_catalog_release=nist_control_catalog_release,
         display_name=document["display_name"],
         sources=tuple(sorted(sources, key=lambda source: source.source_id)),
         files=tuple(sorted(files, key=lambda entry: entry.role)),
@@ -539,9 +708,78 @@ def _load_baselines(
     return resolved
 
 
+def default_implementation_statement_deterministic_policy() -> (
+    ImplementationStatementDeterministicPolicy
+):
+    return ImplementationStatementDeterministicPolicy(
+        reject_oscal_parameter_insert_syntax=True,
+        require_question_for_unresolved_parameterized_controls=True,
+        require_evidence_for_agent_non_unknown_claims=True,
+        require_statement_gap_or_question_before_approval=True,
+        semantic_quality_findings_are_advisory=True,
+    )
+
+
+def default_implementation_statement_agent_instructions() -> (
+    ImplementationStatementAgentInstructions
+):
+    return ImplementationStatementAgentInstructions(
+        statement_content=(),
+        organization_defined_parameters=(
+            "Never invent values for organization-defined parameters "
+            "referenced in control requirement_text placeholders.",
+            "Use direct evidence only when it explicitly supports a parameter "
+            "value and cite supporting_fact_ids.",
+            "When evidence does not support a parameter value, leave "
+            "implementation_statement empty, keep status and responsibility "
+            "unknown, and ask one concise control-targeted question for the "
+            "missing agency or organization value.",
+            "Never emit literal OSCAL placeholder syntax in "
+            "implementation_statement text.",
+        ),
+        inherited_and_hybrid_responsibility=(
+            "Use inherited or hybrid responsibility only when direct evidence "
+            "supports that split.",
+            "When evidence supports inherited or hybrid responsibility, "
+            "describe the known provider or common portion and the "
+            "system-specific portion separately.",
+            "Never invent provider scope, inheritance boundaries, or "
+            "shared-service details.",
+            "When evidence does not support inheritance details, keep "
+            "responsibility unknown and ask a targeted question.",
+        ),
+        semantic_review=(),
+    )
+
+
+def default_implementation_statement_policy() -> ImplementationStatementPolicy:
+    return ImplementationStatementPolicy(
+        policy_version="1.0.0",
+        deterministic=default_implementation_statement_deterministic_policy(),
+        agent_instructions=default_implementation_statement_agent_instructions(),
+        authority_refs=(),
+    )
+
+
+def default_control_response_policy() -> ControlResponsePolicy:
+    return ControlResponsePolicy(
+        implementation_statuses=_DEFAULT_IMPLEMENTATION_STATUSES,
+        responsibilities=_DEFAULT_RESPONSIBILITIES,
+        question_owner_types=_DEFAULT_QUESTION_OWNER_TYPES,
+        evidence_required_for_agent_statement=True,
+    )
+
+
 def _load_ssp_requirements(
     document: dict[str, Any],
-) -> tuple[SspRequiredItem, ...]:
+    *,
+    manifest_sources: tuple[ProfileSource, ...],
+) -> tuple[
+    tuple[SspRequiredItem, ...],
+    ControlResponsePolicy,
+    tuple[StandardCoverage, ...],
+    ImplementationStatementPolicy,
+]:
     _validate_schema(
         document,
         schema_name="profile-ssp-requirements.schema.json",
@@ -555,19 +793,338 @@ def _load_ssp_requirements(
             min_length=item.get("min_length"),
             allowed_values=tuple(item.get("allowed_values", ())),
             evidence_required_for_agent=item["evidence_required_for_agent"],
+            required=item.get("required", True),
+            standard_refs=tuple(item.get("standard_refs", ())),
         )
         for item in document["items"]
     )
     item_ids = [item.item_id for item in items]
     if len(item_ids) != len(set(item_ids)):
         raise ProfileBundleError("SSP requirement item_id values must be unique")
-    for item in items:
-        if item.value_type == "string_list" and item.min_length is not None:
+
+    control_response = _load_control_response(document.get("control_response"))
+    standard_coverage = _load_standard_coverage(
+        document.get("standard_coverage"),
+        manifest_sources=manifest_sources,
+        known_item_ids=set(item_ids),
+    )
+    _validate_ssp_requirement_semantics(
+        items,
+        standard_coverage=standard_coverage,
+    )
+    implementation_statement_policy = _load_implementation_statement_policy(
+        document.get("implementation_statement_policy"),
+        manifest_sources=manifest_sources,
+        standard_coverage=standard_coverage,
+    )
+    return (
+        tuple(sorted(items, key=lambda item: item.item_id)),
+        control_response,
+        standard_coverage,
+        implementation_statement_policy,
+    )
+
+
+def _load_instruction_list(raw: Any, *, label: str) -> tuple[str, ...]:
+    if not isinstance(raw, list) or not raw:
+        raise ProfileBundleError(f"{label} must be a non-empty array")
+    values = tuple(str(value).strip() for value in raw)
+    if any(not value for value in values):
+        raise ProfileBundleError(f"{label} entries must be non-empty strings")
+    if len(values) != len(set(values)):
+        raise ProfileBundleError(f"{label} entries must be unique")
+    return values
+
+
+def _load_implementation_statement_policy(
+    raw: dict[str, Any] | None,
+    *,
+    manifest_sources: tuple[ProfileSource, ...],
+    standard_coverage: tuple[StandardCoverage, ...],
+) -> ImplementationStatementPolicy:
+    if raw is None:
+        return default_implementation_statement_policy()
+    if not isinstance(raw, dict):
+        raise ProfileBundleError("implementation_statement_policy must be an object")
+    policy_version = raw.get("policy_version")
+    if policy_version != "1.0.0":
+        raise ProfileBundleError(
+            "implementation_statement_policy.policy_version is not supported: "
+            f"{policy_version!r}"
+        )
+    deterministic_raw = raw.get("deterministic")
+    if not isinstance(deterministic_raw, dict):
+        raise ProfileBundleError(
+            "implementation_statement_policy.deterministic must be an object"
+        )
+
+    def _bool_field(name: str) -> bool:
+        value = deterministic_raw.get(name)
+        if not isinstance(value, bool):
             raise ProfileBundleError(
-                f"SSP requirement {item.item_id!r} cannot set min_length "
-                "for value_type 'string_list'"
+                f"implementation_statement_policy.deterministic.{name} must be a boolean"
             )
-    return tuple(sorted(items, key=lambda item: item.item_id))
+        return value
+
+    deterministic = ImplementationStatementDeterministicPolicy(
+        reject_oscal_parameter_insert_syntax=_bool_field(
+            "reject_oscal_parameter_insert_syntax"
+        ),
+        require_question_for_unresolved_parameterized_controls=_bool_field(
+            "require_question_for_unresolved_parameterized_controls"
+        ),
+        require_evidence_for_agent_non_unknown_claims=_bool_field(
+            "require_evidence_for_agent_non_unknown_claims"
+        ),
+        require_statement_gap_or_question_before_approval=_bool_field(
+            "require_statement_gap_or_question_before_approval"
+        ),
+        semantic_quality_findings_are_advisory=_bool_field(
+            "semantic_quality_findings_are_advisory"
+        ),
+    )
+    instructions_raw = raw.get("agent_instructions")
+    if not isinstance(instructions_raw, dict):
+        raise ProfileBundleError(
+            "implementation_statement_policy.agent_instructions must be an object"
+        )
+    agent_instructions = ImplementationStatementAgentInstructions(
+        statement_content=_load_instruction_list(
+            instructions_raw.get("statement_content"),
+            label="implementation_statement_policy.agent_instructions.statement_content",
+        ),
+        organization_defined_parameters=_load_instruction_list(
+            instructions_raw.get("organization_defined_parameters"),
+            label=(
+                "implementation_statement_policy.agent_instructions."
+                "organization_defined_parameters"
+            ),
+        ),
+        inherited_and_hybrid_responsibility=_load_instruction_list(
+            instructions_raw.get("inherited_and_hybrid_responsibility"),
+            label=(
+                "implementation_statement_policy.agent_instructions."
+                "inherited_and_hybrid_responsibility"
+            ),
+        ),
+        semantic_review=_load_instruction_list(
+            instructions_raw.get("semantic_review"),
+            label="implementation_statement_policy.agent_instructions.semantic_review",
+        ),
+    )
+    authority_refs_raw = raw.get("authority_refs")
+    if not isinstance(authority_refs_raw, list):
+        raise ProfileBundleError(
+            "implementation_statement_policy.authority_refs must be an array"
+        )
+    manifest_source_ids = {source.source_id for source in manifest_sources}
+    coverage_by_source: dict[str, set[str]] = {}
+    for entry in standard_coverage:
+        coverage_by_source.setdefault(entry.source_id, set()).add(entry.requirement_id)
+    authority_refs: list[ImplementationStatementAuthorityRef] = []
+    for index, entry in enumerate(authority_refs_raw):
+        if not isinstance(entry, dict):
+            raise ProfileBundleError(
+                f"implementation_statement_policy.authority_refs[{index}] must be an object"
+            )
+        source_id = entry.get("source_id")
+        requirement_ids_raw = entry.get("requirement_ids")
+        if not isinstance(source_id, str) or not source_id.strip():
+            raise ProfileBundleError(
+                f"implementation_statement_policy.authority_refs[{index}] must declare source_id"
+            )
+        source_id = source_id.strip()
+        if source_id not in manifest_source_ids:
+            raise ProfileBundleError(
+                "implementation_statement_policy authority ref references unknown "
+                f"source_id {source_id!r}"
+            )
+        if not isinstance(requirement_ids_raw, list):
+            raise ProfileBundleError(
+                f"implementation_statement_policy.authority_refs[{index}].requirement_ids "
+                "must be an array"
+            )
+        requirement_ids = tuple(str(item).strip() for item in requirement_ids_raw)
+        if requirement_ids and source_id not in coverage_by_source:
+            raise ProfileBundleError(
+                "implementation_statement_policy authority ref "
+                f"{source_id!r} has requirement_ids but no standard_coverage entries"
+            )
+        unknown_ids = sorted(
+            set(requirement_ids) - coverage_by_source.get(source_id, set())
+        )
+        if unknown_ids:
+            raise ProfileBundleError(
+                "implementation_statement_policy authority ref references unknown "
+                f"requirement_ids for {source_id!r}: {', '.join(unknown_ids)}"
+            )
+        authority_refs.append(
+            ImplementationStatementAuthorityRef(
+                source_id=source_id,
+                requirement_ids=requirement_ids,
+            )
+        )
+    return ImplementationStatementPolicy(
+        policy_version=policy_version,
+        deterministic=deterministic,
+        agent_instructions=agent_instructions,
+        authority_refs=tuple(
+            sorted(authority_refs, key=lambda ref: (ref.source_id, ref.requirement_ids))
+        ),
+    )
+
+
+def _load_control_response(raw: dict[str, Any] | None) -> ControlResponsePolicy:
+    if raw is None:
+        return default_control_response_policy()
+    implementation_statuses = _validated_enum_collection(
+        raw.get("implementation_statuses"),
+        label="control_response.implementation_statuses",
+        require_unknown=True,
+    )
+    responsibilities = _validated_enum_collection(
+        raw.get("responsibilities"),
+        label="control_response.responsibilities",
+        require_unknown=True,
+    )
+    question_owner_types = _validated_enum_collection(
+        raw.get("question_owner_types"),
+        label="control_response.question_owner_types",
+        require_unknown=False,
+    )
+    evidence_required = raw.get("evidence_required_for_agent_statement")
+    if not isinstance(evidence_required, bool):
+        raise ProfileBundleError(
+            "control_response.evidence_required_for_agent_statement must be a boolean"
+        )
+    return ControlResponsePolicy(
+        implementation_statuses=implementation_statuses,
+        responsibilities=responsibilities,
+        question_owner_types=question_owner_types,
+        evidence_required_for_agent_statement=evidence_required,
+    )
+
+
+def _load_standard_coverage(
+    raw: list[Any] | None,
+    *,
+    manifest_sources: tuple[ProfileSource, ...],
+    known_item_ids: set[str],
+) -> tuple[StandardCoverage, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ProfileBundleError("standard_coverage must be an array")
+    manifest_source_ids = {source.source_id for source in manifest_sources}
+    entries: list[StandardCoverage] = []
+    requirement_ids: list[str] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ProfileBundleError(f"standard_coverage[{index}] must be an object")
+        source_id = entry.get("source_id")
+        requirement_id = entry.get("requirement_id")
+        title = entry.get("title")
+        coverage_kind = entry.get("coverage_kind")
+        required = entry.get("required")
+        item_ids_raw = entry.get("item_ids", [])
+        if not isinstance(source_id, str) or not source_id.strip():
+            raise ProfileBundleError(
+                f"standard_coverage[{index}] must declare source_id"
+            )
+        if source_id not in manifest_source_ids:
+            raise ProfileBundleError(
+                f"standard_coverage requirement {requirement_id!r} references "
+                f"unknown source_id {source_id!r}"
+            )
+        if not isinstance(requirement_id, str) or not requirement_id.strip():
+            raise ProfileBundleError(
+                f"standard_coverage[{index}] must declare requirement_id"
+            )
+        if not isinstance(title, str) or not title.strip():
+            raise ProfileBundleError(f"standard_coverage[{index}] must declare title")
+        if coverage_kind not in {"ssp_item", "controls"}:
+            raise ProfileBundleError(
+                f"standard_coverage[{index}] has unsupported coverage_kind "
+                f"{coverage_kind!r}"
+            )
+        if not isinstance(required, bool):
+            raise ProfileBundleError(
+                f"standard_coverage[{index}].required must be a boolean"
+            )
+        if coverage_kind == "controls":
+            if item_ids_raw:
+                raise ProfileBundleError(
+                    f"standard_coverage {requirement_id!r} with coverage_kind "
+                    "'controls' must not declare item_ids"
+                )
+            item_ids: tuple[str, ...] = ()
+        else:
+            if not isinstance(item_ids_raw, list) or not item_ids_raw:
+                raise ProfileBundleError(
+                    f"standard_coverage {requirement_id!r} with coverage_kind "
+                    "'ssp_item' must declare item_ids"
+                )
+            item_ids = tuple(str(item_id) for item_id in item_ids_raw)
+            unknown_ids = sorted(set(item_ids) - known_item_ids)
+            if unknown_ids:
+                raise ProfileBundleError(
+                    f"standard_coverage {requirement_id!r} references unknown "
+                    f"SSP item_ids: {', '.join(unknown_ids)}"
+                )
+        entries.append(
+            StandardCoverage(
+                source_id=source_id.strip(),
+                requirement_id=requirement_id.strip(),
+                title=title.strip(),
+                coverage_kind=coverage_kind,  # type: ignore[arg-type]
+                item_ids=item_ids,
+                required=required,
+            )
+        )
+        requirement_ids.append(requirement_id.strip())
+    if len(requirement_ids) != len(set(requirement_ids)):
+        raise ProfileBundleError(
+            "standard_coverage requirement_id values must be unique"
+        )
+    return tuple(sorted(entries, key=lambda entry: entry.requirement_id))
+
+
+def _validate_ssp_requirement_semantics(
+    items: tuple[SspRequiredItem, ...],
+    *,
+    standard_coverage: tuple[StandardCoverage, ...],
+) -> None:
+    if not standard_coverage:
+        return
+    coverage_ids = {entry.requirement_id for entry in standard_coverage}
+    for item in items:
+        unknown_refs = sorted(set(item.standard_refs) - coverage_ids)
+        if unknown_refs:
+            raise ProfileBundleError(
+                f"SSP requirement {item.item_id!r} has unknown standard_refs: "
+                + ", ".join(unknown_refs)
+            )
+        if item.required and not item.standard_refs:
+            raise ProfileBundleError(
+                f"required SSP requirement {item.item_id!r} must declare "
+                "at least one standard_ref when standard_coverage is present"
+            )
+
+
+def _validated_enum_collection(
+    raw: Any,
+    *,
+    label: str,
+    require_unknown: bool,
+) -> tuple[str, ...]:
+    if not isinstance(raw, list) or not raw:
+        raise ProfileBundleError(f"{label} must be a non-empty array")
+    values = tuple(str(value) for value in raw)
+    if len(values) != len(set(values)):
+        raise ProfileBundleError(f"{label} values must be unique")
+    if require_unknown and "unknown" not in values:
+        raise ProfileBundleError(f"{label} must include 'unknown'")
+    return values
 
 
 def _load_json_object(raw_bytes: bytes, *, label: str) -> dict[str, Any]:
@@ -611,7 +1168,13 @@ def _validate_schema(
 
 
 __all__ = [
+    "ControlResponsePolicy",
+    "CoverageKind",
     "ImpactLevel",
+    "ImplementationStatementAgentInstructions",
+    "ImplementationStatementAuthorityRef",
+    "ImplementationStatementDeterministicPolicy",
+    "ImplementationStatementPolicy",
     "ProfileBundle",
     "ProfileBundleError",
     "ProfileBundleFile",
@@ -622,6 +1185,9 @@ __all__ = [
     "ResolvedProfile",
     "SourceVersionChange",
     "SspRequiredItem",
+    "StandardCoverage",
+    "default_control_response_policy",
+    "default_implementation_statement_policy",
     "diff_profiles",
     "load_profile_bundle",
     "resolve_profile",

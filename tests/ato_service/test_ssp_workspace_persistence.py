@@ -50,7 +50,7 @@ def _session() -> MagicMock:
 
 def test_migration_is_single_head_and_declares_workspace_tables() -> None:
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    assert script.get_current_head() == "20260728_0015"
+    assert script.get_current_head() == "20260728_0016"
     source = MIGRATION.read_text(encoding="utf-8")
     for table in (
         "ssp_profile_versions",

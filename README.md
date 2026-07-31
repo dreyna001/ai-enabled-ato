@@ -45,13 +45,13 @@ an editable SSP, control implementation statements, and tracked questions.
 
 ## Current state
 
-- **Product scope:** Internal ISSO intake, evidence extraction, SSP/control drafting, contextual editing, approval, and DOCX/JSON export
+- **Product scope:** Internal ISSO intake, evidence extraction, SSP/control drafting, contextual editing, approval, canonical JSON/DOCX export, draft OSCAL 1.2.2 JSON export (structural schema validation only), and optional agency-shaped DOCX from a customer-uploaded template after ISSO approval (Review & export)
 - **First profile:** Agency FISMA — NIST SP 800-53 Rev. 5, with Low, Moderate, and High baselines stored as an immutable local bundle
 - **Portal:** `/ssp` is the default and only product workflow
 - **API:** `/api/v1/ssp-*` plus health and OIDC session routes; legacy package and analysis routes are not mounted
-- **Alembic head:** `20260728_0015`
-- **Portability:** identity, model, storage, database, scanner, and secrets remain deployment configuration; agency content is supplied by versioned local bundles
-- **Not claimed:** control assessment, SAP, SAR, POA&M management, authorization decision, continuous monitoring, or FedRAMP profiles
+- **Alembic head:** `20260728_0016`
+- **Portability:** identity, model, storage, database, scanner, and secrets remain deployment configuration; agency SSP profile content is supplied by versioned local bundles; agency DOCX templates are customer uploads at runtime
+- **Not claimed:** control assessment, SAP, SAR, POA&M management, authorization decision, continuous monitoring, FedRAMP profiles, agency template or field parity, qualified OSCAL SSP or OSCAL SSP conformance (draft OSCAL JSON is non-qualifying working material), privacy or C-SCRM plan completeness, or submission-ready agency-shaped DOCX
 - **Cutover safety:** legacy source and migrations remain retained but unreachable until an operator confirms that no live deployment depends on them
 
 The historical Block 1 developer CLI has been retired. New work belongs in `ato_service` and the frozen contracts only.

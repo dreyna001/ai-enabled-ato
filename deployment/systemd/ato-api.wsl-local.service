@@ -22,6 +22,7 @@ LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
 LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
 LoadCredential=oidc-client-secret:/etc/ato-analyzer/credentials/oidc-client-secret
 EnvironmentFile=-/etc/ato-analyzer/credentials/ato-local.env
+Environment=ATO_LOCAL_ENV_FILE=/etc/ato-analyzer/credentials/ato-local.env
 
 ExecStart=/opt/ato-analyzer/venv/bin/ato-service
 

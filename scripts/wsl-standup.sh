@@ -102,5 +102,5 @@ wait_for_api_loopback
 echo ""
 echo "WSL standup complete."
 echo "  API:    ${API_LOOPBACK_URL}/health/live"
-echo "  Portal: bash scripts/start-portal.sh  (then open http://localhost:5173)"
+echo "  Portal: bash scripts/start-portal.sh  (then open http://localhost:5174)"
 echo "  Logs:   journalctl -u ato-api -f"

@@ -93,8 +93,12 @@ select_runtime_config() {
 }
 
 install_local_env_file() {
-  install -o root -g root -m 600 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
+  install -o root -g ato -m 640 "$LOCAL_ENV_SOURCE" "$LOCAL_ENV_DEST"
   sed -i 's/\r$//' "$LOCAL_ENV_DEST"
+}
+
+ensure_credentials_dir_for_service_user() {
+  install -d -o root -g ato -m 710 "$CREDENTIALS_DIR"
 }
 
 install_openai_local_env_file() {
@@ -212,6 +216,8 @@ fi
 info "Restoring package storage ownership and bind mount"
 bind_package_storage
 
+ensure_credentials_dir_for_service_user
+
 info "Installing updated WSL API unit (OIDC credential mapping)"
 cp "$REPO_DIR/deployment/systemd/ato-api.wsl-local.service" /etc/systemd/system/ato-api.service
 cp "$REPO_DIR/deployment/systemd/ato-synthetic-intake-worker.service" \
@@ -246,4 +252,4 @@ case "$TEXT_MODEL_MODE" in
     ;;
 esac
 info "Start the UI from WSL: bash scripts/start-portal.sh"
-info "Open http://localhost:5173"
+info "Open http://localhost:5174"

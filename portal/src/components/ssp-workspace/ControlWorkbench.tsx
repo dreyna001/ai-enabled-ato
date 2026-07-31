@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type {
   AgentContext,
+  ControlResponseOptions,
   ControlStatement,
   ControlStatementChange,
 } from "@/sspWorkspaceTypes";
@@ -23,6 +24,18 @@ type ControlDraft = Pick<
   "implementationStatus" | "responsibility" | "statement"
 >;
 
+function formatEnumLabel(value: string): string {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function selectOptions(options: string[], currentValue: string): string[] {
+  if (!currentValue || options.includes(currentValue)) return options;
+  return [...options, currentValue];
+}
+
 function stateVariant(state: ControlStatement["state"]) {
   if (state === "reviewed") return "success" as const;
   if (state === "partial" || state === "empty") return "warning" as const;
@@ -31,12 +44,14 @@ function stateVariant(state: ControlStatement["state"]) {
 
 export function ControlWorkbench({
   controls,
+  controlResponse,
   selectedControlId,
   onSelectControl,
   onSave,
   onOpenAgent,
 }: {
   controls: ControlStatement[];
+  controlResponse: ControlResponseOptions;
   selectedControlId: string | null;
   onSelectControl: (id: string) => void;
   onSave?: (change: ControlStatementChange) => void;
@@ -184,25 +199,47 @@ export function ControlWorkbench({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor={`status-${selected.id}`}>Implementation status</Label>
-              <Input
+              <select
                 id={`status-${selected.id}`}
+                aria-label="Implementation status"
+                className="w-full rounded-sm border bg-background px-3 py-2 text-sm"
                 value={draft.implementationStatus}
                 onChange={(event) =>
                   updateDraft({ implementationStatus: event.target.value })
                 }
-              />
+              >
+                {selectOptions(
+                  controlResponse.implementationStatuses,
+                  draft.implementationStatus,
+                ).map((value) => (
+                  <option key={value} value={value}>
+                    {formatEnumLabel(value)}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`responsibility-${selected.id}`}>
                 Responsibility / inheritance
               </Label>
-              <Input
+              <select
                 id={`responsibility-${selected.id}`}
+                aria-label="Responsibility and inheritance"
+                className="w-full rounded-sm border bg-background px-3 py-2 text-sm"
                 value={draft.responsibility}
                 onChange={(event) =>
                   updateDraft({ responsibility: event.target.value })
                 }
-              />
+              >
+                {selectOptions(
+                  controlResponse.responsibilities,
+                  draft.responsibility,
+                ).map((value) => (
+                  <option key={value} value={value}>
+                    {formatEnumLabel(value)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="space-y-1.5">

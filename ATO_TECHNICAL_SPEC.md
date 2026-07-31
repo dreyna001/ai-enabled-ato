@@ -1520,7 +1520,7 @@ Required:
 | ID | Missing input or condition | Work that MUST stop |
 | --- | --- | --- |
 | HS-001 | Reviewed authority snapshot or digest mismatch | Authority-dependent implementation/release |
-| HS-002 | Agency FISMA template pack | Claim of agency field parity or customer-ready FISMA export |
+| HS-002 | Customer agency template parity and acceptance | Claim of agency field parity, customer-ready FISMA export, or submission-ready agency-shaped DOCX |
 | HS-003 | IdP issuer/client/group map | Production identity deployment |
 | HS-004 | Approved model endpoint data policy | Any real customer model call |
 | HS-005 | Production malware scanner | Customer file extraction |
@@ -1563,6 +1563,61 @@ Open hard stops are recorded in `docs/requirements/hard-stops.yaml`. HS-001 bloc
 | P7 | Complete on-prem release | Static deployment contracts and live RHEL install/upgrade/rollback/restore drills pass |
 
 Do not start a later phase while its required prior contract or gate is incomplete.
+
+The mounted internal SSP workspace ships built-in agency profile
+`agency-fisma-nist-sp800-53-rev5` **1.2.0** (NIST SP 800-18 Rev. 2 Table 1
+coverage, 33 SSP items, profile-defined control enums, and
+`implementation_statement_policy` with deterministic flags, profile-owned agent
+instruction blocks, and SP 800-18 Table 1 authority refs). Legacy bundles **1.1.0**
+and **1.0.0** remain loadable with defaults matching prior behavior. **HS-001**
+and **HS-002** stay open for authority qualification and agency template parity.
+Qualified, toolchain-ready, or customer-ready OSCAL SSP products, OSCAL SSP
+conformance claims, and privacy or C-SCRM plan exports remain out of scope.
+
+**Profile-bound implementation statements:** Generation and contextual patches
+resolve the pinned profile's `implementation_statement_policy`. Agent prompts use
+profile-owned statement-content, organization-defined-parameter,
+inherited/hybrid, and semantic-review instruction blocks. Deterministic
+validation and approval honor profile deterministic flags (including OSCAL
+placeholder rejection, evidence grounding, parameterized-control questions, and
+statement/gap/question presence before approval). Semantic quality findings are
+advisory only and do not add model-controlled approval blockers. Timing guidance
+applies only when the control requirement or evidenced implementation is time-
+or event-dependent. No new control fields, database columns, or portal editors
+ship for this policy.
+
+**Organization-defined parameters (minimal):** When pinned profile control
+`requirement_text` contains OSCAL `{{ insert: param, ... }}` tokens, generation
+treats the control as parameterized, rejects the same placeholder syntax in
+implementation statements, and requires a tracked question when the control
+response is still unresolved without evidence-backed text.
+
+**Inherited and hybrid responsibility (minimal):** Agents may set
+`responsibility` to `inherited` or `hybrid` only with evidence-backed
+`implementation_statement` text. Prompts forbid inventing provider scope,
+inheritance boundaries, or common-control coverage beyond cited evidence.
+
+**Draft OSCAL 1.2.2 JSON export:** After ISSO approval, the workspace may export
+deterministic draft OSCAL SSP JSON from the approval snapshot. Export validation
+uses the digest-verified official NIST OSCAL **1.2.2** SSP schema
+(`nist-oscal-1.2.2`). Structural schema validation does not close **HS-001** or
+assert OSCAL SSP completeness, FedRAMP conformance, or customer readiness.
+
+After ISSO approval of the working revision, **Review & export** supports a
+synchronous agency-shaped **DOCX** path: the ISSO uploads a customer-provided
+`.docx` template (stored content-addressed; no generic field-map UI). An agent
+returns a bounded JSON mapping plan using only canonical system, profile, and
+section references plus mapped control-table columns; the server applies
+deterministic copy with a draft notice; a reviewer agent reports blocker and
+warning exceptions; the ISSO previews the render and approves or rejects before
+final download. Exact output reuse requires the same workspace, approved
+revision, template digest, and pinned profile version. An approved mapping plan
+may be reused for a newer approved revision only within the same workspace,
+template digest, and pinned profile version; rendering and review rerun against
+the newer snapshot.
+**HS-002** remains open—this does not prove customer template parity. **HS-004**
+and **HS-005** remain open for production customer model calls and customer file
+handling without an approved malware scanner.
 
 The runtime/deployment contract is cross-cutting after P0. Every later phase that adds a setting, capability, process, listener, writable path, credential, or operator action MUST update its runtime schema and semantic validation, redacted example, least-privilege process projection, deployment assets, operator docs, traceability, and deterministic tests in the same reviewable change. Contract tests never substitute for the live-host validation required at P7.
 
@@ -1652,7 +1707,7 @@ The plan is implementation-ready only when P-1 has:
 
 When these criteria are met, record the outcome in `docs/P1_GATE_RECORD.md`. P0 core safety work may then proceed. Authority-dependent implementation and release remain blocked while HS-001 is open. Customer-specific hard stops remain scoped to the phases that need them.
 
-Job, attempt, pending-approval expiry, disposition decision, and the historical `/api/v1` contract are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. The current mounted product is the internal SSP drafting workflow documented in `docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md`; retained package, analysis, and review modules are not mounted. The delivered product includes OIDC-backed server sessions, the React/Vite SSP portal, direct evidence and screenshot intake, grounded SSP and control-statement generation, contextual editing, approval snapshots, revision restore, offline profile management, and JSON/DOCX export. Alembic head is `20260728_0015`. This remains a contract-tested codebase with `dev_local` substitutes at external boundaries: it is not proof of production malware scanning, customer IdP deployment, live RHEL drills, or AI qualification, and does not close customer-specific hard stops without customer or authority evidence. Current SSP OpenAPI is published in `docs/contracts/ssp-openapi.json`; retained release evidence is indexed in `docs/RELEASE_EVIDENCE_INDEX.md`.
+Job, attempt, pending-approval expiry, disposition decision, and the historical `/api/v1` contract are published in `docs/contracts/LIFECYCLE_AND_ERRORS.md` and `docs/contracts/domain.schema.json`. The current mounted product is the internal SSP drafting workflow documented in `docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md`; retained package, analysis, and review modules are not mounted. The delivered product includes OIDC-backed server sessions, the React/Vite SSP portal, direct evidence and screenshot intake, grounded SSP and control-statement generation, contextual editing, approval snapshots, revision restore, offline profile management, canonical JSON/DOCX export from the approved revision, and optional agency-shaped DOCX renders from customer-uploaded templates after ISSO approval (bounded agent mapping plan, deterministic server render with draft notice, reviewer exceptions, ISSO render approval, preview before approval and download after), plus draft OSCAL 1.2.2 JSON export from the approved revision (official SSP schema structural validation only). The built-in agency SSP profile is `agency-fisma-nist-sp800-53-rev5` version **1.1.0** (NIST SP 800-53 **5.2.0**, NIST SP 800-18 Rev. 2 Table 1 coverage metadata, **33** SSP items with optional digital identity acceptance, profile-defined control-response enums). Legacy profile **1.0.0** bundles remain loadable; import/activate/migrate-profile scaffolding supports future profiles while only the agency bundle is supported now. **HS-001** and **HS-002** remain open—this does not claim authority qualification, agency template parity, qualified OSCAL SSP or conformance, privacy plan, or C-SCRM plan coverage. Alembic head is `20260728_0016`. This remains a contract-tested codebase with `dev_local` substitutes at external boundaries: it is not proof of production malware scanning, customer IdP deployment, live RHEL drills, or AI qualification, and does not close customer-specific hard stops without customer or authority evidence. Current SSP OpenAPI is published in `docs/contracts/ssp-openapi.json`; retained release evidence is indexed in `docs/RELEASE_EVIDENCE_INDEX.md`.
 
 Feature implementation MUST NOT infer missing contracts or bypass open hard stops for authority-dependent, customer-specific, production, or qualification work.
 

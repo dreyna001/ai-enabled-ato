@@ -1,13 +1,19 @@
 import { z } from "zod";
 import type { SessionInfo, System } from "@/types";
 import type {
+  AgencyDocxIssue,
+  AgencyDocxMappingException,
+  AgencyDocxRender,
+  AgencyDocxRenderStatus,
   AgentContext,
   CategorizationChange,
+  ControlResponseOptions,
   ControlStatementChange,
   QuestionAnswer,
   SspSectionChange,
   SspWorkspace,
 } from "@/sspWorkspaceTypes";
+import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
 import { ApiError } from "@/api/client";
 
 const API_BASE = "/api/v1";
@@ -63,9 +69,27 @@ const envelopeSchema = z.object({
   requirements: z.array(z.record(z.string(), z.unknown())),
   satisfied_requirement_ids: z.array(z.string()),
   metrics: z.record(z.string(), z.unknown()),
+  control_response: z
+    .object({
+      implementation_statuses: z.array(z.string()),
+      responsibilities: z.array(z.string()),
+      question_owner_types: z.array(z.string()),
+      evidence_required_for_agent_statement: z.boolean(),
+    })
+    .optional(),
+  agency_docx_renders: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export type SspProfile = z.infer<typeof profileSchema>;
+
+const AGENCY_DOCX_RENDER_STATUSES = new Set<AgencyDocxRenderStatus>([
+  "awaiting_approval",
+  "review_failed",
+  "approved",
+  "rejected",
+]);
+
+const AGENCY_DOCX_ISSUE_SEVERITIES = new Set(["blocker", "warning"] as const);
 
 function mutationHeaders(
   session: SessionInfo,
@@ -144,6 +168,126 @@ function factValue(
   return typeof value === "string" ? value : "";
 }
 
+export function mapControlResponse(raw: unknown): ControlResponseOptions {
+  const document = record(raw);
+  const implementationStatuses = document.implementation_statuses;
+  const responsibilities = document.responsibilities;
+  const questionOwnerTypes = document.question_owner_types;
+  const evidenceRequired = document.evidence_required_for_agent_statement;
+  if (
+    !Array.isArray(implementationStatuses) ||
+    !Array.isArray(responsibilities) ||
+    !Array.isArray(questionOwnerTypes) ||
+    typeof evidenceRequired !== "boolean"
+  ) {
+    return DEFAULT_CONTROL_RESPONSE_OPTIONS;
+  }
+  return {
+    implementationStatuses: implementationStatuses.map(String),
+    responsibilities: responsibilities.map(String),
+    questionOwnerTypes: questionOwnerTypes.map(String),
+    evidenceRequiredForAgentStatement: evidenceRequired,
+  };
+}
+
+function mapAgencyDocxMappingException(
+  raw: unknown,
+): AgencyDocxMappingException | null {
+  const item = record(raw);
+  const severity = text(item.severity);
+  if (!AGENCY_DOCX_ISSUE_SEVERITIES.has(severity as "blocker" | "warning")) {
+    return null;
+  }
+  const code = text(item.code);
+  const message = text(item.message);
+  if (!code || !message) return null;
+  return {
+    severity: severity as AgencyDocxMappingException["severity"],
+    code,
+    message,
+  };
+}
+
+function mapAgencyDocxIssue(raw: unknown): AgencyDocxIssue | null {
+  const item = record(raw);
+  const severity = text(item.severity);
+  if (!AGENCY_DOCX_ISSUE_SEVERITIES.has(severity as "blocker" | "warning")) {
+    return null;
+  }
+  const code = text(item.code);
+  const message = text(item.message);
+  if (!code || !message) return null;
+  const locatorRaw = item.locator;
+  const locator =
+    typeof locatorRaw === "string"
+      ? locatorRaw
+      : locatorRaw === null
+        ? null
+        : null;
+  return {
+    severity: severity as AgencyDocxIssue["severity"],
+    code,
+    message,
+    locator,
+  };
+}
+
+function mapAgencyDocxIssues(raw: unknown): AgencyDocxIssue[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const mapped = mapAgencyDocxIssue(entry);
+    return mapped ? [mapped] : [];
+  });
+}
+
+function mapAgencyDocxMappingExceptions(
+  raw: unknown,
+): AgencyDocxMappingException[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const mapped = mapAgencyDocxMappingException(entry);
+    return mapped ? [mapped] : [];
+  });
+}
+
+export function mapAgencyDocxRenders(raw: unknown): AgencyDocxRender[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const item = record(entry);
+    const status = text(item.status);
+    if (!AGENCY_DOCX_RENDER_STATUSES.has(status as AgencyDocxRenderStatus)) {
+      return [];
+    }
+    const renderId = text(item.render_id);
+    if (!renderId) return [];
+    return [
+      {
+        id: renderId,
+        profileVersionId: text(item.profile_version_id),
+        sourceRevisionId: text(item.source_revision_id),
+        sourceRevisionSha256: text(item.source_revision_sha256),
+        templateSha256: text(item.template_sha256),
+        templateFilename: text(item.template_filename),
+        outputSha256: text(item.output_sha256),
+        status: status as AgencyDocxRenderStatus,
+        createdBy: text(item.created_by),
+        createdAt: text(item.created_at),
+        resolvedBy: nullableText(item.resolved_by),
+        resolvedAt: nullableText(item.resolved_at),
+        mappingSummary: text(item.mapping_summary),
+        mappingExceptions: mapAgencyDocxMappingExceptions(
+          item.mapping_exceptions,
+        ),
+        reviewSummary: text(item.review_summary),
+        reviewIssues: mapAgencyDocxIssues(item.review_issues),
+        canApprove: item.can_approve === true,
+        canPreview: item.can_preview === true,
+        canDownload: item.can_download === true,
+      },
+    ];
+  });
+}
+
 export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
   const envelope = envelopeSchema.parse(raw);
   const revision = envelope.current_revision;
@@ -206,6 +350,7 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
             | "High"
         : "Unconfirmed",
     },
+    controlResponse: mapControlResponse(envelope.control_response),
     revisionId: revision.revision_id,
     revisionUpdatedAt: revision.created_at,
     lastAgentUpdateAt:
@@ -283,6 +428,7 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
         }),
       };
     }),
+    agencyDocxRenders: mapAgencyDocxRenders(envelope.agency_docx_renders),
   };
 }
 
@@ -541,21 +687,133 @@ export function approveSspWorkspace(session: SessionInfo, workspace: SspWorkspac
 
 export async function downloadSspExport(
   workspace: SspWorkspace,
-  format: "docx" | "json",
+  format: "docx" | "json" | "oscal-json",
 ): Promise<void> {
   const params = new URLSearchParams({
     revision_id: workspace.revisionId,
     include_open_questions: "true",
   });
-  const response = await fetch(
-    `${API_BASE}/ssp-workspaces/${workspace.id}/exports/${format}?${params}`,
-    { credentials: "include" },
+  const fallbackFilename =
+    format === "oscal-json"
+      ? `ssp-${workspace.revisionId}.oscal.json`
+      : `ssp-${workspace.revisionId}.${format}`;
+  await downloadWorkspaceBlob(
+    `/ssp-workspaces/${workspace.id}/exports/${format}?${params}`,
+    fallbackFilename,
   );
-  if (!response.ok) throw new ApiError(response.status, response.statusText);
-  const url = URL.createObjectURL(await response.blob());
+}
+
+function parseAttachmentFilename(header: string | null): string | null {
+  if (!header) return null;
+  const match = /filename="([^"]+)"/i.exec(header.trim());
+  if (!match) return null;
+  const filename = match[1];
+  return filename && !/[\u0000-\u001f\u007f]/.test(filename) ? filename : null;
+}
+
+async function readDownloadErrorDetail(response: Response): Promise<string> {
+  let detail = response.statusText || "Request failed";
+  try {
+    const body = (await response.json()) as Record<string, unknown>;
+    detail =
+      (typeof body.detail === "string" && body.detail) ||
+      (typeof body.error === "string" && body.error) ||
+      detail;
+  } catch {
+    // Preserve the HTTP status text when the server did not return JSON.
+  }
+  return detail;
+}
+
+async function downloadWorkspaceBlob(
+  path: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  if (!response.ok) {
+    throw new ApiError(response.status, await readDownloadErrorDetail(response));
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `ssp-${workspace.revisionId}.${format}`;
+  anchor.download =
+    parseAttachmentFilename(response.headers.get("Content-Disposition")) ??
+    fallbackFilename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export async function createAgencyDocxRender(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  file: File,
+): Promise<SspWorkspace> {
+  const form = new FormData();
+  form.append("revision_id", workspace.revisionId);
+  form.append("file", file);
+  const result = await apiRequest(
+    `/ssp-workspaces/${workspace.id}/agency-docx-renders`,
+    envelopeSchema,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: mutationHeaders(session, false),
+      body: form,
+    },
+  );
+  return mapWorkspaceEnvelope(result);
+}
+
+async function agencyDocxRenderMutation(
+  session: SessionInfo,
+  workspaceId: string,
+  renderId: string,
+  action: "approve" | "reject",
+): Promise<SspWorkspace> {
+  const result = await apiRequest(
+    `/ssp-workspaces/${workspaceId}/agency-docx-renders/${encodeURIComponent(renderId)}/${action}`,
+    envelopeSchema,
+    {
+      method: "POST",
+      headers: mutationHeaders(session),
+    },
+  );
+  return mapWorkspaceEnvelope(result);
+}
+
+export function approveAgencyDocxRender(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  renderId: string,
+): Promise<SspWorkspace> {
+  return agencyDocxRenderMutation(session, workspace.id, renderId, "approve");
+}
+
+export function rejectAgencyDocxRender(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  renderId: string,
+): Promise<SspWorkspace> {
+  return agencyDocxRenderMutation(session, workspace.id, renderId, "reject");
+}
+
+export function previewAgencyDocxRender(
+  workspace: SspWorkspace,
+  renderId: string,
+): Promise<void> {
+  return downloadWorkspaceBlob(
+    `/ssp-workspaces/${workspace.id}/agency-docx-renders/${encodeURIComponent(renderId)}/preview`,
+    `draft-${renderId}.docx`,
+  );
+}
+
+export function downloadAgencyDocxRender(
+  workspace: SspWorkspace,
+  renderId: string,
+): Promise<void> {
+  return downloadWorkspaceBlob(
+    `/ssp-workspaces/${workspace.id}/agency-docx-renders/${encodeURIComponent(renderId)}/download`,
+    `agency-shaped-draft-${renderId}.docx`,
+  );
 }

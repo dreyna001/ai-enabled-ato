@@ -1,5 +1,13 @@
 # Profile-Driven Workflow and Profile Currency TODO
 
+> **Redirect — current promoted work:** This file is **later backlog** for
+> profile registry, inheritance UI, qualified export mappings, and FedRAMP paths.
+> **Active increments** with delivered status and narrow acceptance boundaries are
+> tracked in [`docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md`](NEW_INTERNAL_SSP_WORKFLOW_PLAN.md)
+> (**Active increments (do now)**). Minimal ODP prompting, inherited/hybrid prompt
+> rules, draft OSCAL JSON export, and profile-bound implementation-statement policy
+> (bundle **1.2.0**) do **not** check off the broader items below.
+
 ## Objective
 
 - Make authorization-path behavior profile-driven.
@@ -9,17 +17,22 @@
 
 ## Initial Profile
 
-**Profile:** `fisma-nist-sp800-53-rev5`
+**Profile:** `agency-fisma-nist-sp800-53-rev5` (shipped built-in bundle version **1.2.0**)
+
+**Delivered in 1.2.0 (agency only):** explicit `implementation_statement_policy`
+in `ssp-requirements.json` (deterministic flags, agent instruction blocks, authority
+refs); generation, patches, and approval honor profile flags; semantic quality
+findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records final NIST SP 800-18 Rev. 2 provenance (`doi.org/10.6028/NIST.SP.800-18r2`, version 2.0.0) plus NIST OSCAL content 1.5.0 / SP 800-53 5.2.0 baselines; **33** profile SSP items with **digital identity acceptance optional**; **21** exact Table 1 `standard_coverage` rows (19 `ssp_item`, 2 `controls`); profile-defined section constraints and control enums enforced in generation, patches, direct edits, and approval, with profile requiredness enforced in metrics; legacy **1.0.0** bundles remain loadable with defaults; import / activate / migrate-profile API scaffolding exists for future profiles (FedRAMP not supported). Minimal ODP token detection, placeholder rejection, inherited/hybrid prompt guidance, draft OSCAL JSON export, and profile-bound statement policy are shipped narrowly—see NEW_INTERNAL **Active increments**. **HS-001** and **HS-002** stay open—no authority qualification, agency template parity, qualified OSCAL SSP or conformance claims, privacy plan, or C-SCRM plan claims.
 
 ## Security Categorization
 
 - [ ] Add profile-defined FIPS 199 categorization fields.
 - [ ] Map system information types to the agency-approved NIST SP 800-60 version.
-- [ ] Capture confidentiality, integrity, and availability impact separately.
+- [x] Capture confidentiality, integrity, and availability impact separately.
 - [ ] Require a rationale and evidence references for each impact value.
 - [ ] Record information-type adjustments and adjustment rationale.
-- [ ] Compute the system high-water mark deterministically.
-- [ ] Treat agent output as a proposal until human confirmation.
+- [x] Compute the system high-water mark deterministically.
+- [x] Treat agent output as a proposal until human confirmation.
 - [ ] Mark categorization stale when data types, mission, or boundary change.
 - [ ] Export the information-type mapping, C/I/A rationale, adjustments, and final category.
 
@@ -64,17 +77,19 @@
 
 ## NIST SP 800-18 Rev. 2 SSP Coverage
 
-- [ ] Pin the final NIST SP 800-18 Rev. 2 source and Security Plan Example Outline in the profile manifest.
-- [ ] Add missing profile requirements:
+- [x] Record final NIST SP 800-18 Rev. 2 source provenance and exact Table 1 element coverage in the profile.
+- [ ] Pin the separate Security Plan Example Outline supplemental artifact.
+- [x] Add missing Table 1 profile requirements:
   - Laws, regulations, and policies
   - SSP approval and authorization decision
   - Operational status
   - Complete responsible-personnel list
   - Control assessment status
   - Digital identity acceptance statement
-  - Referenced-artifact register
-  - Acronyms and glossary
   - SSP review and change history
+- [ ] Add outline-only structures not represented by Table 1:
+  - General referenced-artifact register
+  - [x] Acronyms and glossary (profile item `ssp.acronyms_and_glossary`, **1.2.0**)
 - [ ] Define each requirement's:
   - Stable requirement ID
   - Required or optional status
@@ -83,16 +98,19 @@
   - UI editor
   - Export mapping
   - Migration behavior
-- [ ] Add deterministic coverage tests against the pinned SSP outline.
+- [x] Add deterministic exact-set coverage tests against final SP 800-18r2 Table 1.
 
 ### TODO: Profile-Defined Control Fields
 
-- [ ] Add a validated `control_response` schema to the profile bundle.
+- [x] Add a validated `control_response` schema to the profile bundle.
 - [ ] Remove globally hardcoded control-field options.
-- [ ] Render control fields from the pinned profile.
-- [ ] Build LLM output contracts from the pinned profile.
-- [ ] Validate API writes against the pinned profile.
-- [ ] Map profile values into DOCX, JSON, and future OSCAL exports.
+- [x] Move globally hardcoded control **statement** agent instructions (statement
+  content, ODP, inherited/hybrid, semantic review) into the pinned profile
+  `implementation_statement_policy` (agency **1.2.0**).
+- [x] Render control fields from the pinned profile.
+- [x] Build LLM output contracts from the pinned profile.
+- [x] Validate API writes against the pinned profile.
+- [ ] Map profile values into DOCX, JSON, and qualified OSCAL export mappings (draft OSCAL JSON from approved snapshots is shipped; full profile-driven OSCAL field mapping remains open).
 
 ### FISMA/NIST Rev. 5 Control Schema
 
@@ -124,13 +142,13 @@ control_response:
 
 ### UI Changes
 
-- [ ] Replace implementation-status text entry with a profile-defined selection.
-- [ ] Replace responsibility/inheritance text entry with profile-defined fields.
+- [x] Replace implementation-status text entry with a profile-defined selection.
+- [x] Replace responsibility/inheritance text entry with profile-defined fields.
 - [ ] Separate control designation from inheritance.
 - [ ] Add common-control provider selection.
 - [ ] Add inherited implementation details.
 - [ ] Require a rationale for `not_applicable`.
-- [ ] Reject values not allowed by the pinned profile.
+- [x] Reject values not allowed by the pinned profile.
 - [ ] Add bulk review and confirmation.
 - [ ] Mark incompatible values for review after profile migration.
 
@@ -148,22 +166,16 @@ control_response:
   - Export mappings
   - LLM structured-output contracts
 - [ ] Add FedRAMP profiles without adding customer-name or path-specific UI code.
+- [ ] Add additional agency or authorization profiles only when authoritative
+  source content, profile-owner decisions, and acceptance fixtures are supplied.
 - [ ] Fail profile import when unsupported field combinations are declared.
 
 ## Profile Source of Truth
 
-- [ ] Store authoritative source content inside each local profile bundle.
-- [ ] Include:
-  - Control catalog
-  - Baselines
-  - Overlays and tailoring
-  - Organization-defined parameters
-  - Common-control definitions
-  - SSP requirements
-  - Control-response schema
-  - Export mappings and templates
-  - Agent instructions and retrieval content
-- [ ] Separate authority content from system implementation evidence.
+- [x] Store authoritative source content inside each local profile bundle.
+- [x] Include control catalog, baselines, and SSP requirements with a validated control-response schema (agency 1.1.0 bundle).
+- [ ] Include complete export mappings, templates, agent instructions, and retrieval content per profile.
+- [x] Separate authority content from system implementation evidence.
 - [ ] Prevent source documents from acting as model instructions.
 
 ## Bundle Manifest
@@ -190,35 +202,28 @@ signature: detached-signature-reference
 1. [ ] Monitor authoritative publishers outside the deployed application.
 2. [ ] Acquire updated source material through an approved connected environment.
 3. [ ] Record source version, publication date, source location, and checksum.
-4. [ ] Compile a new immutable profile bundle.
-5. [ ] Validate schema, identifiers, baselines, references, and export mappings.
+4. [x] Compile a new immutable profile bundle.
+5. [x] Validate schema, identifiers, baselines, references, and standard_coverage links.
 6. [ ] Sign the bundle or attach an approved detached signature.
 7. [ ] Transfer the bundle through the agency-approved process.
 8. [ ] Verify checksum, signature, publisher allowlist, and bundle schema offline.
-9. [ ] Import the bundle as **Inactive**.
-10. [ ] Generate a deterministic diff from the currently active version.
+9. [x] Import the bundle as **Inactive**.
+10. [x] Generate a deterministic diff from the currently active version.
 11. [ ] Require qualified SME or profile-administrator review.
-12. [ ] Activate the new version explicitly.
+12. [x] Activate the new version explicitly.
 13. [ ] Keep the previous version available for rollback and historical export.
 
 ## Profile Diff Requirements
 
-- [ ] Display:
-  - Added, removed, and changed controls
-  - Baseline changes
-  - Overlay and tailoring changes
-  - Parameter changes
-  - Control-field schema changes
-  - SSP requirement changes
-  - Common-control changes
-  - Export-template and mapping changes
-  - Agent instruction and retrieval-content changes
+- [x] Display added, removed, and changed controls.
+- [x] Display SSP requirement (item) changes.
+- [ ] Display baseline, overlay, parameter, control-field schema, export-template, common-control, and agent-content changes (includes `implementation_statement_policy` in offline `diff_profiles`; no profile-admin UI yet).
 - [ ] Bind the diff to both bundle hashes.
 - [ ] Store reviewer, decision, timestamp, and rationale.
 
 ## Workspace Migration Effects
 
-- [ ] Keep existing workspaces pinned until explicitly migrated.
+- [x] Keep existing workspaces pinned until explicitly migrated.
 - [ ] Preserve approved revisions with their original profile version.
 - [ ] On migration:
   - Add new controls as `unaddressed`
@@ -234,10 +239,10 @@ signature: detached-signature-reference
 
 ## Agent Grounding
 
-- [ ] Load the exact pinned profile version for every generation or agent call.
+- [x] Load the exact pinned profile version for every generation or agent call.
 - [ ] Send only relevant profile requirements for the current section or control.
 - [ ] Include profile ID, version, and bundle hash in model-call metadata.
-- [ ] Require output control IDs and values to match the profile allowlists.
+- [x] Require output control IDs and values to match the profile allowlists.
 - [ ] Reject unsupported or stale profile references.
 - [ ] Keep authority context distinct from system evidence citations.
 - [ ] Regenerate affected outputs when the workspace profile changes.
@@ -260,14 +265,20 @@ signature: detached-signature-reference
 
 ## Validation and Tests
 
-- [ ] Reject invalid, unsigned, corrupted, or unapproved bundles.
+- [x] Reject invalid, unsigned, corrupted, or unapproved bundles.
 - [ ] Reject duplicate profile IDs and versions with different bytes.
-- [ ] Test profile-defined UI fields and backend validation.
+- [x] Test profile-defined backend validation and portal control selectors.
 - [ ] Test FISMA and FedRAMP profiles with different field schemas.
-- [ ] Test deterministic profile diffs.
+- [x] Test deterministic profile diffs.
 - [ ] Test workspace migration and rollback.
 - [ ] Test historical export against the original pinned profile.
 - [ ] Test that prompts use pinned profile content, not model memory.
+- [ ] Analyze whether claim-level evidence verification materially improves SSP
+  quality beyond the current evidence-link and human-review gates before adding
+  new workflow, persistence, or UI.
+- [ ] Qualify the production mapping, generation, and review models against
+  expert-reviewed SSP fixtures with measured accuracy, failure thresholds,
+  endpoint/model-version provenance, and regression gates.
 - [ ] Test air-gapped import, activation, and recovery.
 
 ## Completion Criteria

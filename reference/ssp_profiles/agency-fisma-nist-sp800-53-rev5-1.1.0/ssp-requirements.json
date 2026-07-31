@@ -1,0 +1,626 @@
+{
+  "control_response": {
+    "evidence_required_for_agent_statement": true,
+    "implementation_statuses": [
+      "implemented",
+      "partially_implemented",
+      "planned",
+      "not_implemented",
+      "not_applicable",
+      "unknown"
+    ],
+    "question_owner_types": [
+      "isso",
+      "agency",
+      "technical",
+      "system_owner"
+    ],
+    "responsibilities": [
+      "system_specific",
+      "hybrid",
+      "inherited",
+      "unknown"
+    ]
+  },
+  "items": [
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.name",
+      "min_length": 1,
+      "required": true,
+      "standard_refs": [
+        "table1.system-name-and-identifier"
+      ],
+      "title": "System Name",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.identifier",
+      "min_length": 1,
+      "required": true,
+      "standard_refs": [
+        "table1.system-name-and-identifier"
+      ],
+      "title": "System Identifier",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.purpose",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.system-overview"
+      ],
+      "title": "System Purpose",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.owner",
+      "min_length": 1,
+      "required": true,
+      "standard_refs": [
+        "table1.role-identification-and-responsible-personnel"
+      ],
+      "title": "System Owner",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.isso",
+      "min_length": 1,
+      "required": true,
+      "standard_refs": [
+        "table1.role-identification-and-responsible-personnel"
+      ],
+      "title": "Information System Security Officer",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.responsible_personnel",
+      "min_length": 1,
+      "required": true,
+      "standard_refs": [
+        "table1.role-identification-and-responsible-personnel"
+      ],
+      "title": "Other Responsible Personnel",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.type",
+      "min_length": 1,
+      "required": true,
+      "standard_refs": [
+        "table1.system-type"
+      ],
+      "title": "Information System Type",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.authorization_boundary",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.authorization-boundary-description"
+      ],
+      "title": "Authorization Boundary",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.environment",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.system-overview"
+      ],
+      "title": "Operational Environment",
+      "value_type": "string"
+    },
+    {
+      "allowed_values": [
+        "on_premises",
+        "agency_cloud",
+        "agency_hybrid"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.hosting_model",
+      "required": true,
+      "standard_refs": [
+        "table1.system-type"
+      ],
+      "title": "Hosting Model",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.components",
+      "required": true,
+      "standard_refs": [
+        "table1.system-component-inventory"
+      ],
+      "title": "Major System Components",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.interconnections",
+      "required": true,
+      "standard_refs": [
+        "table1.information-exchanges-summary"
+      ],
+      "title": "System Interconnections",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.data_types",
+      "required": true,
+      "standard_refs": [
+        "table1.system-information-types"
+      ],
+      "title": "Information Types",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.user_roles",
+      "required": true,
+      "standard_refs": [
+        "table1.system-overview"
+      ],
+      "title": "User and Privileged Roles",
+      "value_type": "string_list"
+    },
+    {
+      "allowed_values": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.confidentiality_impact",
+      "required": true,
+      "standard_refs": [
+        "table1.system-categorization"
+      ],
+      "title": "Confidentiality Impact Level",
+      "value_type": "string"
+    },
+    {
+      "allowed_values": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.integrity_impact",
+      "required": true,
+      "standard_refs": [
+        "table1.system-categorization"
+      ],
+      "title": "Integrity Impact Level",
+      "value_type": "string"
+    },
+    {
+      "allowed_values": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.availability_impact",
+      "required": true,
+      "standard_refs": [
+        "table1.system-categorization"
+      ],
+      "title": "Availability Impact Level",
+      "value_type": "string"
+    },
+    {
+      "allowed_values": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.impact_level",
+      "required": true,
+      "standard_refs": [
+        "table1.system-categorization"
+      ],
+      "title": "Security Categorization Impact Level",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.categorization_rationale",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.system-categorization"
+      ],
+      "title": "Security Categorization Rationale",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.laws_regulations_policies",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.laws-regulations-and-policies-affecting-system-requirements"
+      ],
+      "title": "Laws, Regulations, and Policies",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.diagram_references",
+      "required": true,
+      "standard_refs": [
+        "table1.environment-of-operation-diagrams"
+      ],
+      "title": "Referenced Diagrams and Architecture Artifacts",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.authorization_path",
+      "min_length": 10,
+      "required": true,
+      "standard_refs": [
+        "table1.system-authorization-decision"
+      ],
+      "title": "Authorization Path",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.plan_approval",
+      "min_length": 10,
+      "required": true,
+      "standard_refs": [
+        "table1.system-plan-approval"
+      ],
+      "title": "Security Plan Approval",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.authorization_decision",
+      "min_length": 10,
+      "required": true,
+      "standard_refs": [
+        "table1.system-authorization-decision"
+      ],
+      "title": "Authorization Decision",
+      "value_type": "string"
+    },
+    {
+      "allowed_values": [
+        "operational",
+        "under_development",
+        "major_modification",
+        "disposal",
+        "other"
+      ],
+      "evidence_required_for_agent": true,
+      "item_id": "system.operational_status",
+      "required": true,
+      "standard_refs": [
+        "table1.system-operational-status"
+      ],
+      "title": "Operational Status",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.control_assessment_status",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.control-assessment-status"
+      ],
+      "title": "Control Assessment Status Summary",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.remediation_actions",
+      "required": true,
+      "standard_refs": [
+        "table1.remediation-actions"
+      ],
+      "title": "Remediation Actions and Milestones",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.digital_identity_acceptance",
+      "min_length": 20,
+      "required": false,
+      "standard_refs": [
+        "table1.digital-identity-acceptance-statement"
+      ],
+      "title": "Digital Identity Acceptance Statement",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.plan_review_records",
+      "required": true,
+      "standard_refs": [
+        "table1.system-plan-review-records"
+      ],
+      "title": "Security Plan Review Records",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.plan_change_records",
+      "required": true,
+      "standard_refs": [
+        "table1.system-plan-change-records"
+      ],
+      "title": "Security Plan Change Records",
+      "value_type": "string_list"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.identity_and_access",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.control-implementation-details"
+      ],
+      "title": "Identification and Access Approach",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.logging_and_monitoring",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.control-implementation-details"
+      ],
+      "title": "Logging and Monitoring Approach",
+      "value_type": "string"
+    },
+    {
+      "evidence_required_for_agent": true,
+      "item_id": "system.contingency_and_recovery",
+      "min_length": 20,
+      "required": true,
+      "standard_refs": [
+        "table1.control-implementation-details"
+      ],
+      "title": "Contingency and Recovery Approach",
+      "value_type": "string"
+    }
+  ],
+  "schema_version": "1.1.0",
+  "standard_coverage": [
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.name",
+        "system.identifier"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-name-and-identifier",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Name and Identifier"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.type",
+        "system.hosting_model"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-type",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Type"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.purpose",
+        "system.environment",
+        "system.user_roles"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-overview",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Overview"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.owner",
+        "system.isso",
+        "system.responsible_personnel"
+      ],
+      "required": true,
+      "requirement_id": "table1.role-identification-and-responsible-personnel",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Role Identification and Responsible Personnel"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.data_types"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-information-types",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Information Types"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.laws_regulations_policies"
+      ],
+      "required": true,
+      "requirement_id": "table1.laws-regulations-and-policies-affecting-system-requirements",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Laws, Regulations, and Policies Affecting the System Requirements"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.authorization_boundary"
+      ],
+      "required": true,
+      "requirement_id": "table1.authorization-boundary-description",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Authorization Boundary Description"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.components"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-component-inventory",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Component Inventory"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.diagram_references"
+      ],
+      "required": true,
+      "requirement_id": "table1.environment-of-operation-diagrams",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Environment of Operation Diagrams"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.confidentiality_impact",
+        "system.integrity_impact",
+        "system.availability_impact",
+        "system.impact_level",
+        "system.categorization_rationale"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-categorization",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Categorization"
+    },
+    {
+      "coverage_kind": "controls",
+      "required": true,
+      "requirement_id": "table1.control-implementation-details",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Control Implementation Details"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.plan_approval"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-plan-approval",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Plan Approval"
+    },
+    {
+      "coverage_kind": "controls",
+      "required": true,
+      "requirement_id": "table1.control-implementation-status",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Control Implementation Status"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.interconnections"
+      ],
+      "required": true,
+      "requirement_id": "table1.information-exchanges-summary",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Information Exchanges Summary"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.control_assessment_status"
+      ],
+      "required": true,
+      "requirement_id": "table1.control-assessment-status",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Control Assessment Status"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.remediation_actions"
+      ],
+      "required": true,
+      "requirement_id": "table1.remediation-actions",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Remediation Actions"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.digital_identity_acceptance"
+      ],
+      "required": false,
+      "requirement_id": "table1.digital-identity-acceptance-statement",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Digital Identity Acceptance Statement"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.authorization_path",
+        "system.authorization_decision"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-authorization-decision",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Authorization Decision"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.operational_status"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-operational-status",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Operational Status"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.plan_review_records"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-plan-review-records",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Plan Review Records"
+    },
+    {
+      "coverage_kind": "ssp_item",
+      "item_ids": [
+        "system.plan_change_records"
+      ],
+      "required": true,
+      "requirement_id": "table1.system-plan-change-records",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "System Plan Change Records"
+    }
+  ]
+}

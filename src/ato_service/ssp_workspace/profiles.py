@@ -24,6 +24,14 @@ from ato_service.ssp_workspace.profile_bundles import (
     ProfileSource,
     ResolvedProfile,
     SspRequiredItem,
+    ControlResponsePolicy,
+    StandardCoverage,
+    ImplementationStatementAgentInstructions,
+    ImplementationStatementAuthorityRef,
+    ImplementationStatementDeterministicPolicy,
+    ImplementationStatementPolicy,
+    default_control_response_policy,
+    default_implementation_statement_policy,
     load_profile_bundle,
     resolve_profile,
 )
@@ -70,16 +78,7 @@ def deserialize_profile_bundle(document: dict[str, Any]) -> ProfileBundle:
     if not isinstance(document, dict):
         raise ProfileBundleError("stored profile bundle must be an object")
     try:
-        raw_manifest = document["manifest"]
-        manifest = ProfileManifest(
-            schema_version=raw_manifest["schema_version"],
-            profile_id=raw_manifest["profile_id"],
-            profile_version=raw_manifest["profile_version"],
-            display_name=raw_manifest["display_name"],
-            sources=tuple(ProfileSource(**item) for item in raw_manifest["sources"]),
-            files=tuple(ProfileBundleFile(**item) for item in raw_manifest["files"]),
-            sha256=raw_manifest["sha256"],
-        )
+        manifest = _deserialize_stored_manifest(document["manifest"])
         return ProfileBundle(
             manifest=manifest,
             catalog_controls=tuple(
@@ -95,15 +94,115 @@ def deserialize_profile_bundle(document: dict[str, Any]) -> ProfileBundle:
                     value_type=item["value_type"],
                     min_length=item["min_length"],
                     allowed_values=tuple(item["allowed_values"]),
-                    evidence_required_for_agent=item[
-                        "evidence_required_for_agent"
-                    ],
+                    evidence_required_for_agent=item["evidence_required_for_agent"],
+                    required=item.get("required", True),
+                    standard_refs=tuple(item.get("standard_refs", ())),
                 )
                 for item in document["ssp_required_items"]
+            ),
+            control_response=_deserialize_control_response(
+                document.get("control_response")
+            ),
+            standard_coverage=tuple(
+                StandardCoverage(**entry)
+                for entry in document.get("standard_coverage", ())
+            ),
+            implementation_statement_policy=_deserialize_implementation_statement_policy(
+                document.get("implementation_statement_policy")
             ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ProfileBundleError("stored profile bundle is malformed") from exc
+
+
+def _deserialize_stored_manifest(raw_manifest: dict[str, Any]) -> ProfileManifest:
+    sources = tuple(ProfileSource(**item) for item in raw_manifest["sources"])
+    catalog_release = raw_manifest.get("nist_control_catalog_release")
+    if not catalog_release:
+        for source in sources:
+            if source.source_id == "nist-sp-800-53":
+                catalog_release = source.version
+                break
+    if not catalog_release:
+        raise ProfileBundleError(
+            "stored profile manifest is missing nist_control_catalog_release"
+        )
+    return ProfileManifest(
+        schema_version=raw_manifest["schema_version"],
+        profile_id=raw_manifest["profile_id"],
+        profile_version=raw_manifest["profile_version"],
+        nist_control_catalog_release=catalog_release,
+        display_name=raw_manifest["display_name"],
+        sources=sources,
+        files=tuple(ProfileBundleFile(**item) for item in raw_manifest["files"]),
+        sha256=raw_manifest["sha256"],
+    )
+
+
+def _deserialize_implementation_statement_policy(
+    raw: dict[str, Any] | None,
+) -> ImplementationStatementPolicy:
+    if not isinstance(raw, dict):
+        return default_implementation_statement_policy()
+    deterministic = raw.get("deterministic")
+    instructions = raw.get("agent_instructions")
+    if not isinstance(deterministic, dict) or not isinstance(instructions, dict):
+        return default_implementation_statement_policy()
+    try:
+        return ImplementationStatementPolicy(
+            policy_version=raw["policy_version"],
+            deterministic=ImplementationStatementDeterministicPolicy(
+                reject_oscal_parameter_insert_syntax=deterministic[
+                    "reject_oscal_parameter_insert_syntax"
+                ],
+                require_question_for_unresolved_parameterized_controls=deterministic[
+                    "require_question_for_unresolved_parameterized_controls"
+                ],
+                require_evidence_for_agent_non_unknown_claims=deterministic[
+                    "require_evidence_for_agent_non_unknown_claims"
+                ],
+                require_statement_gap_or_question_before_approval=deterministic[
+                    "require_statement_gap_or_question_before_approval"
+                ],
+                semantic_quality_findings_are_advisory=deterministic[
+                    "semantic_quality_findings_are_advisory"
+                ],
+            ),
+            agent_instructions=ImplementationStatementAgentInstructions(
+                statement_content=tuple(instructions["statement_content"]),
+                organization_defined_parameters=tuple(
+                    instructions["organization_defined_parameters"]
+                ),
+                inherited_and_hybrid_responsibility=tuple(
+                    instructions["inherited_and_hybrid_responsibility"]
+                ),
+                semantic_review=tuple(instructions["semantic_review"]),
+            ),
+            authority_refs=tuple(
+                ImplementationStatementAuthorityRef(
+                    source_id=entry["source_id"],
+                    requirement_ids=tuple(entry["requirement_ids"]),
+                )
+                for entry in raw.get("authority_refs", ())
+            ),
+        )
+    except (KeyError, TypeError, ValueError):
+        return default_implementation_statement_policy()
+
+
+def _deserialize_control_response(
+    raw: dict[str, Any] | None,
+) -> ControlResponsePolicy:
+    if raw is None:
+        return default_control_response_policy()
+    return ControlResponsePolicy(
+        implementation_statuses=tuple(raw["implementation_statuses"]),
+        responsibilities=tuple(raw["responsibilities"]),
+        question_owner_types=tuple(raw["question_owner_types"]),
+        evidence_required_for_agent_statement=raw[
+            "evidence_required_for_agent_statement"
+        ],
+    )
 
 
 async def import_profile(
@@ -180,9 +279,12 @@ async def activate_profile(
             .with_for_update()
         )
     ).scalars()
-    for row in active_rows:
+    rows_to_deactivate = list(active_rows)
+    for row in rows_to_deactivate:
         row.status = ProfileState.INACTIVE.value
         row.activated_at = None
+    if rows_to_deactivate:
+        await session.flush()
     target.status = ProfileState.ACTIVE.value
     target.activated_at = now
     await session.flush()
@@ -215,8 +317,13 @@ async def ensure_builtin_profile(
         project_root
         / "reference"
         / "ssp_profiles"
-        / "agency-fisma-nist-sp800-53-rev5-5.2.0-1"
+        / "agency-fisma-nist-sp800-53-rev5-1.2.0"
     )
+    document = serialize_profile_bundle(bundle)
+    canonical = json.dumps(
+        document, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    bundle_sha256 = hashlib.sha256(canonical).hexdigest()
     row = (
         await session.execute(
             select(SspProfileVersion).where(
@@ -232,6 +339,10 @@ async def ensure_builtin_profile(
             imported_by="system:built-in-profile",
             now=now,
         )
+    elif row.bundle_sha256 != bundle_sha256:
+        row.bundle = document
+        row.bundle_sha256 = bundle_sha256
+        await session.flush()
     active = (
         await session.execute(
             select(SspProfileVersion).where(

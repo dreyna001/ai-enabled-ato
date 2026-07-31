@@ -14,11 +14,12 @@
     {
       "path": "ssp-requirements.json",
       "role": "ssp_requirements",
-      "sha256": "d2ab1c19273930a0c3881027f590ff378046a54a3fd02039cf364c2854e9c889"
+      "sha256": "09196a74c06c87087496531b4d0bb1ed425ecf85241c9da2b5bedc41011e69a7"
     }
   ],
+  "nist_control_catalog_release": "5.2.0",
   "profile_id": "agency-fisma-nist-sp800-53-rev5",
-  "profile_version": "5.2.0-1",
+  "profile_version": "1.2.0",
   "schema_version": "1.0.0",
   "sources": [
     {
@@ -26,6 +27,12 @@
       "source_id": "nist-oscal-content",
       "title": "NIST OSCAL Content",
       "version": "1.5.0"
+    },
+    {
+      "reference": "https://doi.org/10.6028/NIST.SP.800-18r2 (final June 2026)",
+      "source_id": "nist-sp-800-18-r2",
+      "title": "Developing Security, Privacy, and Cybersecurity Supply Chain Risk Management Plans for Systems",
+      "version": "2.0.0"
     },
     {
       "reference": "oscal-content-1.5.0/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog-min.json",

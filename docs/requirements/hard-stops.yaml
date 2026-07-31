@@ -11,19 +11,23 @@
         "ATO_TECHNICAL_SPEC.md",
         "docs/contracts/authority-manifest.json"
       ],
-      "notes": "Manifest status is draft, approval fields are null, and every source review_status is pending. Bundled profiles under reference/profiles/ and customer FISMA compiles are digest-verified draft artifacts (qualification_status draft). Vendored, digest-verified authority bytes and offline compilation do not constitute qualified human review or production qualification."
+      "notes": "Manifest status is draft, approval fields are null, and every source review_status is pending. Bundled profiles under reference/profiles/ and customer FISMA compiles are digest-verified draft artifacts (qualification_status draft). Vendored, digest-verified authority bytes and offline compilation do not constitute qualified human review or production qualification. Digest-verified validation of draft internal SSP workspace OSCAL 1.2.2 JSON exports against the official NIST OSCAL SSP schema is structural only and does not qualify authority sources, close this hard stop, or assert a qualified OSCAL SSP product."
     },
     {
       "hard_stop_id": "HS-002",
-      "condition": "A customer-approved agency FISMA template pack and field mapping have not been supplied.",
-      "blocked_work": "Claims of agency field parity or customer-ready FISMA export.",
+      "condition": "Customer template parity and acceptance are unproven: no customer-approved agency FISMA template pack and field mapping are evidenced, and the implemented agency DOCX pipeline does not establish parity with a customer-uploaded template.",
+      "blocked_work": "Claims of agency field parity, customer-ready FISMA export, or submission-ready agency-shaped DOCX.",
       "status": "open",
       "owner": "customer agency template owner (unassigned)",
       "evidence_paths": [
         "ATO_TECHNICAL_SPEC.md",
-        "docs/contracts/fisma-control-inventory.schema.json"
+        "docs/contracts/fisma-control-inventory.schema.json",
+        "docs/contracts/fisma-template-pack.schema.json",
+        "docs/contracts/fixtures/fisma-template-pack.valid.internal-fixture.json",
+        "docs/SSP_WORKSPACE_OPERATOR_GUIDE.md",
+        "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md"
       ],
-      "notes": "Repository publishes fisma-control-inventory.schema.json and scripts/compile_fisma_analysis_profile.py, but no customer-approved inventory, agency template pack, or field mapping is evidenced. Production FISMA requires explicit FISMA_ANALYSIS_PROFILE_FILE_REFERENCE; there is no synthetic runtime fallback. Official standard schemas do not establish parity with an agency-specific rendering."
+      "notes": "The repository generic legacy pack is the internal-fixture fisma-template-pack contract sample only; it is not a customer agency template. Runtime agency-shaped DOCX uses a customer-provided .docx uploaded in Review and export after ISSO approval of the SSP revision; stored templates are immutable and content-addressed. The agent produces a bounded mapping plan from canonical system, profile, and section refs plus mapped control-table columns; the server renders deterministic copy with a draft notice; reviewer output reports blocker and warning exceptions; the ISSO approves or rejects the render; preview is available before approval and final download after approval. Exact output cache and approved-mapping reuse apply only for the same workspace, approved revision, template digest, and pinned profile version. The workflow is synchronous, DOCX-only, and has no generic field-map UI. Draft OSCAL 1.2.2 JSON export from an approved SSP snapshot does not prove customer template parity, agency field mapping, or external acceptance: the customer template owner must review and approve DOCX mapping and output, and agency or customer acceptance evidence remains external."
     },
     {
       "hard_stop_id": "HS-003",
@@ -67,7 +71,7 @@
         "docs/CONFIGURATION.md",
         "deployment/README.md"
       ],
-      "notes": "The scanner behavior is a target contract and the scanner is customer-provided. No operational scanner or verification evidence is present."
+      "notes": "The scanner behavior is a target contract and the scanner is customer-provided. Safe ZIP, XML, and DOCX preflight used for extraction and agency template outline parsing is not malware scanning. Customer file extraction and production upload of customer DOCX templates remain blocked while this hard stop is open. No operational scanner or verification evidence is present."
     },
     {
       "hard_stop_id": "HS-006",

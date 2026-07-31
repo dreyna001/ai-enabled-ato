@@ -1635,6 +1635,235 @@
       ],
       "verification_type": "Config-gated single-operator dev/demo approval path with role expansion scoped to config load, unchanged non-self security controls, and deployment examples that default production off; production IdP deployment remains partial under HS-003",
       "status": "partial"
+    },
+    {
+      "requirement_id": "P1-023",
+      "spec_section": "31",
+      "requirement_text": "The shipped agency SSP profile bundle agency-fisma-nist-sp800-53-rev5 version 1.1.0 pins final NIST SP 800-18 Rev. 2 provenance, exact Table 1 standard_coverage metadata, 33 SSP items with optional digital identity acceptance, NIST SP 800-53 5.2.0 catalog and baselines, deterministic offline build/check, and legacy 1.0.0 load compatibility without HS-001 qualification or HS-002 template-parity claims.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "reference/ssp_profiles/agency-fisma-nist-sp800-53-rev5-1.1.0/manifest.json",
+        "reference/ssp_profiles/agency-fisma-nist-sp800-53-rev5-1.1.0/ssp-requirements.json",
+        "scripts/build_ssp_profile_bundle.py",
+        "src/ato_service/ssp_workspace/profile_bundles.py",
+        "src/ato_service/ssp_workspace/schemas/profile-ssp-requirements.schema.json",
+        "src/ato_service/ssp_workspace/profiles.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_profile_bundles.py::test_real_rev5_bundle_resolves_expected_nist_baseline_counts",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_real_bundle_standard_coverage_matches_table1_outline",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_legacy_100_bundle_remains_loadable_with_defaults",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_real_bundle_builder_is_deterministic",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_load_rejects_unknown_standard_refs"
+      ],
+      "verification_type": "Immutable offline agency Rev. 5 profile bundle with manifest source pins, Table 1 coverage rows, DIAS optional item, checksum validation, and deterministic builder parity; authority qualification and customer template parity remain blocked by HS-001 and HS-002",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-024",
+      "spec_section": "31",
+      "requirement_text": "Selected-profile typed constraints and profile control_response enums are enforced for SSP generation, contextual patches, direct ISSO edits, deterministic metrics and reviewability, and approval-bound export without OSCAL SSP, privacy plan, or C-SCRM plan claims.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "src/ato_service/ssp_workspace/generation.py",
+        "src/ato_service/ssp_workspace/generation_contracts.py",
+        "src/ato_service/ssp_workspace/service.py",
+        "src/ato_service/ssp_workspace/metrics.py",
+        "src/ato_service/ssp_workspace/export.py",
+        "portal/src/components/ssp-workspace/ControlWorkbench.tsx"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_parses_allowlisted_grounded_content",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_rejects_control_outside_profile",
+        "tests/ato_service/test_ssp_generation.py::test_initial_generation_prompt_uses_profile_control_and_section_policy",
+        "tests/ato_service/test_ssp_workspace_metrics.py::test_metrics_are_counts_and_profile_coverage_not_llm_estimates",
+        "tests/ato_service/test_ssp_workspace_persistence.py::test_approval_snapshot_binds_to_verified_revision_hash",
+        "tests/ato_service/test_ssp_workspace_e2e_integration.py::test_ssp_workspace_reaches_approved_json_and_docx_exports"
+      ],
+      "verification_type": "Profile-bound generation and patch contracts, workspace save validation, deterministic coverage metrics, and approval snapshot export; structured per-item UI editors and full export field mappings remain incomplete",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P1-025",
+      "spec_section": "31",
+      "requirement_text": "Offline SSP profile import, activation, built-in agency 1.2.0 seeding, and workspace migrate-profile API scaffolding exist for future FedRAMP or agency bundles while only agency-fisma-nist-sp800-53-rev5 is supported in the SSP workspace product boundary.",
+      "epic": "EP-02-package-foundation",
+      "implementation_files": [
+        "src/ato_service/ssp_workspace/profiles.py",
+        "src/ato_service/ssp_workspace/api.py",
+        "src/ato_service/ssp_workspace/service.py",
+        "docs/contracts/ssp-openapi.json"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_workspace_api_service.py::test_workspace_router_exposes_complete_bounded_workflow",
+        "tests/ato_service/test_ssp_workspace_api_service.py::test_stored_builtin_profiles_round_trip_without_semantic_loss",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_diff_profiles_is_deterministic_and_reports_semantic_changes",
+        "tests/ato_service/test_ssp_workspace_e2e_integration.py::test_ssp_workspace_reaches_approved_json_and_docx_exports"
+      ],
+      "verification_type": "Bounded ssp-profiles import/activate routes, built-in 1.2.0 ensure on first boot, deterministic profile diff helper, and migrate-profile route presence; FedRAMP SSP profiles and full administrator profile UI remain out of scope",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P1-026",
+      "spec_section": "31",
+      "requirement_text": "After ISSO approval of the SSP revision, the ISSO uploads a customer-provided agency DOCX template in Review and export; the source template is stored immutable and content-addressed; an agent returns a bounded mapping plan using only canonical system, profile, and section refs plus mapped control-table columns; the server renders deterministic copy with a draft notice; a reviewer agent reports blocker and warning exceptions; the ISSO approves or rejects the render; preview is available before approval and final download after; exact output cache and approved-mapping reuse apply only for the same workspace, approved revision, template digest, and pinned profile version; processing is synchronous with no worker, DOCX-only, and no generic field-map UI; HS-002 remains open for template parity and external acceptance.",
+      "epic": "EP-06-review-portal",
+      "implementation_files": [
+        "src/ato_service/ssp_workspace/agency_docx_contracts.py",
+        "src/ato_service/ssp_workspace/agency_docx.py",
+        "src/ato_service/ssp_workspace/service.py",
+        "src/ato_service/ssp_workspace/api.py",
+        "src/ato_service/db/models.py",
+        "migrations/versions/20260728_0016_ssp_agency_docx_renders.py",
+        "portal/src/components/ssp-workspace/AgencyTemplatePanel.tsx",
+        "portal/src/components/ssp-workspace/ReviewExportPanel.tsx",
+        "portal/src/api/sspWorkspace.ts"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_agency_docx_contracts.py::test_mapping_plan_parses_normal_path",
+        "tests/ato_service/test_agency_docx_contracts.py::test_mapping_plan_rejects_unknown_source_ref",
+        "tests/ato_service/test_agency_docx.py::test_render_template_normal_path_preserves_original_and_notice",
+        "tests/ato_service/test_agency_docx.py::test_generate_mapping_plan_uses_one_schema_repair",
+        "tests/ato_service/test_agency_docx.py::test_review_render_merges_plan_exceptions_and_model_issues",
+        "tests/ato_service/test_agency_docx_service.py::test_create_rejects_unapproved_revision",
+        "tests/ato_service/test_agency_docx_service.py::test_create_returns_exact_cache_hit",
+        "tests/ato_service/test_agency_docx_service.py::test_preview_and_download_gates",
+        "tests/ato_service/test_agency_docx_service.py::test_approve_and_reject_state_transitions",
+        "tests/ato_service/test_agency_docx_api.py::test_agency_docx_routes_use_expected_auth_dependencies",
+        "tests/ato_service/test_db.py::test_alembic_head_is_ssp_workspace_migration",
+        "portal/src/components/ssp-workspace/AgencyTemplatePanel.test.tsx",
+        "portal/src/api/sspWorkspace.test.ts"
+      ],
+      "verification_type": "Closed JSON mapping and review contracts, deterministic render and draft notice, workspace-scoped persistence and blob digests, exact render cache and approved-mapping reuse keyed by workspace, revision, template digest, and profile version, ISSO approve or reject and preview or download gates, and portal Review and export wiring; live customer template parity, production model endpoint approval (HS-004), malware scanning for customer uploads (HS-005), AI qualification (HS-006), and RHEL validation remain open",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P1-027",
+      "spec_section": "31",
+      "requirement_text": "The internal SSP workspace detects OSCAL organization-parameter insert tokens in pinned profile control requirement_text, rejects the same placeholder syntax in generated, patched, or directly edited implementation statements, and requires a tracked question when generation returns a parameterized control without an implementation statement; omitted controls remain empty for later focused work so the workflow does not create hundreds of low-value questions. Full ODP registry UI and qualified parameter export mappings remain out of scope.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "src/ato_service/ssp_workspace/generation_contracts.py",
+        "src/ato_service/ssp_workspace/generation.py",
+        "src/ato_service/ssp_workspace/profile_bundles.py",
+        "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_generation_contracts.py::test_odp_detection_matches_oscal_insert_tokens_case_insensitively",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_rejects_oscal_placeholder_in_implementation_statement",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_patch_rejects_oscal_placeholder_in_implementation_statement",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_requires_question_for_unresolved_parameterized_control",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_allows_omitted_parameterized_controls_without_questions",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_allows_evidence_backed_parameterized_control_without_question",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_workspace_implementation_statement_rejects_oscal_placeholders",
+        "tests/ato_service/test_ssp_generation.py::test_common_prompt_marks_odp_controls_from_requirement_text"
+      ],
+      "verification_type": "Deterministic token detection, generation and patch rejection of placeholder syntax, and parameterized-control question enforcement in contract tests; profile ODP registry, inheritance UI, and qualified export mappings remain backlog",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-028",
+      "spec_section": "31",
+      "requirement_text": "Generation and contextual patch prompts for the internal SSP workspace ground inherited and hybrid responsibility in the existing profile responsibility enum and implementation_statement only, instructing agents not to invent provider scope or inheritance boundaries beyond cited evidence; separate designation fields, provider selection UI, and profile inheritance registry remain out of scope.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "src/ato_service/ssp_workspace/generation.py",
+        "src/ato_service/ssp_workspace/generation_contracts.py",
+        "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_generation.py::test_initial_generation_prompt_includes_odp_and_inheritance_rules",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_generation_parses_allowlisted_grounded_content",
+        "tests/ato_service/test_ssp_workspace_oscal_export.py::test_inherited_and_unknown_mappings_remain_honest"
+      ],
+      "verification_type": "Prompt rule contracts and responsibility allowlist validation in generation tests; common-control provider UI and profile inheritance registry remain backlog",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "P1-029",
+      "spec_section": "31",
+      "requirement_text": "After ISSO approval, the internal SSP workspace exports deterministic draft OSCAL 1.2.2 SSP JSON from the approval snapshot, validates the payload against the digest-verified official NIST OSCAL SSP schema, exposes portal and API oscal-json export, and fails closed on authority digest mismatch; qualified or customer-ready OSCAL SSP products and conformance claims remain blocked by HS-001 and HS-002.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "src/ato_service/oscal_ssp_schema.py",
+        "src/ato_service/ssp_workspace/oscal_export.py",
+        "src/ato_service/ssp_workspace/service.py",
+        "src/ato_service/ssp_workspace/api.py",
+        "portal/src/components/ssp-workspace/ReviewExportPanel.tsx",
+        "portal/src/api/sspWorkspace.ts",
+        "docs/SSP_WORKSPACE_OPERATOR_GUIDE.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_workspace_oscal_export.py::test_representative_export_validates_against_official_schema",
+        "tests/ato_service/test_ssp_workspace_oscal_export.py::test_export_is_deterministic_for_bytes_uuids_and_order",
+        "tests/ato_service/test_ssp_workspace_oscal_export.py::test_invalid_authority_digest_fails_closed",
+        "tests/ato_service/test_ssp_workspace_export.py::test_oscal_json_export_is_schema_valid_draft",
+        "tests/ato_service/test_ssp_workspace_export.py::test_render_approved_export_delegates_oscal_json_args",
+        "tests/ato_service/test_ssp_workspace_api_service.py::test_get_export_oscal_json_sets_media_type_and_filename",
+        "tests/ato_service/test_ssp_workspace_e2e_integration.py::test_ssp_workspace_reaches_approved_json_and_docx_exports",
+        "portal/src/components/ssp-workspace/ReviewExportPanel.test.tsx"
+      ],
+      "verification_type": "Deterministic draft OSCAL SSP JSON builder, official schema validation with digest-verified authority bytes, approved-revision export gates, API and portal wiring; OSCAL SSP qualification, FedRAMP conformance, and agency template parity remain open under HS-001 and HS-002",
+      "status": "implemented"
+    },
+    {
+      "requirement_id": "R-025",
+      "spec_section": "31, 32",
+      "requirement_text": "Internal SSP workspace draft exports (canonical JSON, draft OSCAL 1.2.2 JSON with official-schema structural validation only, optional agency-shaped DOCX renders from customer-uploaded templates), and profile coverage metrics remain draft-only security-plan working material and do not assert authorization decisions, authority qualification (HS-001), agency template parity (HS-002), qualified OSCAL SSP or OSCAL SSP conformance, FedRAMP profiles, or privacy or C-SCRM plan completeness.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md",
+        "docs/SSP_WORKSPACE_OPERATOR_GUIDE.md",
+        "docs/requirements/hard-stops.yaml",
+        "src/ato_service/ssp_workspace/export.py",
+        "src/ato_service/ssp_workspace/oscal_export.py",
+        "src/ato_service/oscal_ssp_schema.py",
+        "src/ato_service/ssp_workspace/agency_docx.py",
+        "src/ato_service/export_readiness.py"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_workspace_export.py::test_json_export_is_canonical_and_filters_answered_questions",
+        "tests/ato_service/test_ssp_workspace_export.py::test_oscal_json_export_is_schema_valid_draft",
+        "tests/ato_service/test_ssp_workspace_oscal_export.py::test_representative_export_validates_against_official_schema",
+        "tests/ato_service/test_downstream_contracts.py::test_export_readiness_fisma_security_only_does_not_require_privacy_execution"
+      ],
+      "verification_type": "Operator docs and export paths describe draft SSP working packages and non-qualifying draft OSCAL JSON under open HS-001/HS-002; security-only FISMA export readiness tests reject privacy-plan execution requirements without claiming customer-ready export or OSCAL conformance",
+      "status": "partial"
+    },
+    {
+      "requirement_id": "P1-030",
+      "spec_section": "31",
+      "requirement_text": "The internal SSP workspace loads a versioned implementation_statement_policy from the pinned profile bundle (deterministic flags, agent instruction blocks, and authority refs), applies profile-owned statement-content, organization-defined-parameter, inherited/hybrid, and semantic-review instructions to initial generation and contextual patches, and honors profile deterministic flags in validation and approval without new control fields, database columns, or portal UI; semantic quality findings are advisory only and profiles that disable semantic_quality_findings_are_advisory are rejected; built-in agency-fisma-nist-sp800-53-rev5 ships at version 1.2.0 with 1.1.0 and 1.0.0 load compatibility; not-applicable or provider fields, common-control registry UI, full ODP registry, SP 800-53A coverage, bulk review, and FedRAMP statement rules remain out of scope.",
+      "epic": "EP-05-draft-artifacts",
+      "implementation_files": [
+        "reference/ssp_profiles/agency-fisma-nist-sp800-53-rev5-1.2.0/ssp-requirements.json",
+        "scripts/build_ssp_profile_bundle.py",
+        "src/ato_service/ssp_workspace/profile_bundles.py",
+        "src/ato_service/ssp_workspace/profiles.py",
+        "src/ato_service/ssp_workspace/generation_contracts.py",
+        "src/ato_service/ssp_workspace/generation.py",
+        "src/ato_service/ssp_workspace/metrics.py",
+        "src/ato_service/ssp_workspace/service.py",
+        "src/ato_service/ssp_workspace/schemas/profile-ssp-requirements.schema.json",
+        "docs/CONTROL_IMPLEMENTATION_STATEMENT_IMPROVEMENTS.md",
+        "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md",
+        "docs/SSP_WORKSPACE_OPERATOR_GUIDE.md"
+      ],
+      "test_ids": [
+        "tests/ato_service/test_ssp_profile_bundles.py::test_prior_110_bundle_remains_loadable_without_statement_policy",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_real_bundle_declares_implementation_statement_policy",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_load_rejects_model_controlled_semantic_approval_gate",
+        "tests/ato_service/test_ssp_profile_bundles.py::test_diff_profiles_reports_implementation_statement_policy_change",
+        "tests/ato_service/test_ssp_generation.py::test_custom_implementation_statement_policy_reaches_initial_and_patch_prompts",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_statement_policy_disabled_oscal_rejection_allows_direct_save_syntax",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_statement_policy_disabled_odp_question_rule_allows_empty_response",
+        "tests/ato_service/test_ssp_generation_contracts.py::test_statement_policy_merged_evidence_requirement_can_disable_agent_facts",
+        "tests/ato_service/test_ssp_workspace_metrics.py::test_reviewable_skips_statement_gap_gate_when_policy_disabled",
+        "tests/ato_service/test_ssp_workspace_metrics.py::test_reviewable_rejects_whitespace_only_unresolved_reason",
+        "tests/ato_service/test_ssp_workspace_api_service.py::test_stored_builtin_profiles_round_trip_without_semantic_loss"
+      ],
+      "verification_type": "Bundled 1.2.0 policy schema and loader defaults for 1.0.0/1.1.0, profile-owned prompt instruction wiring, deterministic flag enforcement in generation and approval contracts, rejection of non-advisory semantic approval gates, and profile diff visibility; live AI qualification of statement quality and full removal of globally hardcoded control-field options remain open",
+      "status": "implemented"
     }
   ]
 }

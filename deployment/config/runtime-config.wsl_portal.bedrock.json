@@ -16,7 +16,7 @@
     "source": "systemd_credential",
     "identifier": "oidc-client-secret"
   },
-  "PORTAL_PUBLIC_ORIGIN": "http://localhost:5173",
+  "PORTAL_PUBLIC_ORIGIN": "http://localhost:5174",
   "DATABASE_DSN_CREDENTIAL_REFERENCE": {
     "source": "systemd_credential",
     "identifier": "database-dsn"
@@ -27,8 +27,8 @@
   },
   "TEXT_MODEL_PROVIDER": "aws_bedrock",
   "AWS_REGION": "us-east-1",
-  "TEXT_MODEL_NAME": "anthropic.claude-3-haiku-20240307-v1:0",
-  "TEXT_MODEL_PROFILE_ID": "anthropic-claude-3-haiku",
+  "TEXT_MODEL_NAME": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+  "TEXT_MODEL_PROFILE_ID": "anthropic-claude-sonnet-4",
   "TEXT_MODEL_MAX_RETRIES": 2,
   "TEXT_MODEL_ENDPOINT_PROFILE": "internal_openai_compatible",
   "TEXT_MODEL_TEMPERATURE": 0.0,

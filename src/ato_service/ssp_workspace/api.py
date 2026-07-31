@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
@@ -44,18 +44,27 @@ from ato_service.ssp_workspace.profiles import (
     parse_profile_archive,
 )
 from ato_service.ssp_workspace.service import (
+    AgencyDocxRenderNotFoundError,
+    AgencyDocxRenderStateError,
+    AgencyDocxUploadError,
     AgentPatchNotFoundError,
     AgentPatchStateError,
     ApprovalNotFoundError,
     WorkspaceNotReviewableError,
+    agency_docx_output_filename,
     apply_proposed_patch,
+    approve_agency_docx_render,
     approve_workspace_revision,
+    create_agency_docx_render,
     create_initialized_workspace,
     generate_workspace_draft,
     list_workspace_rows,
     load_workspace_envelope,
     migrate_workspace_profile,
     propose_agent_patch,
+    read_agency_docx_download_bytes,
+    read_agency_docx_preview_bytes,
+    reject_agency_docx_render,
     reject_proposed_patch,
     render_approved_export,
     restore_workspace_revision,
@@ -135,6 +144,9 @@ class MigrateProfileRequest(ExpectedRevisionRequest):
     impact_level: str = Field(pattern=r"^(low|moderate|high)$")
 
 
+ExportFormat = Literal["json", "docx", "oscal-json"]
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -166,6 +178,8 @@ def _error_response(exc: Exception) -> JSONResponse:
         "profile_already_imported",
     }:
         status = 409
+    elif code in {"agency_docx_upload_failed", "malware_scan_required"}:
+        status = 422
     elif isinstance(exc, (TextModelConfigurationError,)):
         status = 503
         code = "model_not_configured"
@@ -860,7 +874,7 @@ def build_ssp_workspace_router() -> APIRouter:
     @router.get("/ssp-workspaces/{workspace_id}/exports/{export_format}")
     async def get_export(
         workspace_id: uuid.UUID,
-        export_format: str,
+        export_format: ExportFormat,
         revision_id: uuid.UUID,
         include_open_questions: bool,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
@@ -877,22 +891,214 @@ def build_ssp_workspace_router() -> APIRouter:
                 export_format=export_format,
                 include_open_questions=include_open_questions,
             )
-            media_type = (
-                "application/json"
-                if export_format == "json"
-                else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-            extension = "json" if export_format == "json" else "docx"
+            if export_format == "docx":
+                media_type = (
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+                filename = f"ssp-{revision_id}.docx"
+            elif export_format == "oscal-json":
+                media_type = "application/json"
+                filename = f"ssp-{revision_id}.oscal.json"
+            else:
+                media_type = "application/json"
+                filename = f"ssp-{revision_id}.json"
             return Response(
                 content=content,
                 media_type=media_type,
                 headers={
-                    "Content-Disposition": f'attachment; filename="ssp-{revision_id}.{extension}"',
+                    "Content-Disposition": f'attachment; filename="{filename}"',
                     "X-Content-Type-Options": "nosniff",
                     "Cache-Control": "private, no-store",
                 },
             )
         except (AuthorizationDeniedError, ApprovalNotFoundError, ValueError) as exc:
+            return _error_response(exc)
+
+    @router.post("/ssp-workspaces/{workspace_id}/agency-docx-renders")
+    async def post_agency_docx_render(
+        workspace_id: uuid.UUID,
+        revision_id: Annotated[uuid.UUID, Form()],
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        blob_store: Annotated[BlobStore, Depends(get_blob_store)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        file: UploadFile = File(...),
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("isso",)
+            )
+            payload = await file.read(runtime_state.config.limits.max_single_file_bytes + 1)
+            await create_agency_docx_render(
+                session,
+                workspace_id=workspace_id,
+                source_revision_id=revision_id,
+                template_filename=file.filename or "template.docx",
+                template_bytes=payload,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                blob_store=blob_store,
+                config=runtime_state.config,
+                model=_model_adapter(runtime_state),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(session, workspace_id=workspace_id),
+            )
+        except (
+            AuthorizationDeniedError,
+            AgencyDocxUploadError,
+            ApprovalNotFoundError,
+            BlobStoreError,
+        ) as exc:
+            return _error_response(exc)
+
+    @router.get(
+        "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/preview"
+    )
+    async def get_agency_docx_preview(
+        workspace_id: uuid.UUID,
+        render_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        blob_store: Annotated[BlobStore, Depends(get_blob_store)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("viewer",)
+            )
+            content = await read_agency_docx_preview_bytes(
+                session,
+                workspace_id=workspace_id,
+                render_id=render_id,
+                blob_store=blob_store,
+            )
+            return Response(
+                content=content,
+                media_type=(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ),
+                headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{agency_docx_output_filename(render_id)}"'
+                    ),
+                    "X-Content-Type-Options": "nosniff",
+                    "Cache-Control": "private, no-store",
+                },
+            )
+        except (
+            AuthorizationDeniedError,
+            AgencyDocxRenderNotFoundError,
+            AgencyDocxRenderStateError,
+        ) as exc:
+            return _error_response(exc)
+
+    @router.get(
+        "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/download"
+    )
+    async def get_agency_docx_download(
+        workspace_id: uuid.UUID,
+        render_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        blob_store: Annotated[BlobStore, Depends(get_blob_store)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("viewer",)
+            )
+            content = await read_agency_docx_download_bytes(
+                session,
+                workspace_id=workspace_id,
+                render_id=render_id,
+                blob_store=blob_store,
+            )
+            return Response(
+                content=content,
+                media_type=(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ),
+                headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{agency_docx_output_filename(render_id)}"'
+                    ),
+                    "X-Content-Type-Options": "nosniff",
+                    "Cache-Control": "private, no-store",
+                },
+            )
+        except (
+            AuthorizationDeniedError,
+            AgencyDocxRenderNotFoundError,
+            AgencyDocxRenderStateError,
+        ) as exc:
+            return _error_response(exc)
+
+    @router.post(
+        "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/approve"
+    )
+    async def post_agency_docx_approve(
+        workspace_id: uuid.UUID,
+        render_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("isso",)
+            )
+            await approve_agency_docx_render(
+                session,
+                workspace_id=workspace_id,
+                render_id=render_id,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(session, workspace_id=workspace_id),
+            )
+        except (
+            AuthorizationDeniedError,
+            AgencyDocxRenderNotFoundError,
+            AgencyDocxRenderStateError,
+        ) as exc:
+            return _error_response(exc)
+
+    @router.post(
+        "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/reject"
+    )
+    async def post_agency_docx_reject(
+        workspace_id: uuid.UUID,
+        render_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("isso",)
+            )
+            await reject_agency_docx_render(
+                session,
+                workspace_id=workspace_id,
+                render_id=render_id,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(session, workspace_id=workspace_id),
+            )
+        except (
+            AuthorizationDeniedError,
+            AgencyDocxRenderNotFoundError,
+            AgencyDocxRenderStateError,
+        ) as exc:
             return _error_response(exc)
 
     return router

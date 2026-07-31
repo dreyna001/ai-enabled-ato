@@ -23,6 +23,26 @@
         "title": "AnswerQuestionRequest",
         "type": "object"
       },
+      "Body_post_agency_docx_render_api_v1_ssp_workspaces__workspace_id__agency_docx_renders_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "file"
+        ],
+        "title": "Body_post_agency_docx_render_api_v1_ssp_workspaces__workspace_id__agency_docx_renders_post",
+        "type": "object"
+      },
       "Body_post_evidence_api_v1_ssp_workspaces__workspace_id__evidence_post": {
         "properties": {
           "expected_revision_id": {
@@ -76,11 +96,6 @@
       "CreateWorkspaceRequest": {
         "additionalProperties": false,
         "properties": {
-          "impact_level": {
-            "pattern": "^(low|moderate|high)$",
-            "title": "Impact Level",
-            "type": "string"
-          },
           "profile_version_id": {
             "format": "uuid",
             "title": "Profile Version Id",
@@ -94,8 +109,7 @@
         },
         "required": [
           "system_id",
-          "profile_version_id",
-          "impact_level"
+          "profile_version_id"
         ],
         "title": "CreateWorkspaceRequest",
         "type": "object"
@@ -273,6 +287,60 @@
           "instruction"
         ],
         "title": "ProposePatchRequest",
+        "type": "object"
+      },
+      "SaveCategorizationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "availability": {
+            "pattern": "^(low|moderate|high)$",
+            "title": "Availability",
+            "type": "string"
+          },
+          "availability_rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Availability Rationale",
+            "type": "string"
+          },
+          "confidentiality": {
+            "pattern": "^(low|moderate|high)$",
+            "title": "Confidentiality",
+            "type": "string"
+          },
+          "confidentiality_rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Confidentiality Rationale",
+            "type": "string"
+          },
+          "expected_revision_id": {
+            "format": "uuid",
+            "title": "Expected Revision Id",
+            "type": "string"
+          },
+          "integrity": {
+            "pattern": "^(low|moderate|high)$",
+            "title": "Integrity",
+            "type": "string"
+          },
+          "integrity_rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Integrity Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision_id",
+          "confidentiality",
+          "integrity",
+          "availability",
+          "confidentiality_rationale",
+          "integrity_rationale",
+          "availability_rationale"
+        ],
+        "title": "SaveCategorizationRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -1032,6 +1100,357 @@
         ]
       }
     },
+    "/ssp-workspaces/{workspace_id}/agency-docx-renders": {
+      "post": {
+        "operationId": "post_agency_docx_render_api_v1_ssp_workspaces__workspace_id__agency_docx_renders_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_agency_docx_render_api_v1_ssp_workspaces__workspace_id__agency_docx_renders_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Agency Docx Render",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/approve": {
+      "post": {
+        "operationId": "post_agency_docx_approve_api_v1_ssp_workspaces__workspace_id__agency_docx_renders__render_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "render_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Render Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Agency Docx Approve",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/download": {
+      "get": {
+        "operationId": "get_agency_docx_download_api_v1_ssp_workspaces__workspace_id__agency_docx_renders__render_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "render_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Render Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agency Docx Download",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/preview": {
+      "get": {
+        "operationId": "get_agency_docx_preview_api_v1_ssp_workspaces__workspace_id__agency_docx_renders__render_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "render_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Render Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agency Docx Preview",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/{workspace_id}/agency-docx-renders/{render_id}/reject": {
+      "post": {
+        "operationId": "post_agency_docx_reject_api_v1_ssp_workspaces__workspace_id__agency_docx_renders__render_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "render_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Render Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Agency Docx Reject",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
     "/ssp-workspaces/{workspace_id}/agent/patches": {
       "post": {
         "operationId": "post_agent_patch_api_v1_ssp_workspaces__workspace_id__agent_patches_post",
@@ -1374,6 +1793,89 @@
         ]
       }
     },
+    "/ssp-workspaces/{workspace_id}/categorization": {
+      "post": {
+        "operationId": "post_categorization_api_v1_ssp_workspaces__workspace_id__categorization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCategorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Categorization",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
     "/ssp-workspaces/{workspace_id}/controls/{control_id}": {
       "patch": {
         "operationId": "patch_control_api_v1_ssp_workspaces__workspace_id__controls__control_id__patch",
@@ -1661,6 +2163,11 @@
             "name": "export_format",
             "required": true,
             "schema": {
+              "enum": [
+                "json",
+                "docx",
+                "oscal-json"
+              ],
               "title": "Export Format",
               "type": "string"
             }

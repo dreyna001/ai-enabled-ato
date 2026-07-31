@@ -51,6 +51,7 @@ export type SspWorkspacePageProps =
       availableWorkspaces?: Array<{ id: string; name: string }>;
       generationPending?: boolean;
       initialView?: WorkspaceView;
+      actionsBusy?: boolean;
     };
 
 const NAV_ITEMS: Array<{
@@ -83,12 +84,14 @@ function SspWorkspaceSuccess({
   availableWorkspaces = [],
   generationPending = false,
   initialView = "overview",
+  actionsBusy = false,
 }: {
   workspace: SspWorkspace;
   actions?: SspWorkspaceActions;
   availableWorkspaces?: Array<{ id: string; name: string }>;
   generationPending?: boolean;
   initialView?: WorkspaceView;
+  actionsBusy?: boolean;
 }) {
   const [view, setView] = useState<WorkspaceView>(initialView);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
@@ -246,6 +249,7 @@ function SspWorkspaceSuccess({
           {view === "controls" ? (
             <ControlWorkbench
               controls={workspace.controls}
+              controlResponse={workspace.controlResponse}
               selectedControlId={selectedControlId}
               onSelectControl={setSelectedControlId}
               onSave={actions.onSaveControl}
@@ -263,8 +267,14 @@ function SspWorkspaceSuccess({
             <ReviewExportPanel
               workspace={workspace}
               metrics={metrics}
+              actionsBusy={actionsBusy}
               onApprove={actions.onApprove}
               onExport={actions.onExport}
+              onUploadAgencyTemplate={actions.onUploadAgencyTemplate}
+              onPreviewAgencyRender={actions.onPreviewAgencyRender}
+              onApproveAgencyRender={actions.onApproveAgencyRender}
+              onRejectAgencyRender={actions.onRejectAgencyRender}
+              onDownloadAgencyRender={actions.onDownloadAgencyRender}
             />
           ) : null}
         </main>
@@ -314,6 +324,7 @@ export function SspWorkspacePage(props: SspWorkspacePageProps) {
       availableWorkspaces={props.availableWorkspaces}
       generationPending={props.generationPending}
       initialView={props.initialView}
+      actionsBusy={props.actionsBusy}
     />
   );
 }

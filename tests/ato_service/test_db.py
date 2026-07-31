@@ -116,6 +116,7 @@ EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
         "ssp_evidence_links",
         "ssp_agent_patches",
         "ssp_approval_snapshots",
+        "ssp_agency_docx_renders",
     }
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states", "package_revision_search_chunks"})
@@ -588,7 +589,7 @@ def test_create_session_factory_does_not_connect() -> None:
 def test_alembic_head_is_ssp_workspace_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260728_0015"
+    assert script.get_current_head() == "20260728_0016"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:
@@ -1037,3 +1038,22 @@ def test_database_connectivity_probe_against_optional_test_database() -> None:
             await engine.dispose()
 
     asyncio.run(_probe())
+
+
+def test_ssp_agency_docx_render_unique_includes_profile_version() -> None:
+    table = Base.metadata.tables["ssp_agency_docx_renders"]
+    unique = {
+        constraint.name: tuple(constraint.columns.keys())
+        for constraint in table.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert unique[
+        "uq_ssp_agency_docx_renders_workspace_profile_revision_template"
+    ] == (
+        "workspace_id",
+        "profile_version_id",
+        "source_revision_id",
+        "template_sha256",
+    )
+    ddl = _compile_create_table("ssp_agency_docx_renders")
+    assert "uq_ssp_agency_docx_renders_workspace_profile_revision_template" in ddl

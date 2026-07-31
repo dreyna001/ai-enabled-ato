@@ -35,9 +35,7 @@ def _fixture_inputs():
             key="hosting.model",
             value="agency_cloud",
             provenance=Provenance.AGENT_GENERATED,
-            evidence=(
-                EvidenceLink(artifact_id=evidence_id, locator={"page": 1}),
-            ),
+            evidence=(EvidenceLink(artifact_id=evidence_id, locator={"page": 1}),),
         ),
     )
     requirements = (
@@ -55,9 +53,7 @@ def _fixture_inputs():
             title="Account Management",
             implementation_statement="Agency identity manages accounts.",
             state=ControlState.GENERATED,
-            evidence=(
-                EvidenceLink(artifact_id=evidence_id, locator={"page": 2}),
-            ),
+            evidence=(EvidenceLink(artifact_id=evidence_id, locator={"page": 2}),),
         ),
         ControlContent(
             control_id="AU-2",
@@ -152,6 +148,58 @@ def test_reviewable_allows_tracked_unknowns_but_requires_terminal_jobs() -> None
         controls=controls,
         questions=questions,
         all_jobs_terminal=False,
+        revision_saved=True,
+        content_consistent=True,
+    )
+
+
+def test_reviewable_skips_statement_gap_gate_when_policy_disabled() -> None:
+    facts, requirements, controls, questions = _fixture_inputs()
+    empty_control = ControlContent(
+        control_id="CM-1",
+        title="Configuration Management Policy",
+        implementation_statement="",
+        state=ControlState.EMPTY,
+    )
+    controls_with_gap = controls + (empty_control,)
+
+    assert not workspace_is_reviewable(
+        requirements=requirements,
+        facts=facts,
+        controls=controls_with_gap,
+        questions=questions,
+        all_jobs_terminal=True,
+        revision_saved=True,
+        content_consistent=True,
+    )
+    assert workspace_is_reviewable(
+        requirements=requirements,
+        facts=facts,
+        controls=controls_with_gap,
+        questions=questions,
+        all_jobs_terminal=True,
+        revision_saved=True,
+        content_consistent=True,
+        require_statement_gap_or_question_before_approval=False,
+    )
+
+
+def test_reviewable_rejects_whitespace_only_unresolved_reason() -> None:
+    facts, requirements, controls, questions = _fixture_inputs()
+    whitespace_gap = ControlContent(
+        control_id="CM-1",
+        title="Configuration Management Policy",
+        implementation_statement="",
+        unresolved_reason="   ",
+        state=ControlState.EMPTY,
+    )
+
+    assert not workspace_is_reviewable(
+        requirements=requirements,
+        facts=facts,
+        controls=controls + (whitespace_gap,),
+        questions=questions,
+        all_jobs_terminal=True,
         revision_saved=True,
         content_consistent=True,
     )

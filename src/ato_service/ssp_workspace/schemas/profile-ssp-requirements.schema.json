@@ -4,10 +4,173 @@
   "title": "SSP workspace required items",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "items"],
+  "required": [
+    "schema_version",
+    "items"
+  ],
   "properties": {
     "schema_version": {
-      "const": "1.0.0"
+      "type": "string",
+      "enum": [
+        "1.0.0",
+        "1.1.0",
+        "1.2.0"
+      ]
+    },
+    "control_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implementation_statuses",
+        "responsibilities",
+        "question_owner_types",
+        "evidence_required_for_agent_statement"
+      ],
+      "properties": {
+        "implementation_statuses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "responsibilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "question_owner_types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "evidence_required_for_agent_statement": {
+          "type": "boolean"
+        }
+      }
+    },
+    "standard_coverage": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "requirement_id",
+          "title",
+          "coverage_kind",
+          "required"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+            "maxLength": 128
+          },
+          "requirement_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "\\S"
+          },
+          "coverage_kind": {
+            "type": "string",
+            "enum": [
+              "ssp_item",
+              "controls"
+            ]
+          },
+          "item_ids": {
+            "type": "array",
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9._-]{2,127}$",
+              "maxLength": 128
+            }
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "coverage_kind": {
+                  "const": "ssp_item"
+                }
+              },
+              "required": [
+                "coverage_kind"
+              ]
+            },
+            "then": {
+              "required": [
+                "item_ids"
+              ],
+              "properties": {
+                "item_ids": {
+                  "type": "array",
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "coverage_kind": {
+                  "const": "controls"
+                }
+              },
+              "required": [
+                "coverage_kind"
+              ]
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "item_ids"
+                ],
+                "properties": {
+                  "item_ids": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     "items": {
       "type": "array",
@@ -36,7 +199,10 @@
           },
           "value_type": {
             "type": "string",
-            "enum": ["string", "string_list"]
+            "enum": [
+              "string",
+              "string_list"
+            ]
           },
           "min_length": {
             "type": "integer",
@@ -54,10 +220,135 @@
               "maxLength": 255
             }
           },
+          "required": {
+            "type": "boolean"
+          },
+          "standard_refs": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+              "maxLength": 128
+            }
+          },
           "evidence_required_for_agent": {
             "type": "boolean"
           }
         }
+      }
+    },
+    "implementation_statement_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "deterministic",
+        "agent_instructions",
+        "authority_refs"
+      ],
+      "properties": {
+        "policy_version": {
+          "type": "string",
+          "enum": [
+            "1.0.0"
+          ]
+        },
+        "deterministic": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reject_oscal_parameter_insert_syntax",
+            "require_question_for_unresolved_parameterized_controls",
+            "require_evidence_for_agent_non_unknown_claims",
+            "require_statement_gap_or_question_before_approval",
+            "semantic_quality_findings_are_advisory"
+          ],
+          "properties": {
+            "reject_oscal_parameter_insert_syntax": {
+              "type": "boolean"
+            },
+            "require_question_for_unresolved_parameterized_controls": {
+              "type": "boolean"
+            },
+            "require_evidence_for_agent_non_unknown_claims": {
+              "type": "boolean"
+            },
+            "require_statement_gap_or_question_before_approval": {
+              "type": "boolean"
+            },
+            "semantic_quality_findings_are_advisory": {
+              "const": true
+            }
+          }
+        },
+        "agent_instructions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "statement_content",
+            "organization_defined_parameters",
+            "inherited_and_hybrid_responsibility",
+            "semantic_review"
+          ],
+          "properties": {
+            "statement_content": {
+              "$ref": "#/$defs/instruction_list"
+            },
+            "organization_defined_parameters": {
+              "$ref": "#/$defs/instruction_list"
+            },
+            "inherited_and_hybrid_responsibility": {
+              "$ref": "#/$defs/instruction_list"
+            },
+            "semantic_review": {
+              "$ref": "#/$defs/instruction_list"
+            }
+          }
+        },
+        "authority_refs": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_id",
+              "requirement_ids"
+            ],
+            "properties": {
+              "source_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+                "maxLength": 128
+              },
+              "requirement_ids": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+                  "maxLength": 128
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "instruction_list": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000,
+        "pattern": "\\S"
       }
     }
   }

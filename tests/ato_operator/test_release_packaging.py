@@ -149,7 +149,9 @@ def release_tree(tmp_path: Path) -> Path:
     return tree
 
 
-def test_collect_allowlisted_files_includes_bundled_profiles(release_tree: Path) -> None:
+def test_collect_allowlisted_files_includes_bundled_profiles(
+    release_tree: Path,
+) -> None:
     selected = collect_allowlisted_files(
         release_tree,
         require_portal_dist=False,
@@ -283,8 +285,7 @@ def test_verify_release_archive_includes_profiles_and_draft_warning(
     for relative_path in bundled_profile_relative_paths():
         assert relative_path in names
     assert (
-        "reference/ssp_profiles/"
-        "agency-fisma-nist-sp800-53-rev5-5.2.0-1/manifest.json"
+        "reference/ssp_profiles/agency-fisma-nist-sp800-53-rev5-1.2.0/manifest.json"
     ) in names
 
 
@@ -333,9 +334,7 @@ def test_verify_release_archive_detects_tampered_profile(
     tampered_path.write_bytes(buffer.getvalue())
     verify_report = verify_release_archive(tampered_path, project_root=release_tree)
     assert verify_report.passed is False
-    assert any(
-        "mixed qualification_status" in error for error in verify_report.errors
-    )
+    assert any("mixed qualification_status" in error for error in verify_report.errors)
 
 
 def test_verify_release_archive_rejects_qualified_profiles_with_draft_manifest(
@@ -502,7 +501,9 @@ def test_read_bounded_tar_member_rejects_long_member() -> None:
     )
     assert payload is None
     assert aggregate == 0
-    assert any("archive member exceeds declared size during read" in error for error in errors)
+    assert any(
+        "archive member exceeds declared size during read" in error for error in errors
+    )
 
 
 def test_build_release_archive_rejects_qualified_profiles_with_draft_manifest(

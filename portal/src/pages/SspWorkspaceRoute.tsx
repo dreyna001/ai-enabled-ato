@@ -4,13 +4,18 @@ import {
   applySspPatch,
   approveSspWorkspace,
   askSspAgent,
+  approveAgencyDocxRender,
+  createAgencyDocxRender,
   createSspSystem,
   createSspWorkspace,
+  downloadAgencyDocxRender,
   downloadSspExport,
   generateSspWorkspace,
   listSspProfiles,
   listSspWorkspaces,
+  previewAgencyDocxRender,
   removeSspEvidence,
+  rejectAgencyDocxRender,
   rejectSspPatch,
   saveSspCategorization,
   saveSspControl,
@@ -183,6 +188,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           name: item.name,
         }))}
         generationPending={generationPending}
+        actionsBusy={busy}
         actions={{
           onRetry: () => void load(),
           onOpenWorkspace: (workspaceId) => {
@@ -244,6 +250,32 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           onApprove: () =>
             void run((current) => approveSspWorkspace(session, current)),
           onExport: (format) => void downloadSspExport(workspace, format),
+          onUploadAgencyTemplate: (file) =>
+            void run((current) =>
+              createAgencyDocxRender(session, current, file),
+            ),
+          onPreviewAgencyRender: (renderId) => {
+            if (busy) return;
+            setBusy(true);
+            void previewAgencyDocxRender(workspace, renderId)
+              .catch((caught) => setError(formatApiError(caught)))
+              .finally(() => setBusy(false));
+          },
+          onApproveAgencyRender: (renderId) =>
+            void run((current) =>
+              approveAgencyDocxRender(session, current, renderId),
+            ),
+          onRejectAgencyRender: (renderId) =>
+            void run((current) =>
+              rejectAgencyDocxRender(session, current, renderId),
+            ),
+          onDownloadAgencyRender: (renderId) => {
+            if (busy) return;
+            setBusy(true);
+            void downloadAgencyDocxRender(workspace, renderId)
+              .catch((caught) => setError(formatApiError(caught)))
+              .finally(() => setBusy(false));
+          },
         }}
       />
     </>

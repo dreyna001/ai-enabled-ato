@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SspWorkspace } from "@/sspWorkspaceTypes";
+import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
 import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
 
 function workspaceFixture(): SspWorkspace {
@@ -26,6 +27,7 @@ function workspaceFixture(): SspWorkspace {
       version: "2026.1",
       baseline: "Moderate",
     },
+    controlResponse: DEFAULT_CONTROL_RESPONSE_OPTIONS,
     revisionId: "rev-4",
     revisionUpdatedAt: "2026-07-27T12:00:00Z",
     lastAgentUpdateAt: "2026-07-27T11:30:00Z",
@@ -122,6 +124,7 @@ function workspaceFixture(): SspWorkspace {
       },
     ],
     patches: [],
+    agencyDocxRenders: [],
   };
 }
 

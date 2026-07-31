@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from datetime import datetime
+from io import BytesIO
+import hashlib
+import json
 from typing import Any
 import uuid
 
@@ -34,6 +37,7 @@ from ato_service.ssp_workspace.export import (
     build_workspace_docx_export,
     build_workspace_json_export,
 )
+from ato_service.ssp_workspace.oscal_export import build_draft_oscal_ssp_json_export
 from ato_service.ssp_workspace.generation import (
     ContextualEditRequest,
     ControlState as GenerationControlState,
@@ -48,11 +52,19 @@ from ato_service.ssp_workspace.generation import (
 from ato_service.ssp_workspace.generation_contracts import (
     GeneratedQuestion,
     PatchResult,
+    ProfileValidationError,
+    SelectedProfilePolicy,
     TargetedPatch,
+    validate_applied_patch_result,
+    validate_workspace_control_fields,
+    validate_workspace_implementation_statement,
+    validate_workspace_section_content,
 )
 from ato_service.ssp_workspace.metrics import (
     EvidenceMetricRecord,
+    agent_control_blocks_approval,
     calculate_workspace_metrics,
+    controls_have_tracked_responses,
     requirement_is_satisfied,
 )
 from ato_service.ssp_workspace.persistence import (
@@ -62,7 +74,11 @@ from ato_service.ssp_workspace.persistence import (
     save_revision,
 )
 from ato_service.ssp_workspace.profiles import resolve_stored_profile
-from ato_service.ssp_workspace.profile_bundles import ProfileDiff, diff_profiles
+from ato_service.ssp_workspace.profile_bundles import (
+    ControlResponsePolicy,
+    ProfileDiff,
+    diff_profiles,
+)
 
 
 class AgentPatchNotFoundError(ValueError):
@@ -79,6 +95,32 @@ class ApprovalNotFoundError(ValueError):
 
 class WorkspaceNotReviewableError(ValueError):
     error_code = "workspace_not_reviewable"
+
+
+class WorkspaceProfileValidationError(ValueError):
+    error_code = "profile_validation_failed"
+
+
+class AgencyDocxRenderNotFoundError(ValueError):
+    error_code = "resource_not_found"
+
+
+class AgencyDocxRenderStateError(ValueError):
+    error_code = "illegal_state_transition"
+
+
+class AgencyDocxUploadError(ValueError):
+    error_code = "agency_docx_upload_failed"
+
+
+class AgencyDocxMalwareScanRequiredError(AgencyDocxUploadError):
+    error_code = "malware_scan_required"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "agency DOCX upload requires an approved malware scanner integration "
+            "before customer template processing in onprem_production"
+        )
 
 
 async def create_initialized_workspace(
@@ -221,6 +263,7 @@ async def load_workspace_envelope(
     """Return one explicit UI contract computed only from persisted records."""
 
     from ato_service.db.models import (
+        SspAgencyDocxRender,
         SspApprovalSnapshot,
         SspAgentPatch,
         SspEvidenceArtifact,
@@ -236,8 +279,7 @@ async def load_workspace_envelope(
             .join(System, System.system_id == SspWorkspace.system_id)
             .join(
                 SspProfileVersion,
-                SspProfileVersion.profile_version_id
-                == SspWorkspace.profile_version_id,
+                SspProfileVersion.profile_version_id == SspWorkspace.profile_version_id,
             )
             .where(SspWorkspace.workspace_id == workspace_id)
         )
@@ -253,8 +295,7 @@ async def load_workspace_envelope(
         revision = (
             await session.execute(
                 select(SspWorkspaceRevision).where(
-                    SspWorkspaceRevision.revision_id
-                    == workspace.current_revision_id
+                    SspWorkspaceRevision.revision_id == workspace.current_revision_id
                 )
             )
         ).scalar_one()
@@ -289,6 +330,15 @@ async def load_workspace_envelope(
             )
         ).scalars()
     )
+    agency_docx_renders = list(
+        (
+            await session.execute(
+                select(SspAgencyDocxRender)
+                .where(SspAgencyDocxRender.workspace_id == workspace_id)
+                .order_by(SspAgencyDocxRender.created_at.desc())
+            )
+        ).scalars()
+    )
     requirements = _metric_requirements(profile_row)
     effective_facts = _effective_metric_facts(content, requirements)
     fact_by_key = {item.key: item for item in effective_facts}
@@ -317,6 +367,7 @@ async def load_workspace_envelope(
     )
     metric_document = asdict(metrics)
     impact_level = _confirmed_impact_level(content)
+    resolved_profile = resolve_stored_profile(profile_row, _impact_level(content))
     return {
         "workspace_id": str(workspace.workspace_id),
         "system_id": str(workspace.system_id),
@@ -365,9 +416,7 @@ async def load_workspace_envelope(
                 "patch_id": str(item.patch_id),
                 "base_revision_id": str(item.base_revision_id),
                 "applied_revision_id": (
-                    str(item.applied_revision_id)
-                    if item.applied_revision_id
-                    else None
+                    str(item.applied_revision_id) if item.applied_revision_id else None
                 ),
                 "summary": item.summary,
                 "status": item.status,
@@ -380,11 +429,15 @@ async def load_workspace_envelope(
             }
             for item in patches
         ],
-        "requirements": [
-            item.model_dump(mode="json") for item in requirements
-        ],
+        "requirements": [item.model_dump(mode="json") for item in requirements],
         "satisfied_requirement_ids": satisfied_requirement_ids,
         "metrics": metric_document,
+        "control_response": _control_response_envelope(
+            resolved_profile.control_response
+        ),
+        "agency_docx_renders": [
+            _agency_docx_render_metadata(item) for item in agency_docx_renders
+        ],
     }
 
 
@@ -402,6 +455,12 @@ async def save_section_edit(
     revision = await _load_exact_current_revision(
         session, workspace_id=workspace_id, revision_id=expected_revision_id
     )
+    profile = await _resolved_profile_for_revision(session, revision)
+    profile_policy = SelectedProfilePolicy.from_resolved(profile)
+    try:
+        validate_workspace_section_content(section_key, content, profile_policy)
+    except ProfileValidationError as exc:
+        raise WorkspaceProfileValidationError(str(exc)) from exc
     updated = edit_section(
         RevisionContent.model_validate(revision.content),
         section_key=section_key,
@@ -436,6 +495,23 @@ async def save_control_edit(
     revision = await _load_exact_current_revision(
         session, workspace_id=workspace_id, revision_id=expected_revision_id
     )
+    profile = await _resolved_profile_for_revision(session, revision)
+    profile_policy = SelectedProfilePolicy.from_resolved(profile)
+    try:
+        validate_workspace_control_fields(
+            implementation_status=implementation_status,
+            responsibility=responsibility,
+            profile_policy=profile_policy,
+        )
+    except ProfileValidationError as exc:
+        raise WorkspaceProfileValidationError(str(exc)) from exc
+    try:
+        validate_workspace_implementation_statement(
+            implementation_statement,
+            profile_policy=profile_policy,
+        )
+    except ProfileValidationError as exc:
+        raise WorkspaceProfileValidationError(str(exc)) from exc
     updated = edit_control(
         RevisionContent.model_validate(revision.content),
         control_id=control_id,
@@ -659,8 +735,20 @@ async def apply_proposed_patch(
         session, workspace_id=workspace_id, revision_id=expected_revision_id
     )
     result = _deserialize_patch_result(patch.operations)
+    content = RevisionContent.model_validate(revision.content)
+    profile = await _resolved_profile_for_revision(session, revision)
+    profile_policy = SelectedProfilePolicy.from_resolved(profile)
+    allowed_fact_ids = frozenset(fact.key for fact in content.facts if fact.evidence)
+    try:
+        validate_applied_patch_result(
+            result,
+            profile_policy,
+            allowed_fact_ids=allowed_fact_ids,
+        )
+    except ProfileValidationError as exc:
+        raise WorkspaceProfileValidationError(str(exc)) from exc
     updated = apply_agent_patch(
-        RevisionContent.model_validate(revision.content),
+        content,
         result,
         current_revision=revision.version,
     )
@@ -736,6 +824,21 @@ async def approve_workspace_revision(
     if revision is None:
         raise WorkspaceNotReviewableError("current revision is unavailable")
     content = RevisionContent.model_validate(revision.content)
+    from ato_service.db.models import SspProfileVersion, SspWorkspace
+
+    profile_row = (
+        await session.execute(
+            select(SspProfileVersion)
+            .join(
+                SspWorkspace,
+                SspWorkspace.profile_version_id == SspProfileVersion.profile_version_id,
+            )
+            .where(SspWorkspace.workspace_id == workspace_id)
+        )
+    ).scalar_one()
+    profile = resolve_stored_profile(profile_row, _impact_level(content))
+    requirements = _metric_requirements(profile_row)
+    required_section_keys = {item.key for item in requirements if item.required}
     nonterminal_evidence = (
         await session.execute(
             select(SspEvidenceArtifact.evidence_artifact_id).where(
@@ -753,16 +856,33 @@ async def approve_workspace_revision(
     envelope = await load_workspace_envelope(session, workspace_id=workspace_id)
     satisfied = set(envelope["satisfied_requirement_ids"])
     sections_resolved = all(
-        item.key in satisfied or ("ssp_section", item.key) in open_targets
-        for item in content.sections
+        key in satisfied or ("ssp_section", key) in open_targets
+        for key in required_section_keys
     )
-    controls_resolved = all(
-        item.implementation_statement.strip()
-        or bool(item.unresolved_reason and item.unresolved_reason.strip())
-        or ("control", item.control_id) in open_targets
+    profile_policy = SelectedProfilePolicy.from_resolved(profile)
+    statement_policy = profile_policy.implementation_statement_rules
+    controls_resolved = controls_have_tracked_responses(
+        content.controls,
+        open_targets,
+        required=statement_policy.require_statement_gap_or_question_before_approval,
+    )
+    if any(
+        agent_control_blocks_approval(
+            item,
+            evidence_required=(
+                profile_policy.control_response.evidence_required_for_agent_statement
+            ),
+        )
         for item in content.controls
-    )
-    if nonterminal_evidence is not None or not sections_resolved or not controls_resolved:
+    ):
+        raise WorkspaceNotReviewableError(
+            "workspace has ungrounded agent control metadata"
+        )
+    if (
+        nonterminal_evidence is not None
+        or not sections_resolved
+        or not controls_resolved
+    ):
         raise WorkspaceNotReviewableError(
             "workspace has untracked required information gaps"
         )
@@ -805,7 +925,12 @@ async def render_approved_export(
         return build_workspace_docx_export(
             snapshot, include_open_questions=include_open_questions
         )
-    raise ValueError("export_format must be json or docx")
+    if export_format == "oscal-json":
+        return build_draft_oscal_ssp_json_export(
+            snapshot,
+            include_open_questions=include_open_questions,
+        )
+    raise ValueError("export_format must be json, docx, or oscal-json")
 
 
 async def restore_workspace_revision(
@@ -902,8 +1027,7 @@ async def migrate_workspace_profile(
     old_profile_row = (
         await session.execute(
             select(SspProfileVersion).where(
-                SspProfileVersion.profile_version_id
-                == workspace.profile_version_id
+                SspProfileVersion.profile_version_id == workspace.profile_version_id
             )
         )
     ).scalar_one()
@@ -917,9 +1041,9 @@ async def migrate_workspace_profile(
     ).scalar_one_or_none()
     if new_profile_row is None:
         raise ValueError("target profile version is not active")
-    old_profile = resolve_stored_profile(old_profile_row, _impact_level(
-        RevisionContent.model_validate(current.content)
-    ))
+    old_profile = resolve_stored_profile(
+        old_profile_row, _impact_level(RevisionContent.model_validate(current.content))
+    )
     new_profile = resolve_stored_profile(new_profile_row, impact_level)
     if old_profile.profile_id != new_profile.profile_id:
         raise ValueError("profile migration requires the same profile_id")
@@ -1125,6 +1249,30 @@ async def _load_exact_current_revision(
     return revision
 
 
+async def _resolved_profile_for_revision(
+    session: AsyncSession,
+    revision: Any,
+) -> Any:
+    from ato_service.db.models import SspProfileVersion, SspWorkspace
+
+    content = RevisionContent.model_validate(revision.content)
+    workspace = (
+        await session.execute(
+            select(SspWorkspace).where(
+                SspWorkspace.workspace_id == revision.workspace_id
+            )
+        )
+    ).scalar_one()
+    profile_row = (
+        await session.execute(
+            select(SspProfileVersion).where(
+                SspProfileVersion.profile_version_id == workspace.profile_version_id
+            )
+        )
+    ).scalar_one()
+    return resolve_stored_profile(profile_row, _impact_level(content))
+
+
 async def _generation_context(
     session: AsyncSession,
     *,
@@ -1142,8 +1290,7 @@ async def _generation_context(
             .join(System, System.system_id == SspWorkspace.system_id)
             .join(
                 SspProfileVersion,
-                SspProfileVersion.profile_version_id
-                == SspWorkspace.profile_version_id,
+                SspProfileVersion.profile_version_id == SspWorkspace.profile_version_id,
             )
             .where(SspWorkspace.workspace_id == workspace_id)
         )
@@ -1166,6 +1313,19 @@ def _generation_facts(content: RevisionContent) -> tuple[EvidenceFact, ...]:
         text = fact.value if isinstance(fact.value, str) else str(fact.value)
         facts.append(EvidenceFact(fact_id=fact.key, source_id=source_id, text=text))
     return tuple(facts)
+
+
+def _control_response_envelope(
+    control_response: ControlResponsePolicy,
+) -> dict[str, Any]:
+    return {
+        "implementation_statuses": sorted(control_response.implementation_statuses),
+        "responsibilities": sorted(control_response.responsibilities),
+        "question_owner_types": sorted(control_response.question_owner_types),
+        "evidence_required_for_agent_statement": (
+            control_response.evidence_required_for_agent_statement
+        ),
+    }
 
 
 def _impact_level(content: RevisionContent) -> str:
@@ -1217,7 +1377,7 @@ def _metric_requirements(profile_row: Any) -> tuple[ProfileRequirement, ...]:
         ProfileRequirement(
             key=item["item_id"],
             value_type="array" if item["value_type"] == "string_list" else "string",
-            required=True,
+            required=item.get("required", True),
             enum_values=tuple(item.get("allowed_values", ())),
             min_length=item.get("min_length") or 1,
             evidence_required_for_agent_value=item.get(
@@ -1380,14 +1540,12 @@ async def _approved_export_snapshot(
             )
             .join(
                 SspApprovalSnapshot,
-                SspApprovalSnapshot.revision_id
-                == SspWorkspaceRevision.revision_id,
+                SspApprovalSnapshot.revision_id == SspWorkspaceRevision.revision_id,
             )
             .join(System, System.system_id == SspWorkspace.system_id)
             .join(
                 SspProfileVersion,
-                SspProfileVersion.profile_version_id
-                == SspWorkspace.profile_version_id,
+                SspProfileVersion.profile_version_id == SspWorkspace.profile_version_id,
             )
             .where(
                 SspWorkspace.workspace_id == workspace_id,
@@ -1497,3 +1655,655 @@ async def _audit(
         metadata=metadata,
         occurred_at=now,
     )
+
+
+async def list_agency_docx_renders(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+) -> list[Any]:
+    from ato_service.db.models import SspAgencyDocxRender
+
+    result = await session.execute(
+        select(SspAgencyDocxRender)
+        .where(SspAgencyDocxRender.workspace_id == workspace_id)
+        .order_by(SspAgencyDocxRender.created_at.desc())
+    )
+    return list(result.scalars())
+
+
+async def get_agency_docx_render(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    render_id: uuid.UUID,
+) -> Any:
+    from ato_service.db.models import SspAgencyDocxRender
+
+    row = (
+        await session.execute(
+            select(SspAgencyDocxRender).where(
+                SspAgencyDocxRender.workspace_id == workspace_id,
+                SspAgencyDocxRender.render_id == render_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise AgencyDocxRenderNotFoundError("agency docx render not found")
+    return row
+
+
+async def create_agency_docx_render(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    source_revision_id: uuid.UUID,
+    template_filename: str,
+    template_bytes: bytes,
+    actor_id: str,
+    now: datetime,
+    blob_store: Any,
+    config: Any,
+    model: Any,
+    audit_hmac_key: bytes,
+) -> Any:
+    from ato_service.blobs import BlobStore
+    from ato_service.db.models import SspAgencyDocxRender, SspWorkspace
+    from ato_service.extraction.limits import resolve_extraction_limits_from_config
+    from ato_service.ssp_workspace.agency_docx import (
+        AgencyDocxError,
+        extract_template_outline,
+        generate_mapping_plan,
+        render_template,
+        review_render,
+    )
+    from ato_service.ssp_workspace.agency_docx_contracts import parse_mapping_plan
+
+    normalized_filename = template_filename.strip()
+    if not normalized_filename:
+        raise AgencyDocxUploadError("template filename cannot be empty")
+    if len(normalized_filename) > 255:
+        raise AgencyDocxUploadError("template filename exceeds 255 characters")
+    if not normalized_filename.lower().endswith(".docx"):
+        raise AgencyDocxUploadError("agency template must be a .docx file")
+    if not template_bytes:
+        raise AgencyDocxUploadError("template file cannot be empty")
+    if len(template_bytes) > config.limits.max_single_file_bytes:
+        raise AgencyDocxUploadError("template file exceeds configured limit")
+
+    _require_agency_docx_malware_scan_ready(config)
+
+    if not isinstance(blob_store, BlobStore):
+        raise TypeError("blob_store must be a BlobStore")
+
+    extraction_limits = resolve_extraction_limits_from_config(config)
+    try:
+        outline = extract_template_outline(template_bytes, extraction_limits)
+    except AgencyDocxError as exc:
+        raise AgencyDocxUploadError(str(exc)) from exc
+
+    snapshot = await _approved_export_snapshot(
+        session,
+        workspace_id=workspace_id,
+        revision_id=source_revision_id,
+    )
+    workspace = (
+        await session.execute(
+            select(SspWorkspace).where(SspWorkspace.workspace_id == workspace_id)
+        )
+    ).scalar_one()
+    source_revision_sha256 = snapshot["content_sha256"]
+    template_sha256 = hashlib.sha256(template_bytes).hexdigest()
+
+    cached = (
+        await session.execute(
+            select(SspAgencyDocxRender).where(
+                SspAgencyDocxRender.workspace_id == workspace_id,
+                SspAgencyDocxRender.profile_version_id == workspace.profile_version_id,
+                SspAgencyDocxRender.source_revision_id == source_revision_id,
+                SspAgencyDocxRender.template_sha256 == template_sha256,
+            )
+        )
+    ).scalar_one_or_none()
+    if cached is not None:
+        return cached
+
+    stored_template = blob_store.store_stream(
+        BytesIO(template_bytes),
+        max_bytes=config.limits.max_single_file_bytes,
+    )
+    if stored_template.sha256 != template_sha256:
+        raise AgencyDocxUploadError("template digest mismatch after storage")
+
+    section_ids = frozenset(item["section_id"] for item in snapshot["sections"])
+    reused_mapping = False
+    mapping_plan_document: dict[str, Any]
+    reusable = (
+        await session.execute(
+            select(SspAgencyDocxRender)
+            .where(
+                SspAgencyDocxRender.workspace_id == workspace_id,
+                SspAgencyDocxRender.template_sha256 == stored_template.sha256,
+                SspAgencyDocxRender.profile_version_id == workspace.profile_version_id,
+                SspAgencyDocxRender.status == "approved",
+            )
+            .order_by(SspAgencyDocxRender.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    from ato_service.ssp_workspace.agency_docx_contracts import AgencyDocxContractError
+
+    try:
+        if reusable is not None:
+            mapping_plan_document = dict(reusable.mapping_plan)
+            reused_mapping = True
+            mapping_plan = parse_mapping_plan(
+                json.dumps(mapping_plan_document),
+                outline=outline,
+                allowed_section_ids=section_ids,
+            )
+        else:
+            execution = await generate_mapping_plan(outline, snapshot, model)
+            mapping_plan = execution.plan
+            mapping_plan_document = _mapping_plan_document(mapping_plan)
+    except AgencyDocxError as exc:
+        raise AgencyDocxUploadError(str(exc)) from exc
+    except AgencyDocxContractError as exc:
+        raise AgencyDocxUploadError(str(exc)) from exc
+
+    try:
+        rendered_bytes = render_template(
+            template_bytes,
+            mapping_plan,
+            snapshot,
+            extraction_limits=extraction_limits,
+        )
+    except AgencyDocxError as exc:
+        raise AgencyDocxUploadError(str(exc)) from exc
+
+    try:
+        review = await review_render(
+            outline,
+            mapping_plan,
+            snapshot,
+            rendered_bytes,
+            model,
+        )
+    except AgencyDocxError as exc:
+        raise AgencyDocxUploadError(str(exc)) from exc
+    except AgencyDocxContractError as exc:
+        raise AgencyDocxUploadError(str(exc)) from exc
+    review_document = _review_result_document(review)
+    status = _agency_docx_render_status(
+        mapping_plan=mapping_plan,
+        mapping_plan_document=mapping_plan_document,
+        review_document=review_document,
+    )
+
+    stored_output = blob_store.store_stream(
+        BytesIO(rendered_bytes),
+        max_bytes=config.limits.max_single_file_bytes,
+    )
+
+    render = SspAgencyDocxRender(
+        render_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        profile_version_id=workspace.profile_version_id,
+        source_revision_id=source_revision_id,
+        source_revision_sha256=source_revision_sha256,
+        template_storage_key=stored_template.storage_key,
+        template_sha256=stored_template.sha256,
+        template_filename=normalized_filename,
+        mapping_plan=mapping_plan_document,
+        review_result=review_document,
+        output_storage_key=stored_output.storage_key,
+        output_sha256=stored_output.sha256,
+        status=status,
+        created_by=actor_id,
+        created_at=now,
+    )
+    session.add(render)
+    await session.flush()
+
+    await _audit(
+        session,
+        hmac_key=audit_hmac_key,
+        actor_id=actor_id,
+        action="ssp_agency_docx_render_created",
+        object_type="ssp_agency_docx_render",
+        object_id=str(render.render_id),
+        metadata={
+            "workspace_id": str(workspace_id),
+            "source_revision_id": str(source_revision_id),
+            "source_revision_sha256": source_revision_sha256,
+            "template_sha256": stored_template.sha256,
+            "output_sha256": stored_output.sha256,
+            "reused_mapping": reused_mapping,
+            "placement_count": len(mapping_plan.text_placements),
+            "plan_exception_count": len(mapping_plan.exceptions),
+            "review_issue_count": len(review.issues),
+            "review_blocker_count": sum(
+                1 for item in review.issues if item.severity == "blocker"
+            ),
+            "status": status,
+        },
+        now=now,
+    )
+    return render
+
+
+async def approve_agency_docx_render(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    render_id: uuid.UUID,
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> Any:
+    render = await _load_agency_docx_render_for_update(
+        session, workspace_id=workspace_id, render_id=render_id
+    )
+    if render.status != "awaiting_approval":
+        raise AgencyDocxRenderStateError("render is not awaiting approval")
+    if _stored_render_has_blocker(render.mapping_plan, render.review_result):
+        raise AgencyDocxRenderStateError("render has unresolved blockers")
+    render.status = "approved"
+    render.resolved_by = actor_id
+    render.resolved_at = now
+    await _audit(
+        session,
+        hmac_key=audit_hmac_key,
+        actor_id=actor_id,
+        action="ssp_agency_docx_render_approved",
+        object_type="ssp_agency_docx_render",
+        object_id=str(render.render_id),
+        metadata={
+            "workspace_id": str(workspace_id),
+            "output_sha256": render.output_sha256,
+        },
+        now=now,
+    )
+    return render
+
+
+async def reject_agency_docx_render(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    render_id: uuid.UUID,
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> Any:
+    render = await _load_agency_docx_render_for_update(
+        session, workspace_id=workspace_id, render_id=render_id
+    )
+    if render.status not in {"awaiting_approval", "review_failed"}:
+        raise AgencyDocxRenderStateError("render cannot be rejected")
+    render.status = "rejected"
+    render.resolved_by = actor_id
+    render.resolved_at = now
+    await _audit(
+        session,
+        hmac_key=audit_hmac_key,
+        actor_id=actor_id,
+        action="ssp_agency_docx_render_rejected",
+        object_type="ssp_agency_docx_render",
+        object_id=str(render.render_id),
+        metadata={
+            "workspace_id": str(workspace_id),
+            "output_sha256": render.output_sha256,
+        },
+        now=now,
+    )
+    return render
+
+
+async def read_agency_docx_preview_bytes(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    render_id: uuid.UUID,
+    blob_store: Any,
+) -> bytes:
+    from ato_service.blobs import BlobStore
+
+    if not isinstance(blob_store, BlobStore):
+        raise TypeError("blob_store must be a BlobStore")
+    render = await get_agency_docx_render(
+        session, workspace_id=workspace_id, render_id=render_id
+    )
+    if render.status not in {"awaiting_approval", "review_failed", "approved"}:
+        raise AgencyDocxRenderStateError("render preview is unavailable")
+    return _read_blob_bytes(blob_store, render.output_storage_key, render.output_sha256)
+
+
+async def read_agency_docx_download_bytes(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    render_id: uuid.UUID,
+    blob_store: Any,
+) -> bytes:
+    from ato_service.blobs import BlobStore
+
+    if not isinstance(blob_store, BlobStore):
+        raise TypeError("blob_store must be a BlobStore")
+    render = await get_agency_docx_render(
+        session, workspace_id=workspace_id, render_id=render_id
+    )
+    if render.status != "approved":
+        raise AgencyDocxRenderStateError("render download requires approval")
+    return _read_blob_bytes(blob_store, render.output_storage_key, render.output_sha256)
+
+
+def agency_docx_output_filename(render_id: uuid.UUID) -> str:
+    return f"agency-shaped-draft-{render_id}.docx"
+
+
+def _agency_docx_render_metadata(render: Any) -> dict[str, Any]:
+    from ato_service.ssp_workspace.agency_docx_contracts import (
+        MAX_CODE_LENGTH,
+        MAX_EXCEPTIONS,
+        MAX_ISSUES,
+        MAX_MESSAGE_LENGTH,
+        MAX_SUMMARY_LENGTH,
+    )
+
+    mapping_plan = render.mapping_plan if isinstance(render.mapping_plan, dict) else {}
+    review_result = (
+        render.review_result if isinstance(render.review_result, dict) else {}
+    )
+    status = render.status
+    return {
+        "render_id": str(render.render_id),
+        "profile_version_id": str(render.profile_version_id),
+        "source_revision_id": str(render.source_revision_id),
+        "source_revision_sha256": render.source_revision_sha256,
+        "template_sha256": render.template_sha256,
+        "template_filename": render.template_filename,
+        "output_sha256": render.output_sha256,
+        "status": status,
+        "created_by": render.created_by,
+        "created_at": render.created_at.isoformat(),
+        "resolved_by": render.resolved_by,
+        "resolved_at": (
+            render.resolved_at.isoformat() if render.resolved_at is not None else None
+        ),
+        "mapping_summary": _bounded_agency_docx_envelope_text(
+            mapping_plan.get("summary"),
+            maximum=MAX_SUMMARY_LENGTH,
+        ),
+        "mapping_exceptions": _safe_mapping_exceptions(
+            mapping_plan,
+            maximum=MAX_EXCEPTIONS,
+            code_max=MAX_CODE_LENGTH,
+            message_max=MAX_MESSAGE_LENGTH,
+        ),
+        "review_summary": _bounded_agency_docx_envelope_text(
+            review_result.get("summary"),
+            maximum=MAX_SUMMARY_LENGTH,
+        ),
+        "review_issues": _safe_review_issues(
+            review_result,
+            maximum=MAX_ISSUES,
+            code_max=MAX_CODE_LENGTH,
+            message_max=MAX_MESSAGE_LENGTH,
+        ),
+        "can_approve": status == "awaiting_approval"
+        and not _stored_render_has_blocker(mapping_plan, review_result),
+        "can_preview": status in {"awaiting_approval", "review_failed", "approved"},
+        "can_download": status == "approved",
+    }
+
+
+async def _load_agency_docx_render_for_update(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    render_id: uuid.UUID,
+) -> Any:
+    from ato_service.db.models import SspAgencyDocxRender
+
+    row = (
+        await session.execute(
+            select(SspAgencyDocxRender)
+            .where(
+                SspAgencyDocxRender.workspace_id == workspace_id,
+                SspAgencyDocxRender.render_id == render_id,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise AgencyDocxRenderNotFoundError("agency docx render not found")
+    return row
+
+
+def _read_blob_bytes(blob_store: Any, storage_key: str, expected_sha256: str) -> bytes:
+    from ato_service.storage_reconciliation import require_storage_regular_file
+
+    prefix, digest = storage_key.split("/", maxsplit=1)
+    if digest != expected_sha256:
+        raise ValueError("storage key does not match content digest")
+    path = require_storage_regular_file(
+        blob_store.storage_root,
+        "blobs",
+        prefix,
+        digest,
+    )
+    payload = path.read_bytes()
+    if len(payload) < 1:
+        raise ValueError("stored blob is empty")
+    digest = hashlib.sha256(payload).hexdigest()
+    if digest != expected_sha256:
+        raise ValueError("stored blob digest does not match expected sha256")
+    return payload
+
+
+def _mapping_plan_document(plan: Any) -> dict[str, Any]:
+    from ato_service.ssp_workspace.agency_docx_contracts import (
+        SCHEMA_VERSION,
+        MappingPlan,
+    )
+
+    if not isinstance(plan, MappingPlan):
+        raise TypeError("plan must be a MappingPlan")
+    control_table: dict[str, Any] = {
+        "table_index": plan.control_table.table_index,
+        "column_map": dict(plan.control_table.column_map),
+    }
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "text_placements": [
+            {
+                "target_locator": item.target_locator,
+                "source_ref": item.source_ref,
+                "mode": item.mode,
+            }
+            for item in plan.text_placements
+        ],
+        "control_table": control_table,
+        "exceptions": [
+            {
+                "severity": item.severity,
+                "code": item.code,
+                "message": item.message,
+            }
+            for item in plan.exceptions
+        ],
+        "summary": plan.summary,
+    }
+
+
+def _review_result_document(result: Any) -> dict[str, Any]:
+    from ato_service.ssp_workspace.agency_docx_contracts import (
+        SCHEMA_VERSION,
+        ReviewResult,
+    )
+
+    if not isinstance(result, ReviewResult):
+        raise TypeError("result must be a ReviewResult")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "summary": result.summary,
+        "issues": [
+            {
+                "severity": item.severity,
+                "code": item.code,
+                "message": item.message,
+                "locator": item.locator,
+            }
+            for item in result.issues
+        ],
+        "facts": {
+            "section_count": result.facts.section_count,
+            "control_count": result.facts.control_count,
+            "plan_exception_count": result.facts.plan_exception_count,
+            "rendered_paragraph_count": result.facts.rendered_paragraph_count,
+            "rendered_cell_count": result.facts.rendered_cell_count,
+            "rendered_table_count": result.facts.rendered_table_count,
+        },
+    }
+
+
+def _require_agency_docx_malware_scan_ready(config: Any) -> None:
+    if getattr(config, "runtime_profile", None) == "onprem_production":
+        raise AgencyDocxMalwareScanRequiredError()
+
+
+def _stored_render_has_blocker(
+    mapping_plan: dict[str, Any],
+    review_result: dict[str, Any],
+) -> bool:
+    mapping_document = mapping_plan if isinstance(mapping_plan, dict) else {}
+    review_document = review_result if isinstance(review_result, dict) else {}
+    if _mapping_plan_has_blocker(_EMPTY_MAPPING_PLAN, mapping_document):
+        return True
+    return _review_has_blocker(review_document)
+
+
+class _EmptyMappingPlan:
+    exceptions: tuple[Any, ...] = ()
+
+
+_EMPTY_MAPPING_PLAN = _EmptyMappingPlan()
+
+
+def _agency_docx_render_status(
+    *,
+    mapping_plan: Any,
+    mapping_plan_document: dict[str, Any],
+    review_document: dict[str, Any],
+) -> str:
+    if _mapping_plan_has_blocker(mapping_plan, mapping_plan_document):
+        return "review_failed"
+    if _review_has_blocker(review_document):
+        return "review_failed"
+    return "awaiting_approval"
+
+
+def _mapping_plan_has_blocker(plan: Any, document: dict[str, Any]) -> bool:
+    for item in getattr(plan, "exceptions", ()):
+        if getattr(item, "severity", None) == "blocker":
+            return True
+    exceptions = document.get("exceptions")
+    if not isinstance(exceptions, list):
+        return False
+    return any(
+        isinstance(item, dict) and item.get("severity") == "blocker"
+        for item in exceptions
+    )
+
+
+def _review_has_blocker(review_document: dict[str, Any]) -> bool:
+    issues = review_document.get("issues")
+    if not isinstance(issues, list):
+        return False
+    return any(
+        isinstance(item, dict) and item.get("severity") == "blocker" for item in issues
+    )
+
+
+def _bounded_agency_docx_envelope_text(value: Any, *, maximum: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = " ".join(value.split())
+    if len(normalized) <= maximum:
+        return normalized
+    return normalized[:maximum]
+
+
+def _safe_mapping_exceptions(
+    mapping_plan: dict[str, Any],
+    *,
+    maximum: int,
+    code_max: int,
+    message_max: int,
+) -> list[dict[str, str]]:
+    raw = mapping_plan.get("exceptions")
+    if not isinstance(raw, list):
+        return []
+    safe: list[dict[str, str]] = []
+    for item in raw[:maximum]:
+        if not isinstance(item, dict):
+            continue
+        severity = item.get("severity")
+        code = item.get("code")
+        message = item.get("message")
+        if not isinstance(severity, str) or severity not in {"blocker", "warning"}:
+            continue
+        if not isinstance(code, str) or not isinstance(message, str):
+            continue
+        safe.append(
+            {
+                "severity": severity,
+                "code": _bounded_agency_docx_envelope_text(code, maximum=code_max),
+                "message": _bounded_agency_docx_envelope_text(
+                    message, maximum=message_max
+                ),
+            }
+        )
+    return safe
+
+
+def _safe_review_issues(
+    review_result: dict[str, Any],
+    *,
+    maximum: int,
+    code_max: int,
+    message_max: int,
+) -> list[dict[str, str | None]]:
+    raw = review_result.get("issues")
+    if not isinstance(raw, list):
+        return []
+    safe: list[dict[str, str | None]] = []
+    for item in raw[:maximum]:
+        if not isinstance(item, dict):
+            continue
+        severity = item.get("severity")
+        code = item.get("code")
+        message = item.get("message")
+        locator = item.get("locator")
+        if not isinstance(severity, str) or severity not in {"blocker", "warning"}:
+            continue
+        if not isinstance(code, str) or not isinstance(message, str):
+            continue
+        if locator is not None and not isinstance(locator, str):
+            locator = None
+        safe.append(
+            {
+                "severity": severity,
+                "code": _bounded_agency_docx_envelope_text(code, maximum=code_max),
+                "message": _bounded_agency_docx_envelope_text(
+                    message, maximum=message_max
+                ),
+                "locator": (
+                    _bounded_agency_docx_envelope_text(locator, maximum=128)
+                    if isinstance(locator, str)
+                    else None
+                ),
+            }
+        )
+    return safe

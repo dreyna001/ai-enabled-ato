@@ -2,7 +2,7 @@
 
 **Status:** Phase 6 integration and release gate (2026-07-14); upload-first intake **P0–P7** doc reconciliation (2026-07-17); **metadata-first create** doc reconciliation (2026-07-21)  
 **Repository tip:** snapshot at Phase 6 reconciliation; branch name is historical (`cursor/phase-6-integration-and-release-gate-f4f1`)  
-**Alembic head:** `20260728_0015` (`migrations/versions/20260728_0015_ssp_evidence_removal.py`) — auditable pre-analysis evidence removal; prior package migrations remain retained for compatibility
+**Alembic head:** `20260728_0016` (`migrations/versions/20260728_0016_ssp_agency_docx_renders.py`) — workspace-scoped agency DOCX render persistence; prior SSP and package migrations remain retained for compatibility
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
 
@@ -22,6 +22,46 @@ Implementation plan [`UPLOAD_FIRST_INTAKE_PLAN.md`](UPLOAD_FIRST_INTAKE_PLAN.md)
 | User docs (P6 + metadata-first) | Epics §2, talking track, [`PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md) | Reconciled 2026-07-21 |
 
 This note does **not** claim full product release or close any hard stop. Dev mock scanner/routing behavior is not production evidence (**HS-004**, **HS-005** remain open).
+
+## Internal SSP agency-shaped DOCX (bounded index note)
+
+Implemented synchronous agency DOCX renders bind to an ISSO-approved SSP revision,
+customer-uploaded `.docx` templates (content-addressed storage), bounded agent
+mapping and review JSON, deterministic server render with draft notice, and ISSO
+render approve/reject with preview before approval and download after. **HS-002**
+(template parity and external acceptance), **HS-004**, and **HS-005** remain open.
+
+| Area | Representative paths | Classification |
+| --- | --- | --- |
+| Mapping/review contracts and render | [`src/ato_service/ssp_workspace/agency_docx_contracts.py`](../src/ato_service/ssp_workspace/agency_docx_contracts.py), [`agency_docx.py`](../src/ato_service/ssp_workspace/agency_docx.py) | PASS (code) |
+| API, persistence, cache/reuse | [`src/ato_service/ssp_workspace/service.py`](../src/ato_service/ssp_workspace/service.py), [`api.py`](../src/ato_service/ssp_workspace/api.py), migration `20260728_0016` | PASS (code) |
+| Focused service/API tests | [`tests/ato_service/test_agency_docx_contracts.py`](../tests/ato_service/test_agency_docx_contracts.py), [`test_agency_docx.py`](../tests/ato_service/test_agency_docx.py), [`test_agency_docx_service.py`](../tests/ato_service/test_agency_docx_service.py), [`test_agency_docx_api.py`](../tests/ato_service/test_agency_docx_api.py) | PASS (code) |
+| Portal Review & export wiring | [`portal/src/components/ssp-workspace/AgencyTemplatePanel.tsx`](../portal/src/components/ssp-workspace/AgencyTemplatePanel.tsx), [`portal/src/api/sspWorkspace.ts`](../portal/src/api/sspWorkspace.ts) | PASS (code) |
+| Live customer template / RHEL validation | Operator guide, open hard stops | **customer-gated** / environment-not-run |
+
+Re-run pytest and portal vitest at repository tip for current counts; this index does not record a fresh run for agency DOCX delivery.
+
+## Internal SSP ODP, inheritance prompts, and draft OSCAL JSON (bounded index note)
+
+Minimal organization-defined-parameter detection, placeholder rejection, and
+question prompting; inherited/hybrid generation and patch guidance using existing
+responsibility and statement fields; and deterministic **draft** OSCAL 1.2.2 SSP
+JSON export from ISSO-approved revisions (official schema structural validation
+only) are implemented in the internal SSP workspace. **HS-001** (authority
+qualification), **HS-002** (agency template parity), **HS-004**, and **HS-005**
+remain open. Draft OSCAL JSON is not OSCAL SSP conformance or a qualified OSCAL
+product.
+
+| Area | Representative paths | Classification |
+| --- | --- | --- |
+| ODP detection and contract enforcement | [`src/ato_service/ssp_workspace/generation_contracts.py`](../src/ato_service/ssp_workspace/generation_contracts.py), [`generation.py`](../src/ato_service/ssp_workspace/generation.py) | PASS (code) |
+| Draft OSCAL export and schema validation | [`src/ato_service/ssp_workspace/oscal_export.py`](../src/ato_service/ssp_workspace/oscal_export.py), [`src/ato_service/oscal_ssp_schema.py`](../src/ato_service/oscal_ssp_schema.py) | PASS (code) |
+| Approved-revision export API | [`src/ato_service/ssp_workspace/service.py`](../src/ato_service/ssp_workspace/service.py), [`api.py`](../src/ato_service/ssp_workspace/api.py) | PASS (code) |
+| Focused tests | [`tests/ato_service/test_ssp_generation_contracts.py`](../tests/ato_service/test_ssp_generation_contracts.py), [`test_ssp_workspace_oscal_export.py`](../tests/ato_service/test_ssp_workspace_oscal_export.py), [`test_ssp_workspace_export.py`](../tests/ato_service/test_ssp_workspace_export.py) | PASS (code) |
+| Portal Review & export button | [`portal/src/components/ssp-workspace/ReviewExportPanel.tsx`](../portal/src/components/ssp-workspace/ReviewExportPanel.tsx) | PASS (code) |
+| Qualified OSCAL / agency parity / live RHEL | Open hard stops and operator guide | **customer-gated** / environment-not-run |
+
+Re-run pytest at repository tip for current counts; this index does not record a fresh run for this delivery.
 
 ## Evidence classification
 
@@ -54,7 +94,7 @@ This note does **not** claim full product release or close any hard stop. Dev mo
 | Focused contract/operator/release suite | **219 passed** |
 | Non-integration regression (`-m "not integration"`) | **1619 passed**, 1 skipped, 20 deselected |
 | Ruff (`ruff check .`) | **0 errors** |
-| Alembic heads | **single head `20260728_0015`** |
+| Alembic heads | **single head `20260728_0016`** |
 | Portal vitest | **22 passed** |
 | Portal production build | **PASS** |
 | Playwright mocked rendering/authz | **6 passed** |
@@ -80,7 +120,7 @@ Historical doc-reconciliation record (unchanged gate record [`P6_GATE_RECORD.md`
 | --- | --- | --- |
 | Drill catalog and dispatch | [`src/ato_operator/drill_catalog.py`](../src/ato_operator/drill_catalog.py), [`drill_handlers.py`](../src/ato_operator/drill_handlers.py) | Dry-run default; hard-stop claims never close from mocks |
 | Drill record persistence | [`src/ato_operator/drill_records.py`](../src/ato_operator/drill_records.py) | Append-only under operator-supplied root |
-| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260728_0015` |
+| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260728_0016` |
 | Audit chain verify | [`src/ato_operator/audit_verify.py`](../src/ato_operator/audit_verify.py) | Requires live PostgreSQL for full chain walk |
 
 Live customer validation drills on RHEL hosts: **environment-not-run**.
@@ -95,9 +135,9 @@ Live customer validation drills on RHEL hosts: **environment-not-run**.
 
 | Check | Path | Expected head |
 | --- | --- | --- |
-| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260728_0015` |
-| Head assertion tests | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | `20260728_0015` |
-| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260728_0015` |
+| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260728_0016` |
+| Head assertion tests | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | `20260728_0016` |
+| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260728_0016` |
 
 ## Release package verification
 

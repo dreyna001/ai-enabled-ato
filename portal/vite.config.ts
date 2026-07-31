@@ -21,8 +21,8 @@ export default defineConfig(({ mode }) => {
       exclude: ["**/node_modules/**", "**/e2e/**"],
     },
     server: {
-      host: "127.0.0.1",
-      port: 5173,
+      host: "0.0.0.0",
+      port: 5174,
       proxy: {
         "/api": {
           target: apiTarget,

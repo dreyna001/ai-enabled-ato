@@ -53,7 +53,7 @@ PY
 echo ""
 echo "OpenAI standup complete."
 echo "  API:    ${API_URL}/health/live"
-echo "  Portal: bash scripts/start-portal.sh  (then open http://localhost:5173)"
+echo "  Portal: bash scripts/start-portal.sh  (then open http://localhost:5174)"
 echo ""
 echo "Near-prod test path (FedRAMP Rev5, fewest hard-stop warnings):"
 echo "  1. New revision -> FedRAMP Rev. 5 transition, Impact moderate"

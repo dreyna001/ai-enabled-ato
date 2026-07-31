@@ -28,6 +28,8 @@ from ato_service.ssp_workspace.generation_contracts import (
     GeneratedQuestion,
     GeneratedSection,
     GenerationResult,
+    ProfileValidationError,
+    validate_workspace_implementation_statement,
 )
 
 
@@ -279,6 +281,13 @@ def test_direct_control_edit_and_question_answer() -> None:
 
     assert edited.controls[0].state is ControlState.REVIEWED
     assert answered.questions[0].state is QuestionState.ANSWERED
+
+
+def test_direct_control_edit_rejects_oscal_parameter_placeholder_syntax() -> None:
+    with pytest.raises(ProfileValidationError, match="placeholder syntax"):
+        validate_workspace_implementation_statement(
+            "The agency policy uses {{ insert: param, ac-1_prm_1 }}."
+        )
 
 
 def test_unknown_target_fails_without_mutating_input() -> None:

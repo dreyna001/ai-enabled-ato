@@ -333,6 +333,13 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 export_format="docx",
                 include_open_questions=True,
             )
+            oscal_export = await render_approved_export(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                revision_id=approval.revision_id,
+                export_format="oscal-json",
+                include_open_questions=True,
+            )
             exported = json.loads(json_export)
             exported_sections = {
                 item["section_id"]: item for item in exported["sections"]
@@ -348,6 +355,9 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
             )
             assert exported["controls"][0]["implementation_status"] == "implemented"
             assert docx_export.startswith(b"PK")
+            assert json.loads(oscal_export)["system-security-plan"]["metadata"][
+                "oscal-version"
+            ]
             assert len(final_envelope["evidence"]) == 2
             assert final_envelope["metrics"]["screenshots"] == 1
             assert final_envelope["approvals"][0]["revision_sha256"] == (

@@ -192,6 +192,18 @@ sudo bash scripts/wsl-portal-enable.sh --bedrock
 The API service runs as user `ato` with `ProtectHome=yes`, so Bedrock credentials
 must be installed into `/etc/ato-analyzer/credentials/ato-local.env` via
 `config.local.env` (see `config.local.env.bedrock.example`), not only `~/.aws/`.
+After each `aws sso login`, sync SSO cache into the service user's home:
+
+```bash
+sudo bash scripts/wsl-sync-aws-for-ato.sh
+```
+
+Verify Bedrock from the same credential path the API uses:
+
+```bash
+sudo bash scripts/wsl-bedrock-smoke.sh
+```
+
 Portal OIDC works without AWS env assignments; Bedrock model calls require them.
 
 ### Loopback local model
@@ -245,7 +257,7 @@ From the repository root inside WSL:
 
     bash scripts/start-portal.sh
 
-Open http://localhost:5173 in Windows. The launcher installs portal dependencies when missing and configures the Vite dev server to proxy API calls to the WSL API on http://127.0.0.1:8001.
+Open http://localhost:5174 in Windows. The launcher installs portal dependencies when missing and configures the Vite dev server to proxy API calls to the WSL API on http://127.0.0.1:8001.
 
 Synthetic demo package walkthrough: [`docs/PORTAL_WORKFLOW_GUIDE.md`](PORTAL_WORKFLOW_GUIDE.md).
 Upload `data/synthetic-packages/fisma-demo-portal/agency-security-plan-excerpt.json` only.

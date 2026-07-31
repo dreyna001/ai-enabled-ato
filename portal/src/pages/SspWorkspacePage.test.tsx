@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SspWorkspacePage } from "@/pages/SspWorkspacePage";
 import type { SspWorkspace } from "@/sspWorkspaceTypes";
+import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
 
 function workspaceFixture(): SspWorkspace {
   return {
@@ -33,6 +34,7 @@ function workspaceFixture(): SspWorkspace {
       version: "2026.1",
       baseline: "Moderate",
     },
+    controlResponse: DEFAULT_CONTROL_RESPONSE_OPTIONS,
     revisionId: "rev-4",
     revisionUpdatedAt: "2026-07-27T12:00:00Z",
     lastAgentUpdateAt: "2026-07-27T11:30:00Z",
@@ -99,6 +101,7 @@ function workspaceFixture(): SspWorkspace {
         targetLabels: ["AC-2", "SSP section 6.3"],
       },
     ],
+    agencyDocxRenders: [],
   };
 }
 
@@ -396,5 +399,37 @@ describe("SspWorkspacePage", () => {
     expect(
       screen.getByText("Evidence cannot be removed after analysis has started."),
     ).toBeInTheDocument();
+  });
+
+  it("shows agency template upload only after ISSO approval on review view", () => {
+    const onUploadAgencyTemplate = vi.fn();
+    const workspace = workspaceFixture();
+    workspace.approvedContentHash = workspace.currentContentHash;
+
+    const { rerender } = render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspaceFixture()}
+        initialView="review"
+        actions={{ onUploadAgencyTemplate }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Generate agency-shaped draft" }),
+    ).toBeDisabled();
+
+    rerender(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspace}
+        initialView="review"
+        actions={{ onUploadAgencyTemplate }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Generate agency-shaped draft" }),
+    ).toBeEnabled();
   });
 });

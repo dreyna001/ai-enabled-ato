@@ -16,7 +16,7 @@
     "source": "systemd_credential",
     "identifier": "oidc-client-secret"
   },
-  "PORTAL_PUBLIC_ORIGIN": "http://localhost:5173",
+  "PORTAL_PUBLIC_ORIGIN": "http://localhost:5174",
   "DATABASE_DSN_CREDENTIAL_REFERENCE": {
     "source": "systemd_credential",
     "identifier": "database-dsn"

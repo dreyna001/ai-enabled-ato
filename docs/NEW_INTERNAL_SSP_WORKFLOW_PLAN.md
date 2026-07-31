@@ -3,22 +3,123 @@
 **Status:** Implemented, cut over, and locally validated. Destructive legacy
 cleanup remains deferred pending deployment-data confirmation.
 
+**Current work:** Promoted increments and narrow acceptance boundaries live in
+**Active increments (do now)** below. Later profile-registry, inheritance UI,
+qualified export mappings, and FedRAMP backlog remain in
+[`docs/PROFILE_DRIVEN_WORKFLOW_TODO.md`](PROFILE_DRIVEN_WORKFLOW_TODO.md).
+
+## Active increments (do now)
+
+Track shipped, narrowly scoped behavior here. Do not treat this section as
+closing the broader profile-driven backlog.
+
+### Increment A — Minimal ODP detection and question prompting
+
+**Delivered.**
+
+- Detect OSCAL organization-parameter insert tokens in pinned profile control
+  `requirement_text` and mark those controls as parameterized for generation.
+- Reject `{{ insert: param, ... }}` placeholder syntax in implementation
+  statements during generation output validation and contextual patch validation.
+- Require a tracked question when a parameterized control still lacks an
+  evidence-backed implementation response after generation (profile policy
+  present).
+
+**Acceptance boundaries (not done):** full organization-defined parameter
+registry, profile parameter value catalog, dedicated ODP UI, qualified export
+mappings, and FedRAMP parameter packs.
+
+### Increment B — Inherited and hybrid prompt guidance
+
+**Delivered.**
+
+- Ground inherited and hybrid responsibility in the existing profile
+  `responsibility` enum and `implementation_statement` only.
+- Generation and patch prompts instruct agents to describe provider or common
+  portions only when evidence supports them and to avoid inventing inheritance
+  boundaries or provider scope.
+
+**Acceptance boundaries (not done):** separate control designation from
+inheritance, common-control provider selection, inherited-implementation detail
+fields, and profile inheritance registry UI.
+
+### Increment C — Draft OSCAL 1.2.2 JSON export
+
+**Delivered.**
+
+- After ISSO approval, export deterministic **draft** OSCAL SSP JSON
+  (`oscal-json`) from the immutable approval snapshot.
+- Validate exported JSON against the digest-verified official NIST OSCAL **1.2.2**
+  SSP schema (`nist-oscal-1.2.2` in `docs/contracts/authority-manifest.json`).
+- Portal **Review & export** exposes **Export draft OSCAL JSON**; API route
+  `/ssp-workspaces/{id}/exports/oscal-json` requires an approved revision.
+
+**Acceptance boundaries (not done):** qualified or customer-ready OSCAL SSP
+products, FedRAMP OSCAL conformance, toolchain parity, privacy or C-SCRM plan
+content, and authority qualification (**HS-001**). Draft export does not prove
+agency template parity (**HS-002**).
+
+### Increment D — Profile-bound control implementation statement policy
+
+**Delivered.**
+
+- Built-in `agency-fisma-nist-sp800-53-rev5` bundle version **1.2.0** declares
+  `implementation_statement_policy` (deterministic flags, agent instruction
+  blocks, authority refs) in `ssp-requirements.json`.
+- Generation and contextual patches use profile-owned statement-content, ODP,
+  inherited/hybrid, and semantic-review instructions; deterministic validation
+  and approval honor profile flags.
+- Semantic quality findings are advisory; they do not add model-controlled
+  approval blockers. **1.1.0** and **1.0.0** bundles remain loadable with
+  defaults matching prior behavior.
+
+**Acceptance boundaries (not done):** dedicated not-applicable or provider fields,
+common-control provider registry or inheritance UI, full ODP registry, SP 800-53A
+assessment coverage, bulk control review, FedRAMP statement rules, new portal UI,
+and database migrations.
+
 ## Implementation Record
 
 - Backend product boundary: `src/ato_service/ssp_workspace/`
 - Portal product route: `/ssp`
 - API product routes: `/api/v1/ssp-*`
-- Database migration: `20260728_0015`
-- Built-in offline profile: NIST SP 800-53 Rev. 5.2.0 with Low, Moderate, and
-  High baselines
+- Database migration: `20260728_0015` (evidence removal); `20260728_0016` (agency DOCX renders)
+- Built-in offline profile: **Agency FISMA — NIST SP 800-53 Rev. 5** bundle
+  `agency-fisma-nist-sp800-53-rev5` version **1.2.0** (NIST control catalog release
+  **5.2.0**, `implementation_statement_policy`), with legacy **1.1.0** and **1.0.0**
+  load compatibility
+- Profile pins final **NIST SP 800-18 Rev. 2** (version 2.0.0,
+  `doi.org/10.6028/NIST.SP.800-18r2`) Table 1 **standard_coverage** metadata,
+  **33** SSP items (**digital identity acceptance** optional), and profile-defined
+  control-response enums enforced across generation, patches, direct edits, metrics,
+  and approval
+- **HS-001** and **HS-002** remain open: no authority qualification, agency template
+  parity, qualified OSCAL SSP or conformance claims, privacy plan, or C-SCRM plan
+  claims; draft OSCAL JSON is structural working material only (see Increment C)
+- Offline profile import, activation, and workspace migrate-profile scaffolding only;
+  **FedRAMP SSP profiles are not supported** in this workflow
+- Minimal ODP detection, placeholder rejection, and question prompting (Increment A)
+- Inherited/hybrid generation and patch guidance using responsibility and
+  statements only (Increment B)
+- Profile-bound implementation statement policy in bundle **1.2.0** (Increment D)
 - Deterministic metrics, versioned edits, contextual patches, approval
-  snapshots, revision restore, profile migration, and DOCX/JSON export
+  snapshots, revision restore, profile migration, and DOCX/JSON/draft OSCAL JSON
+  export (Increment C)
+- Agency-shaped DOCX (Review & export): after ISSO approval, upload customer
+  `.docx` template; bounded agent mapping plan; deterministic server render with
+  draft notice; reviewer blocker/warning exceptions; ISSO render approve/reject;
+  preview before approval and download after; exact cache and approved-mapping
+  reuse scoped to workspace, revision, template digest, and profile version;
+  synchronous, DOCX-only, no generic field-map UI (**HS-002** open)
 - Legacy package, analysis, and review routes are not mounted
 - Validation completed:
-  - Empty PostgreSQL database migrated through `20260728_0015`
+  - Empty PostgreSQL database migrated through `20260728_0016`
   - Live PostgreSQL workflow passed from evidence and screenshot intake through
     generation, editing, agent patching, approval, and JSON/DOCX export
+  - Agency DOCX mapping, render, cache, and approval paths covered by repository
+    contract tests (counts not re-run for this record)
   - Backend suite: 1,814 passed, 84 explicitly skipped retired/integration tests
+    (snapshot before agency DOCX tests; re-run pytest for current counts)
   - Portal suite: 129 passed; production build succeeded
 
 ## Goal
@@ -60,7 +161,8 @@ The ISSO does not approve every answer or agent edit. Approval is a single actio
 
 ## First Profile
 
-**Agency FISMA — NIST SP 800-53 Revision 5**
+**Agency FISMA — NIST SP 800-53 Revision 5** (`agency-fisma-nist-sp800-53-rev5`,
+version **1.2.0**; legacy **1.1.0** and **1.0.0** remain loadable)
 
 This profile supports agency-authorized systems hosted:
 
@@ -72,12 +174,18 @@ Hosting is a system attribute, not a separate control profile.
 
 The profile contains:
 
-- NIST SP 800-53 control catalog
+- NIST SP 800-53 Rev. 5.2.0 control catalog (via pinned OSCAL content 1.5.0)
 - NIST SP 800-53B Low, Moderate, and High baselines
-- Agency tailoring and overlays
-- Organization-defined parameters
-- Common and inherited control information
-- SSP template and field mappings
+- NIST SP 800-18 Rev. 2 Table 1 security-plan coverage metadata mapped to **33**
+  structured SSP items (DIAS optional)
+- Profile-defined `control_response` enums (implementation status, responsibility,
+  question owner types)
+- Workspace validation, metrics, generation contracts, and exports bound to the
+  selected profile version
+
+Agency tailoring, organization-defined parameters, customer template packs, and
+field-level export mappings beyond the built-in DOCX/JSON shapes remain local
+bundle or customer inputs; they do not close **HS-002**.
 
 The applicable baseline is selected once the system impact level is known.
 
@@ -384,15 +492,38 @@ Acceptance:
 **Delivered.**
 
 Add one-step ISSO approval and export from an immutable approval snapshot.
-Start with DOCX and structured JSON; add another format only when required by a
-real agency bundle.
+Ship canonical JSON and DOCX plus draft OSCAL 1.2.2 JSON validated against the
+pinned official SSP schema; qualified or customer-ready OSCAL remains out of scope.
 
 Acceptance:
 
 - Approval records actor, timestamp, profile version, and content hash
 - Editing approved content creates a new working revision
-- DOCX and JSON exports agree with the approved snapshot
+- DOCX, JSON, and draft OSCAL JSON exports agree with the approved snapshot
+- Draft OSCAL JSON fails closed when authority digest verification fails
 - Open questions can be included in an export appendix
+- Optional agency-shaped DOCX from a customer-uploaded template after ISSO
+  approval (see agency DOCX implementation record above); does not close **HS-002**
+
+### Diff 5b — Agency-shaped DOCX (customer template)
+
+**Delivered.**
+
+After ISSO approval, the ISSO uploads a customer-provided agency `.docx` in
+Review & export. Templates are stored content-addressed. Agents produce a bounded
+mapping plan and reviewer exceptions; the server renders deterministic copy with a
+draft notice. The ISSO previews, approves or rejects the render, and downloads
+after approval. No worker, DOCX-only, no generic field-map UI.
+
+Acceptance:
+
+- Render creation requires an approved revision hash binding
+- Mapping plan JSON uses closed canonical refs and control-table column maps only
+- Blockers force **review_failed**; ISSO approval disabled while blockers remain
+- Exact render cache for same workspace, revision, and template digest
+- Approved mapping reuse for same workspace, template digest, and profile version
+- **HS-002**, **HS-004**, and **HS-005** remain open for parity, production model
+  calls, and malware scanning
 
 ### Diff 6 — Cutover and Deletion
 
@@ -477,7 +608,12 @@ Profiles are stored locally as immutable, versioned bundles. Each bundle contain
 - POA&M management
 - Authorization decision
 - Continuous monitoring
-- FedRAMP profiles
+- FedRAMP SSP profiles (retained FedRAMP analysis/export paths elsewhere are not
+  this workspace)
+- Qualified, toolchain-ready, or customer-ready OSCAL SSP products; OSCAL SSP
+  conformance; privacy plan; and C-SCRM plan content (**HS-001** / **HS-002** and
+  the security-only boundary remain governing). Draft OSCAL JSON from an approved
+  snapshot is in scope as non-qualifying working material only.
 
 ## Reference Sources
 

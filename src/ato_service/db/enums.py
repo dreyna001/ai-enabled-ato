@@ -222,3 +222,9 @@ SSP_EVIDENCE_LINK_TARGET_VALUES: tuple[str, ...] = (
     "ssp_section",
     "control",
 )
+SSP_AGENCY_DOCX_RENDER_STATUS_VALUES: tuple[str, ...] = (
+    "awaiting_approval",
+    "review_failed",
+    "approved",
+    "rejected",
+)

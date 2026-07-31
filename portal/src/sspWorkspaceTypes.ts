@@ -9,6 +9,49 @@ export type QuestionState = "open" | "answered" | "dismissed";
 export type AgentPatchState = "proposed" | "applied" | "rejected" | "stale";
 export type ImpactLevel = "low" | "moderate" | "high";
 
+export type AgencyDocxRenderStatus =
+  | "awaiting_approval"
+  | "review_failed"
+  | "approved"
+  | "rejected";
+
+export type AgencyDocxIssueSeverity = "blocker" | "warning";
+
+export type AgencyDocxMappingException = {
+  severity: AgencyDocxIssueSeverity;
+  code: string;
+  message: string;
+};
+
+export type AgencyDocxIssue = {
+  severity: AgencyDocxIssueSeverity;
+  code: string;
+  message: string;
+  locator: string | null;
+};
+
+export type AgencyDocxRender = {
+  id: string;
+  profileVersionId: string;
+  sourceRevisionId: string;
+  sourceRevisionSha256: string;
+  templateSha256: string;
+  templateFilename: string;
+  outputSha256: string;
+  status: AgencyDocxRenderStatus;
+  createdBy: string;
+  createdAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  mappingSummary: string;
+  mappingExceptions: AgencyDocxMappingException[];
+  reviewSummary: string;
+  reviewIssues: AgencyDocxIssue[];
+  canApprove: boolean;
+  canPreview: boolean;
+  canDownload: boolean;
+};
+
 export type EvidenceLink = {
   id: string;
   artifactId: string;
@@ -81,6 +124,28 @@ export type ProfileSummary = {
   baseline: "Low" | "Moderate" | "High" | "Unconfirmed";
 };
 
+export type ControlResponseOptions = {
+  implementationStatuses: string[];
+  responsibilities: string[];
+  questionOwnerTypes: string[];
+  evidenceRequiredForAgentStatement: boolean;
+};
+
+/** Client-side defaults when older envelopes omit control_response. */
+export const DEFAULT_CONTROL_RESPONSE_OPTIONS: ControlResponseOptions = {
+  implementationStatuses: [
+    "implemented",
+    "partially_implemented",
+    "planned",
+    "not_implemented",
+    "not_applicable",
+    "unknown",
+  ],
+  responsibilities: ["system_specific", "hybrid", "inherited", "unknown"],
+  questionOwnerTypes: ["isso", "agency", "technical", "system_owner"],
+  evidenceRequiredForAgentStatement: true,
+};
+
 export type SystemCategorization = {
   confidentiality: ImpactLevel | "";
   integrity: ImpactLevel | "";
@@ -101,6 +166,7 @@ export type SspWorkspace = {
   categorization: SystemCategorization;
   authorizationPath: string;
   profile: ProfileSummary;
+  controlResponse: ControlResponseOptions;
   revisionId: string;
   revisionUpdatedAt: string;
   lastAgentUpdateAt?: string | null;
@@ -115,6 +181,7 @@ export type SspWorkspace = {
   controls: ControlStatement[];
   questions: WorkspaceQuestion[];
   patches: AgentPatch[];
+  agencyDocxRenders: AgencyDocxRender[];
 };
 
 export type SspSectionChange = {
@@ -152,5 +219,10 @@ export type SspWorkspaceActions = {
   onApplyPatch?: (patchId: string) => void;
   onRejectPatch?: (patchId: string) => void;
   onApprove?: () => void;
-  onExport?: (format: "docx" | "json") => void;
+  onExport?: (format: "docx" | "json" | "oscal-json") => void;
+  onUploadAgencyTemplate?: (file: File) => void;
+  onPreviewAgencyRender?: (renderId: string) => void;
+  onApproveAgencyRender?: (renderId: string) => void;
+  onRejectAgencyRender?: (renderId: string) => void;
+  onDownloadAgencyRender?: (renderId: string) => void;
 };
