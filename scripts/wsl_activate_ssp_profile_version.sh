@@ -4,17 +4,17 @@ set -euo pipefail
 
 readonly INSTALL_DIR="/opt/ato-analyzer"
 readonly DATABASE_DSN_CREDENTIAL_PATH="/etc/ato-analyzer/credentials/database-dsn"
-PROFILE_VERSION="${1:-1.2.0}"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [profile-version]
+Usage: $(basename "$0") <profile-key> [profile-version]
 
-Makes the given imported profile version active for its profile_key (deactivates
-the prior active row). Default version: 1.2.0
+Makes the given imported profile version active for the specified profile key
+(deactivates the prior active row for that key). Default version: 1.2.0
 
 Example:
-  sudo bash scripts/wsl_activate_ssp_profile_version.sh 1.2.0
+  sudo bash scripts/wsl_activate_ssp_profile_version.sh \
+    agency-fisma-nist-sp800-53-rev5 1.2.0
 EOF
 }
 
@@ -22,6 +22,14 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
     exit 0
 fi
+
+if [[ $# -lt 1 || $# -gt 2 || -z "$1" || ( $# -eq 2 && -z "$2" ) ]]; then
+    usage >&2
+    exit 2
+fi
+
+readonly PROFILE_KEY="$1"
+readonly PROFILE_VERSION="${2:-1.2.0}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
     echo "ERROR: run with sudo so database-dsn can be read" >&2
@@ -38,6 +46,7 @@ fi
 }
 
 export ATO_DATABASE_DSN_FILE="$DATABASE_DSN_CREDENTIAL_PATH"
+export ACTIVATE_SSP_PROFILE_KEY="$PROFILE_KEY"
 export ACTIVATE_SSP_PROFILE_VERSION="$PROFILE_VERSION"
 export PYTHONPATH="$INSTALL_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -56,16 +65,22 @@ from ato_service.ssp_workspace.profiles import ProfileNotFoundError, activate_pr
 async def main() -> None:
     dsn_path = os.environ["ATO_DATABASE_DSN_FILE"]
     dsn = open(dsn_path, encoding="utf-8").read().strip()
+    profile_key = os.environ["ACTIVATE_SSP_PROFILE_KEY"]
     version = os.environ["ACTIVATE_SSP_PROFILE_VERSION"]
     factory = create_session_factory(create_async_engine_from_url(dsn))
     async with session_scope(factory) as session:
         row = (
             await session.execute(
-                select(SspProfileVersion).where(SspProfileVersion.version == version)
+                select(SspProfileVersion).where(
+                    SspProfileVersion.profile_key == profile_key,
+                    SspProfileVersion.version == version,
+                )
             )
         ).scalar_one_or_none()
         if row is None:
-            raise SystemExit(f"No imported profile version {version!r}")
+            raise SystemExit(
+                f"No imported profile {profile_key!r} version {version!r}"
+            )
         activated = await activate_profile(
             session,
             profile_version_id=row.profile_version_id,

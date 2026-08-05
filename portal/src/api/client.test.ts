@@ -10,6 +10,7 @@ import {
   fetchSession,
   getIntakeReport,
   listSystems,
+  logout,
   patchRevisionMetadata,
 } from "@/api/client";
 import { INVALID_RESPONSE_MESSAGE, parseIntakeReport } from "@/api/responseSchemas";
@@ -71,6 +72,37 @@ describe("fetchSession response validation", () => {
         "invalid_response",
       ),
     );
+  });
+});
+
+describe("logout mutation headers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the current session CSRF token and portal origin", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("/api/v1/auth/logout");
+        expect(init?.method).toBe("POST");
+        expect(init?.credentials).toBe("include");
+        expect(init?.headers).toMatchObject({
+          "X-CSRF-Token": "l".repeat(32),
+          Origin: "https://portal.example.gov",
+        });
+        return new Response(null, { status: 204 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await logout({
+      actor_id: "logout-user",
+      groups: ["owners"],
+      csrf_token: "l".repeat(32),
+      portal_origin: "https://portal.example.gov",
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 

@@ -16,4 +16,17 @@ describe("formatApiError", () => {
       ),
     ).toBe("403: Authorization denied. (authorization_denied)");
   });
+
+  it("uses a friendly message for workspace approval gates", () => {
+    expect(
+      formatApiError(
+        new ApiError(
+          422,
+          "workspace_not_reviewable",
+          "http",
+          "workspace_not_reviewable",
+        ),
+      ),
+    ).toContain("not ready to approve");
+  });
 });

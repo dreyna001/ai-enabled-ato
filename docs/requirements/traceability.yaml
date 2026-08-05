@@ -1816,6 +1816,7 @@
         "docs/SSP_WORKSPACE_OPERATOR_GUIDE.md",
         "docs/requirements/hard-stops.yaml",
         "src/ato_service/ssp_workspace/export.py",
+        "src/ato_service/ssp_workspace/sp800_18_docx.py",
         "src/ato_service/ssp_workspace/oscal_export.py",
         "src/ato_service/oscal_ssp_schema.py",
         "src/ato_service/ssp_workspace/agency_docx.py",
@@ -1823,6 +1824,7 @@
       ],
       "test_ids": [
         "tests/ato_service/test_ssp_workspace_export.py::test_json_export_is_canonical_and_filters_answered_questions",
+        "tests/ato_service/test_ssp_workspace_export.py::test_docx_export_contains_approved_snapshot_content",
         "tests/ato_service/test_ssp_workspace_export.py::test_oscal_json_export_is_schema_valid_draft",
         "tests/ato_service/test_ssp_workspace_oscal_export.py::test_representative_export_validates_against_official_schema",
         "tests/ato_service/test_downstream_contracts.py::test_export_readiness_fisma_security_only_does_not_require_privacy_execution"

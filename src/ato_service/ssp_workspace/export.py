@@ -9,7 +9,13 @@ from typing import Any
 from docx import Document
 from docx.document import Document as DocxDocument
 
-EXPORT_SCHEMA_VERSION = "1.0.0"
+from ato_service.ssp_workspace.sp800_18_docx import (
+    nist_control_sort_key,
+    render_sp800_18_cover,
+    render_sp800_18_docx,
+)
+
+EXPORT_SCHEMA_VERSION = "1.1.0"
 MAX_SECTIONS = 100
 MAX_CONTROLS = 2_000
 MAX_QUESTIONS = 2_000
@@ -53,9 +59,13 @@ def build_workspace_docx_export(
     )
     document = Document()
     _set_document_metadata(document, normalized)
-    _render_header(document, normalized)
-    _render_sections(document, normalized["sections"])
-    _render_controls(document, normalized["controls"])
+    if normalized.get("standard_coverage"):
+        render_sp800_18_cover(document, normalized)
+        render_sp800_18_docx(document, normalized)
+    else:
+        _render_header(document, normalized)
+        _render_sections(document, normalized["sections"])
+        _render_controls(document, normalized["controls"])
     if include_open_questions:
         _render_open_questions(document, normalized["open_questions"])
 
@@ -88,7 +98,10 @@ def normalize_export_snapshot(
     system = _required_object(snapshot, "system")
     profile = _required_object(snapshot, "profile")
     sections = _normalize_sections(snapshot.get("sections"))
-    controls = _normalize_controls(snapshot.get("controls"))
+    controls = _normalize_controls(
+        snapshot.get("controls"),
+        control_order=snapshot.get("control_order"),
+    )
     questions = _normalize_questions(snapshot.get("questions"))
     open_questions = (
         [question for question in questions if question["status"] == "open"]
@@ -96,7 +109,14 @@ def normalize_export_snapshot(
         else []
     )
 
-    return {
+    document_title = _optional_text(snapshot, "document_title", max_length=500)
+    facts = _normalize_facts(snapshot.get("facts"))
+    standard_coverage = _normalize_standard_coverage(snapshot.get("standard_coverage"))
+    ssp_items = _normalize_ssp_items(snapshot.get("ssp_items"))
+    control_order = _normalize_control_order(snapshot.get("control_order"))
+    evidence_catalog = _normalize_evidence_catalog(snapshot.get("evidence_catalog"))
+
+    normalized: dict[str, Any] = {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "workspace_id": workspace_id,
         "revision_id": revision_id,
@@ -124,6 +144,19 @@ def normalize_export_snapshot(
         "controls": controls,
         "open_questions": open_questions,
     }
+    if document_title is not None:
+        normalized["document_title"] = document_title
+    if facts:
+        normalized["facts"] = facts
+    if standard_coverage:
+        normalized["standard_coverage"] = standard_coverage
+    if ssp_items:
+        normalized["ssp_items"] = ssp_items
+    if control_order:
+        normalized["control_order"] = control_order
+    if evidence_catalog:
+        normalized["evidence_catalog"] = evidence_catalog
+    return normalized
 
 
 def _normalize_sections(value: Any) -> list[dict[str, Any]]:
@@ -148,7 +181,11 @@ def _normalize_sections(value: Any) -> list[dict[str, Any]]:
     return sorted(normalized, key=lambda item: (item["order"], item["section_id"]))
 
 
-def _normalize_controls(value: Any) -> list[dict[str, Any]]:
+def _normalize_controls(
+    value: Any,
+    *,
+    control_order: Any = None,
+) -> list[dict[str, Any]]:
     items = _bounded_object_list(value, field_name="controls", maximum=MAX_CONTROLS)
     normalized: list[dict[str, Any]] = []
     for item in items:
@@ -186,7 +223,19 @@ def _normalize_controls(value: Any) -> list[dict[str, Any]]:
         )
     control_ids = [item["control_id"] for item in normalized]
     _require_unique(control_ids, field_name="control_id")
-    return sorted(normalized, key=lambda item: item["control_id"])
+    order = _normalize_control_order(control_order)
+    if order:
+        by_id = {item["control_id"]: item for item in normalized}
+        ordered = [by_id[cid] for cid in order if cid in by_id]
+        seen = {item["control_id"] for item in ordered}
+        ordered.extend(
+            sorted(
+                (item for item in normalized if item["control_id"] not in seen),
+                key=lambda item: nist_control_sort_key(item["control_id"]),
+            )
+        )
+        return ordered
+    return sorted(normalized, key=lambda item: nist_control_sort_key(item["control_id"]))
 
 
 def _normalize_questions(value: Any) -> list[dict[str, Any]]:
@@ -210,9 +259,8 @@ def _set_document_metadata(
     document: DocxDocument,
     snapshot: dict[str, Any],
 ) -> None:
-    document.core_properties.title = (
-        f"{snapshot['system']['display_name']} System Security Plan"
-    )
+    title_name = snapshot.get("document_title") or snapshot["system"]["display_name"]
+    document.core_properties.title = f"{title_name} System Security Plan"
     document.core_properties.subject = "System Security Plan"
     document.core_properties.author = snapshot["approved_by"]
     document.core_properties.keywords = (
@@ -370,3 +418,143 @@ def _require_unique(values: list[str], *, field_name: str) -> None:
         raise WorkspaceExportValidationError(
             f"duplicate {field_name} values are not allowed"
         )
+
+
+def _normalize_facts(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise WorkspaceExportValidationError("facts must be an object")
+    if len(value) > 500:
+        raise WorkspaceExportValidationError("facts exceeds the maximum of 500")
+    normalized: dict[str, Any] = {}
+    for key, fact_value in value.items():
+        if not isinstance(key, str) or not key.strip() or len(key) > 255:
+            raise WorkspaceExportValidationError("facts keys must be non-empty strings")
+        normalized[key] = fact_value
+    return dict(sorted(normalized.items(), key=lambda item: item[0]))
+
+
+def _normalize_standard_coverage(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise WorkspaceExportValidationError("standard_coverage must be an array")
+    if len(value) > 100:
+        raise WorkspaceExportValidationError(
+            "standard_coverage exceeds the maximum of 100"
+        )
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise WorkspaceExportValidationError(
+                "standard_coverage must contain objects"
+            )
+        normalized.append(
+            {
+                "source_id": _required_text(item, "source_id", max_length=128),
+                "requirement_id": _required_text(
+                    item,
+                    "requirement_id",
+                    max_length=256,
+                ),
+                "title": _required_text(item, "title", max_length=500),
+                "coverage_kind": _required_text(
+                    item,
+                    "coverage_kind",
+                    max_length=32,
+                ),
+                "item_ids": _normalize_string_list(
+                    item.get("item_ids"),
+                    field_name=f"standard_coverage[{index}].item_ids",
+                    maximum=100,
+                ),
+                "required": bool(item.get("required", True)),
+            }
+        )
+    return normalized
+
+
+def _normalize_ssp_items(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise WorkspaceExportValidationError("ssp_items must be an array")
+    if len(value) > 500:
+        raise WorkspaceExportValidationError("ssp_items exceeds the maximum of 500")
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise WorkspaceExportValidationError("ssp_items must contain objects")
+        normalized.append(
+            {
+                "item_id": _required_text(item, "item_id", max_length=255),
+                "title": _required_text(item, "title", max_length=500),
+                "value_type": _required_text(item, "value_type", max_length=32),
+                "standard_refs": _normalize_string_list(
+                    item.get("standard_refs"),
+                    field_name="ssp_items.standard_refs",
+                    maximum=32,
+                ),
+            }
+        )
+    return normalized
+
+
+def _normalize_control_order(value: Any) -> list[str]:
+    return _normalize_string_list(
+        value,
+        field_name="control_order",
+        maximum=MAX_CONTROLS,
+    )
+
+
+def _normalize_evidence_catalog(value: Any) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise WorkspaceExportValidationError("evidence_catalog must be an object")
+    if len(value) > 5_000:
+        raise WorkspaceExportValidationError(
+            "evidence_catalog exceeds the maximum of 5000"
+        )
+    normalized: dict[str, str] = {}
+    for key, label in value.items():
+        if not isinstance(key, str) or len(key) > 128:
+            raise WorkspaceExportValidationError(
+                "evidence_catalog keys must be strings of at most 128 characters"
+            )
+        if not isinstance(label, str) or not label.strip() or len(label) > 255:
+            raise WorkspaceExportValidationError(
+                "evidence_catalog values must be non-empty strings"
+            )
+        normalized[key] = label.strip()
+    return dict(sorted(normalized.items(), key=lambda item: item[0]))
+
+
+def _normalize_string_list(
+    value: Any,
+    *,
+    field_name: str,
+    maximum: int,
+) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise WorkspaceExportValidationError(f"{field_name} must be an array")
+    if len(value) > maximum:
+        raise WorkspaceExportValidationError(
+            f"{field_name} exceeds the maximum of {maximum}"
+        )
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise WorkspaceExportValidationError(
+                f"{field_name} must contain non-empty strings"
+            )
+        if len(item) > 255:
+            raise WorkspaceExportValidationError(
+                f"{field_name} entries must be at most 255 characters"
+            )
+        normalized.append(item.strip())
+    return normalized

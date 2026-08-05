@@ -39,6 +39,12 @@ class WorkspaceEditError(ValueError):
     """Raised when a requested transform does not match the current revision."""
 
 
+class WorkspaceQuestionStateError(WorkspaceEditError):
+    """Raised when an answer targets a question that is no longer open."""
+
+    error_code = "illegal_state_transition"
+
+
 def merge_generation(
     content: RevisionContent,
     result: GenerationResult,
@@ -318,6 +324,8 @@ def answer_question(
     )
     if selected is None:
         raise WorkspaceEditError(f"unknown question: {question_id}")
+    if selected.state is not QuestionState.OPEN:
+        raise WorkspaceQuestionStateError("question is not open")
 
     sections = list(content.sections)
     if (

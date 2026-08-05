@@ -84,7 +84,10 @@ export function PortalApp() {
   }, [refreshReadiness, refreshSession]);
 
   const handleSignOut = () => {
-    void logout().then(() => refreshSession());
+    if (!session) {
+      return;
+    }
+    void logout(session).then(() => refreshSession());
   };
 
   if (session === undefined) {

@@ -61,6 +61,7 @@ function metricsFixture(approved: boolean): SspWorkspaceMetrics {
     approved,
     requiredItemsResolved: true,
     controlsResolved: true,
+    agentControlsGrounded: true,
     reviewable: true,
   };
 }

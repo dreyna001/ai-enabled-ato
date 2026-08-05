@@ -147,6 +147,7 @@ describe("calculateSspWorkspaceMetrics", () => {
       approved: true,
       requiredItemsResolved: true,
       controlsResolved: true,
+      agentControlsGrounded: true,
       reviewable: true,
     });
   });
@@ -178,6 +179,21 @@ describe("calculateSspWorkspaceMetrics", () => {
     const metrics = calculateSspWorkspaceMetrics(workspace);
 
     expect(metrics.requiredItemsResolved).toBe(false);
+    expect(metrics.reviewable).toBe(false);
+  });
+
+  it("is not reviewable when an agent-drafted control has no evidence links", () => {
+    const workspace = workspaceFixture();
+    workspace.controls = [
+      {
+        ...workspace.controls[1]!,
+        evidenceLinks: [],
+      },
+    ];
+
+    const metrics = calculateSspWorkspaceMetrics(workspace);
+
+    expect(metrics.agentControlsGrounded).toBe(false);
     expect(metrics.reviewable).toBe(false);
   });
 });

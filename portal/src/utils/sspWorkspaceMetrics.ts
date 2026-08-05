@@ -28,6 +28,29 @@ function isPartial(control: ControlStatement): boolean {
   );
 }
 
+/** Mirror backend agent_control_blocks_approval for ISSO review gating. */
+export function agentControlBlocksApproval(
+  control: ControlStatement,
+  evidenceRequired: boolean,
+): boolean {
+  if (!evidenceRequired) {
+    return false;
+  }
+  if (control.state === "reviewed") {
+    return false;
+  }
+  if (control.state !== "generated" && control.state !== "partial") {
+    return false;
+  }
+  const status = (control.implementationStatus || "unknown").trim().toLowerCase();
+  const responsibility = (control.responsibility || "unknown").trim().toLowerCase();
+  const hasAgentMetadata =
+    control.statement.trim().length > 0 ||
+    status !== "unknown" ||
+    responsibility !== "unknown";
+  return hasAgentMetadata && control.evidenceLinks.length === 0;
+}
+
 function satisfiedRequiredIds(sections: SspSection[]): Set<string> {
   return new Set(
     sections.flatMap((section) => section.satisfiedRequirementIds),
@@ -49,6 +72,7 @@ export type SspWorkspaceMetrics = {
   approved: boolean;
   requiredItemsResolved: boolean;
   controlsResolved: boolean;
+  agentControlsGrounded: boolean;
   reviewable: boolean;
 };
 
@@ -63,6 +87,7 @@ export function calculateSspWorkspaceMetrics({
   internallyConsistent,
   currentContentHash,
   approvedContentHash,
+  controlResponse,
 }: Pick<
   SspWorkspace,
   | "requirements"
@@ -75,6 +100,7 @@ export function calculateSspWorkspaceMetrics({
   | "internallyConsistent"
   | "currentContentHash"
   | "approvedContentHash"
+  | "controlResponse"
 >): SspWorkspaceMetrics {
   const required = requirements.filter((requirement) => requirement.required);
   const satisfiedIds = satisfiedRequiredIds(sections);
@@ -106,6 +132,12 @@ export function calculateSspWorkspaceMetrics({
               section.requirementIds.includes(requirement.id),
           ),
       ),
+  );
+  const agentControlsGrounded = !controls.some((control) =>
+    agentControlBlocksApproval(
+      control,
+      controlResponse.evidenceRequiredForAgentStatement,
+    ),
   );
 
   return {
@@ -140,10 +172,12 @@ export function calculateSspWorkspaceMetrics({
       approvedContentHash === currentContentHash,
     requiredItemsResolved,
     controlsResolved: controlsWithResolution,
+    agentControlsGrounded,
     reviewable:
       processingJobsTerminal &&
       requiredItemsResolved &&
       controlsWithResolution &&
+      agentControlsGrounded &&
       revisionSaved &&
       internallyConsistent,
   };

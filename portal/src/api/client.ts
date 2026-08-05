@@ -296,11 +296,18 @@ export function login(): void {
   window.location.href = `${API_BASE}/auth/login`;
 }
 
-export async function logout(options: ApiFetchOptions = {}): Promise<void> {
+export async function logout(
+  session: SessionInfo,
+  options: ApiFetchOptions = {},
+): Promise<void> {
   const response = await apiFetch(`${API_BASE}/auth/logout`, {
     method: "POST",
     credentials: "include",
     ...options,
+    headers: {
+      ...mutationHeaders(session),
+      ...options.headers,
+    },
   });
   if (!response.ok && response.status !== 204) {
     throw new ApiError(response.status, response.statusText);

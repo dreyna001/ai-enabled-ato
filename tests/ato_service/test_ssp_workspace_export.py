@@ -17,6 +17,7 @@ from ato_service.ssp_workspace.export import (
     build_workspace_docx_export,
     build_workspace_json_export,
 )
+from ato_service.ssp_workspace.sp800_18_docx import nist_control_sort_key
 from ato_service.ssp_workspace.oscal_export import (
     OscalSspExportError,
     build_draft_oscal_ssp_json_export,
@@ -27,13 +28,14 @@ from ato_service.ssp_workspace.service import (
 )
 
 
-def _snapshot() -> dict[str, object]:
-    return {
+def _snapshot(*, include_sp800_18: bool = True) -> dict[str, object]:
+    snapshot: dict[str, object] = {
         "workspace_id": "11111111-1111-4111-8111-111111111111",
         "revision_id": "22222222-2222-4222-8222-222222222222",
         "content_sha256": "a" * 64,
         "approved_by": "isso@example.gov",
         "approved_at": "2026-07-27T12:00:00Z",
+        "document_title": "Grant Intake System",
         "system": {
             "display_name": "Grant Intake System",
             "external_system_id": "GIMS-001",
@@ -43,16 +45,24 @@ def _snapshot() -> dict[str, object]:
             "version": "5.2.0",
             "impact_level": "moderate",
         },
+        "facts": {
+            "system.name": "Grant Intake System",
+            "system.identifier": "GIMS-001",
+            "system.confidentiality_impact": "moderate",
+            "system.integrity_impact": "moderate",
+            "system.availability_impact": "moderate",
+            "system.impact_level": "moderate",
+        },
         "sections": [
             {
-                "section_id": "boundary",
+                "section_id": "system.authorization_boundary",
                 "title": "Authorization Boundary",
                 "order": 2,
                 "state": "reviewed",
                 "content": "The boundary includes the application and database.",
             },
             {
-                "section_id": "purpose",
+                "section_id": "system.purpose",
                 "title": "System Purpose",
                 "order": 1,
                 "state": "reviewed",
@@ -87,6 +97,93 @@ def _snapshot() -> dict[str, object]:
             },
         ],
     }
+    if include_sp800_18:
+        snapshot["standard_coverage"] = [
+            {
+                "source_id": "nist-sp-800-18r2",
+                "requirement_id": "table1.system-name-and-identifier",
+                "title": "System Name and Identifier",
+                "coverage_kind": "ssp_item",
+                "item_ids": ["system.name", "system.identifier"],
+                "required": True,
+            },
+            {
+                "source_id": "nist-sp-800-18r2",
+                "requirement_id": "table1.system-overview",
+                "title": "System Overview",
+                "coverage_kind": "ssp_item",
+                "item_ids": ["system.purpose"],
+                "required": True,
+            },
+            {
+                "source_id": "nist-sp-800-18r2",
+                "requirement_id": "table1.authorization-boundary-description",
+                "title": "Authorization Boundary Description",
+                "coverage_kind": "ssp_item",
+                "item_ids": ["system.authorization_boundary"],
+                "required": True,
+            },
+            {
+                "source_id": "nist-sp-800-18r2",
+                "requirement_id": "table1.system-categorization",
+                "title": "System Categorization",
+                "coverage_kind": "ssp_item",
+                "item_ids": [
+                    "system.confidentiality_impact",
+                    "system.integrity_impact",
+                    "system.availability_impact",
+                ],
+                "required": True,
+            },
+            {
+                "source_id": "nist-sp-800-18r2",
+                "requirement_id": "table1.control-implementation-details",
+                "title": "Control Implementation Details",
+                "coverage_kind": "controls",
+                "item_ids": [],
+                "required": True,
+            },
+            {
+                "source_id": "nist-sp-800-18r2",
+                "requirement_id": "table1.control-implementation-status",
+                "title": "Control Implementation Status",
+                "coverage_kind": "controls",
+                "item_ids": [],
+                "required": True,
+            },
+        ]
+        snapshot["ssp_items"] = [
+            {
+                "item_id": "system.name",
+                "title": "System Name",
+                "value_type": "string",
+                "standard_refs": ["table1.system-name-and-identifier"],
+            },
+            {
+                "item_id": "system.identifier",
+                "title": "System Identifier",
+                "value_type": "string",
+                "standard_refs": ["table1.system-name-and-identifier"],
+            },
+            {
+                "item_id": "system.purpose",
+                "title": "System Purpose",
+                "value_type": "string",
+                "standard_refs": ["table1.system-overview"],
+            },
+            {
+                "item_id": "system.authorization_boundary",
+                "title": "Authorization Boundary",
+                "value_type": "string",
+                "standard_refs": ["table1.authorization-boundary-description"],
+            },
+        ]
+        snapshot["control_order"] = ["AC-2"]
+        snapshot["evidence_catalog"] = {
+            "artifact-1": "identity-policy.pdf",
+            "artifact-2": "account-review.sarif",
+        }
+    return snapshot
 
 
 def test_json_export_is_canonical_and_filters_answered_questions() -> None:
@@ -102,9 +199,10 @@ def test_json_export_is_canonical_and_filters_answered_questions() -> None:
     assert hashlib.sha256(first).hexdigest() == hashlib.sha256(second).hexdigest()
     payload = json.loads(first)
     assert [section["section_id"] for section in payload["sections"]] == [
-        "purpose",
-        "boundary",
+        "system.purpose",
+        "system.authorization_boundary",
     ]
+    assert payload["schema_version"] == "1.1.0"
     assert payload["controls"][0]["evidence_links"] == [
         "artifact-1",
         "artifact-2",
@@ -123,11 +221,34 @@ def test_docx_export_contains_approved_snapshot_content() -> None:
     document = Document(BytesIO(rendered))
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
     assert "Grant Intake System System Security Plan" in text
-    assert "System Purpose" in text
+    assert "NIST SP 800-18 Revision 2 (Table 1)" in text
+    assert "System Overview" in text
+    assert "The system supports grant intake." in text
+    assert "Authorization Boundary Description" in text
+    assert "Control Implementation Details" in text
     assert "AC-2 — Account Management" in text
+    assert "identity-policy.pdf" in text
+    assert "Control Implementation Status" in text
     assert "What is the retention period?" in text
     assert "Who reviews accounts?" not in text
     assert document.core_properties.author == "isso@example.gov"
+    assert len(document.tables) >= 2
+
+
+def test_docx_export_legacy_flat_layout_without_standard_coverage() -> None:
+    rendered = build_workspace_docx_export(
+        _snapshot(include_sp800_18=False),
+        include_open_questions=False,
+    )
+    document = Document(BytesIO(rendered))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    assert "System Purpose" in text
+    assert "Security Controls" in text
+
+
+def test_nist_control_sort_key_orders_numeric_segments() -> None:
+    assert nist_control_sort_key("AC-3") < nist_control_sort_key("AC-11")
+    assert nist_control_sort_key("AC-2(1)") < nist_control_sort_key("AC-2(2)")
 
 
 def test_export_rejects_duplicate_control_ids() -> None:

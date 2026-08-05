@@ -1,5 +1,5 @@
 import { Bot, Check, Send, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -7,6 +7,21 @@ import type {
   AgentPatch,
   SspWorkspaceActions,
 } from "@/sspWorkspaceTypes";
+
+function patchMatchesContext(patch: AgentPatch, context: AgentContext): boolean {
+  if (context.targetType === "workspace") {
+    return true;
+  }
+  return patch.targetLabels.some(
+    (label) =>
+      label.includes(context.targetId) || context.label.includes(label),
+  );
+}
+
+/** Patches with no edit targets are model explanations, not applyable diffs. */
+export function isEditableAgentPatch(patch: AgentPatch): boolean {
+  return patch.targetLabels.length > 0;
+}
 
 export function ContextualAgentDrawer({
   context,
@@ -24,15 +39,41 @@ export function ContextualAgentDrawer({
   onRejectPatch?: SspWorkspaceActions["onRejectPatch"];
 }) {
   const [message, setMessage] = useState("");
+  const [exchange, setExchange] = useState<{
+    question: string;
+    answer: string | null;
+  } | null>(null);
+  const pendingQuestionRef = useRef<string | null>(null);
+  const patchIdsBeforeAskRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const pending = pendingQuestionRef.current;
+    if (!pending || exchange?.answer !== null) {
+      return;
+    }
+    const newPatch = patches.find(
+      (patch) =>
+        patch.state === "proposed" &&
+        patchMatchesContext(patch, context) &&
+        !patchIdsBeforeAskRef.current.has(patch.id),
+    );
+    if (newPatch) {
+      setExchange({ question: pending, answer: newPatch.summary });
+      pendingQuestionRef.current = null;
+    }
+  }, [patches, context, exchange?.answer]);
+
   const proposedPatches = patches.filter(
     (patch) =>
       patch.state === "proposed" &&
-      (context.targetType === "workspace" ||
-        patch.targetLabels.some(
-          (label) =>
-            label.includes(context.targetId) ||
-            context.label.includes(label),
-        )),
+      patchMatchesContext(patch, context) &&
+      isEditableAgentPatch(patch),
+  );
+  const responsePatches = patches.filter(
+    (patch) =>
+      patch.state === "proposed" &&
+      patchMatchesContext(patch, context) &&
+      !isEditableAgentPatch(patch),
   );
 
   return (
@@ -76,10 +117,68 @@ export function ContextualAgentDrawer({
           <div className="rounded-sm border bg-muted/20 p-3 text-sm">
             <p className="font-medium">Targeted editing</p>
             <p className="mt-1 text-muted-foreground">
-              Answer a question, provide a fact, or request a change. The agent
-              proposes a bounded patch to the current target for review.
+              Request a content change to the SSP or controls. Readiness and
+              export steps are on Review and Export, not in this chat.
             </p>
           </div>
+
+          {exchange ? (
+            <section aria-labelledby="agent-exchange-title" className="space-y-2">
+              <h3
+                id="agent-exchange-title"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                This turn
+              </h3>
+              <div className="rounded-sm border p-3">
+                <p className="text-xs font-medium text-muted-foreground">You</p>
+                <p className="mt-1 text-sm">{exchange.question}</p>
+              </div>
+              {exchange.answer === null ? (
+                <p className="text-sm text-muted-foreground">Waiting for agent…</p>
+              ) : (
+                <div className="rounded-sm border bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Agent</p>
+                  <p className="mt-1 text-sm">{exchange.answer}</p>
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {responsePatches.length > 0 ? (
+            <section aria-labelledby="agent-responses-title">
+              <h3
+                id="agent-responses-title"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Agent responses
+              </h3>
+              <div className="mt-2 space-y-2">
+                {responsePatches.map((patch) => (
+                  <div key={patch.id} className="rounded-sm border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant="muted">Response</Badge>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {patch.id}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm">{patch.summary}</p>
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!onRejectPatch}
+                        onClick={() => onRejectPatch?.(patch.id)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {proposedPatches.length > 0 ? (
             <section aria-labelledby="proposed-patches-title">
@@ -126,11 +225,13 @@ export function ContextualAgentDrawer({
                 ))}
               </div>
             </section>
-          ) : (
+          ) : proposedPatches.length === 0 &&
+            responsePatches.length === 0 &&
+            !exchange ? (
             <p className="text-sm text-muted-foreground">
               No agent changes are awaiting review.
             </p>
-          )}
+          ) : null}
         </div>
 
         <form
@@ -139,6 +240,9 @@ export function ContextualAgentDrawer({
             event.preventDefault();
             const trimmed = message.trim();
             if (!trimmed || !onAskAgent) return;
+            patchIdsBeforeAskRef.current = new Set(patches.map((patch) => patch.id));
+            pendingQuestionRef.current = trimmed;
+            setExchange({ question: trimmed, answer: null });
             onAskAgent(context, trimmed);
             setMessage("");
           }}

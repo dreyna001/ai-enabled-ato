@@ -80,6 +80,10 @@ export function ReviewExportPanel({
               satisfied={metrics.controlsResolved}
             />
             <ReviewCheck
+              label="Agent-drafted controls are linked to evidence"
+              satisfied={metrics.agentControlsGrounded}
+            />
+            <ReviewCheck
               label="Working revision is saved and internally consistent"
               satisfied={workspace.revisionSaved && workspace.internallyConsistent}
             />
@@ -106,9 +110,19 @@ export function ReviewExportPanel({
                       : "Current revision needs attention"}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Approval binds the ISSO decision to revision{" "}
-                  <span className="font-mono">{workspace.revisionId}</span> and
-                  its exact content hash.
+                  {!metrics.approved && !metrics.agentControlsGrounded ? (
+                    <>
+                      Link evidence to each agent-drafted control, or edit the
+                      control, add an unresolved reason, or track an open question
+                      before approving.
+                    </>
+                  ) : (
+                    <>
+                      Approval binds the ISSO decision to revision{" "}
+                      <span className="font-mono">{workspace.revisionId}</span>{" "}
+                      and its exact content hash.
+                    </>
+                  )}
                 </p>
               </div>
             </div>

@@ -113,8 +113,13 @@ async function apiRequest<T>(
   });
   if (!response.ok) {
     let detail = response.statusText || "Request failed";
+    let errorCode: string | undefined;
     try {
       const body = (await response.json()) as Record<string, unknown>;
+      errorCode =
+        (typeof body.error_code === "string" && body.error_code) ||
+        (typeof body.error === "string" && body.error) ||
+        undefined;
       detail =
         (typeof body.detail === "string" && body.detail) ||
         (typeof body.error === "string" && body.error) ||
@@ -122,7 +127,7 @@ async function apiRequest<T>(
     } catch {
       // Preserve the HTTP status text when the server did not return JSON.
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, detail, "http", errorCode);
   }
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) {

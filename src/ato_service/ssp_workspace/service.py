@@ -19,6 +19,7 @@ from ato_service.ssp_workspace.contracts import (
     ControlState,
     EvidenceState,
     FactContent,
+    FactState,
     ProfileRequirement,
     Provenance,
     QuestionState,
@@ -73,7 +74,7 @@ from ato_service.ssp_workspace.persistence import (
     create_workspace,
     save_revision,
 )
-from ato_service.ssp_workspace.profiles import resolve_stored_profile
+from ato_service.ssp_workspace.profiles import deserialize_profile_bundle, resolve_stored_profile
 from ato_service.ssp_workspace.profile_bundles import (
     ControlResponsePolicy,
     ProfileDiff,
@@ -824,6 +825,15 @@ async def approve_workspace_revision(
     if revision is None:
         raise WorkspaceNotReviewableError("current revision is unavailable")
     content = RevisionContent.model_validate(revision.content)
+    if not any(
+        fact.key == "system.categorization_status"
+        and fact.value == "confirmed"
+        and fact.state is FactState.ACTIVE
+        for fact in content.facts
+    ):
+        raise WorkspaceNotReviewableError(
+            "system categorization must be explicitly confirmed before approval"
+        )
     from ato_service.db.models import SspProfileVersion, SspWorkspace
 
     profile_row = (
@@ -1579,12 +1589,42 @@ async def _approved_export_snapshot(
         if historical_profile is None:
             raise ApprovalNotFoundError("approved revision profile is unavailable")
         profile = historical_profile
+
+    impact_level = _impact_level(content)
+    resolved_profile = resolve_stored_profile(profile, impact_level)
+    stored_bundle = deserialize_profile_bundle(profile.bundle)
+    active_facts = {
+        item.key: item.value
+        for item in content.facts
+        if item.state is FactState.ACTIVE
+    }
+    document_title = active_facts.get("system.name")
+    if not isinstance(document_title, str) or not document_title.strip():
+        document_title = system.display_name
+    else:
+        document_title = document_title.strip()
+
+    from ato_service.db.models import SspEvidenceArtifact
+
+    evidence_rows = (
+        await session.execute(
+            select(SspEvidenceArtifact.evidence_artifact_id, SspEvidenceArtifact.display_filename).where(
+                SspEvidenceArtifact.workspace_id == workspace_id,
+                SspEvidenceArtifact.removed_at.is_(None),
+            )
+        )
+    ).all()
+    evidence_catalog = {
+        str(row.evidence_artifact_id): row.display_filename for row in evidence_rows
+    }
+
     return {
         "workspace_id": str(workspace.workspace_id),
         "revision_id": str(revision.revision_id),
         "content_sha256": revision.content_sha256,
         "approved_by": approval.approved_by,
         "approved_at": approval.approved_at.isoformat(),
+        "document_title": document_title,
         "system": {
             "display_name": system.display_name,
             "external_system_id": system.external_system_id,
@@ -1592,8 +1632,31 @@ async def _approved_export_snapshot(
         "profile": {
             "profile_id": profile.profile_key,
             "version": profile.version,
-            "impact_level": _impact_level(content),
+            "impact_level": impact_level,
         },
+        "facts": active_facts,
+        "standard_coverage": [
+            {
+                "source_id": entry.source_id,
+                "requirement_id": entry.requirement_id,
+                "title": entry.title,
+                "coverage_kind": entry.coverage_kind,
+                "item_ids": list(entry.item_ids),
+                "required": entry.required,
+            }
+            for entry in stored_bundle.standard_coverage
+        ],
+        "ssp_items": [
+            {
+                "item_id": item.item_id,
+                "title": item.title,
+                "value_type": item.value_type,
+                "standard_refs": list(item.standard_refs),
+            }
+            for item in stored_bundle.ssp_required_items
+        ],
+        "control_order": [control.control_id for control in resolved_profile.controls],
+        "evidence_catalog": evidence_catalog,
         "sections": [
             {
                 "section_id": item.key,

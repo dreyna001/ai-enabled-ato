@@ -27,6 +27,7 @@ from ato_service.ssp_workspace.service import (
     load_workspace_envelope,
     propose_agent_patch,
     render_approved_export,
+    save_system_categorization,
     save_section_edit,
 )
 from ato_service.systems import create_system
@@ -109,6 +110,21 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 workspace_id=workspace.workspace_id,
             )
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            categorized, _ = await save_system_categorization(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                expected_revision_id=revision_id,
+                confidentiality="low",
+                integrity="low",
+                availability="low",
+                confidentiality_rationale="The system processes low-impact records.",
+                integrity_rationale="Incorrect records have a limited adverse effect.",
+                availability_rationale="Short outages have a limited adverse effect.",
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                audit_hmac_key=harness.hmac_key,
+            )
+            revision_id = categorized.revision_id
 
             evidence_text = (
                 b"The agency operates the system on premises to process federal "
