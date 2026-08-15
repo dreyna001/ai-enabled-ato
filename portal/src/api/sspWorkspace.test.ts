@@ -6,12 +6,46 @@ import {
   downloadSspExport,
   mapAgencyDocxRenders,
   mapControlResponse,
+  mapSystemDefinition,
   mapWorkspaceEnvelope,
   previewAgencyDocxRender,
 } from "./sspWorkspace";
 import { DEFAULT_CONTROL_RESPONSE_OPTIONS, type SspWorkspace } from "@/sspWorkspaceTypes";
 import { ApiError } from "@/api/client";
 import type { SessionInfo } from "@/types";
+
+const confirmedSystemDefinition = {
+  status: "confirmed" as const,
+  boundaryNarrative:
+    "The authorization boundary includes all production application hosts.",
+  diagramLinks: [],
+  components: [
+    {
+      componentId: "web",
+      name: "Web tier",
+      purpose: "Public UI",
+      placement: "inside" as const,
+      evidence: [],
+    },
+  ],
+  interconnections: [
+    {
+      interconnectionId: "ic-1",
+      connectedOrganization: "Partner agency",
+      connectedSystem: "Identity broker",
+      direction: "inbound" as const,
+      dataTypes: ["authentication"],
+      interfaceProtocol: "HTTPS",
+      connectionOwner: "System owner",
+      agreementType: "ISA",
+      agreementId: "",
+      agreementStatus: "",
+      agreementExpiration: "",
+      boundaryProtections: "TLS and IP allowlisting",
+      evidence: [],
+    },
+  ],
+};
 
 describe("mapWorkspaceEnvelope", () => {
   it("maps persisted metrics inputs without model-calculated counts", () => {
@@ -166,6 +200,126 @@ describe("mapWorkspaceEnvelope", () => {
     expect(workspace.controlResponse).toEqual(DEFAULT_CONTROL_RESPONSE_OPTIONS);
     expect(workspace.agencyDocxRenders).toEqual([]);
   });
+
+  it("maps structured system definition sections and status facts", () => {
+    const artifactId = "30000000-0000-4000-8000-000000000010";
+    const workspace = mapWorkspaceEnvelope({
+      workspace_id: "10000000-0000-4000-8000-000000000001",
+      system_id: "10000000-0000-4000-8000-000000000002",
+      status: "working",
+      system: { display_name: "Boundary Portal" },
+      profile: {
+        profile_version_id: "10000000-0000-4000-8000-000000000003",
+        profile_id: "agency-fisma-nist-sp800-53-rev5",
+        version: "1.3.0",
+        status: "active",
+        impact_level: "moderate",
+        provisional_impact_level: "moderate",
+      },
+      current_revision: {
+        revision_id: "10000000-0000-4000-8000-000000000004",
+        version: 3,
+        status: "working",
+        content_sha256: "c".repeat(64),
+        created_at: "2026-07-27T12:00:00Z",
+        content: {
+          facts: [
+            {
+              key: "system.system_definition_status",
+              value: "stale",
+              provenance: "isso_entered",
+              evidence: [],
+              state: "active",
+            },
+          ],
+          sections: [
+            {
+              key: "system.authorization_boundary",
+              title: "Authorization Boundary",
+              content: JSON.stringify({
+                narrative: "The boundary includes all production hosts.",
+                diagram_links: [
+                  {
+                    artifact_id: artifactId,
+                    locator: { page: 1 },
+                    label: "Boundary diagram",
+                  },
+                ],
+              }),
+              state: "edited",
+              evidence: [],
+            },
+            {
+              key: "system.components",
+              title: "Components",
+              content: JSON.stringify({
+                components: [
+                  {
+                    component_id: "web",
+                    name: "Web tier",
+                    purpose: "Public UI",
+                    placement: "inside",
+                    evidence: [],
+                  },
+                ],
+              }),
+              state: "edited",
+              evidence: [],
+            },
+            {
+              key: "system.interconnections",
+              title: "Interconnections",
+              content: JSON.stringify({
+                interconnections: [
+                  {
+                    interconnection_id: "ic-1",
+                    connected_organization: "Partner agency",
+                    connected_system: "Identity broker",
+                    direction: "inbound",
+                    data_types: ["authentication"],
+                    interface_protocol: "HTTPS",
+                    connection_owner: "System owner",
+                    agreement_type: "ISA",
+                    agreement_id: "",
+                    agreement_status: "",
+                    agreement_expiration: "",
+                    boundary_protections: "TLS and IP allowlisting",
+                    evidence: [],
+                  },
+                ],
+              }),
+              state: "edited",
+              evidence: [],
+            },
+          ],
+          controls: [],
+          questions: [],
+        },
+      },
+      evidence: [],
+      approvals: [],
+      agent_patches: [],
+      requirements: [],
+      satisfied_requirement_ids: [],
+      metrics: {},
+    });
+
+    expect(workspace.systemDefinition.status).toBe("stale");
+    expect(workspace.systemDefinition.boundaryNarrative).toContain(
+      "production hosts",
+    );
+    expect(workspace.systemDefinition.diagramLinks).toEqual([
+      {
+        artifactId,
+        locator: { page: 1 },
+        label: "Boundary diagram",
+      },
+    ]);
+    expect(workspace.systemDefinition.components[0]?.name).toBe("Web tier");
+    expect(
+      workspace.systemDefinition.interconnections[0]?.connectedSystem,
+    ).toBe("Identity broker");
+  });
 });
 
 const baseEnvelope = {
@@ -201,6 +355,61 @@ const baseEnvelope = {
   satisfied_requirement_ids: [],
   metrics: {},
 };
+
+describe("mapSystemDefinition", () => {
+  it("returns empty defaults when structured sections are absent", () => {
+    expect(mapSystemDefinition([], [])).toEqual({
+      status: null,
+      boundaryNarrative: "",
+      diagramLinks: [],
+      components: [],
+      interconnections: [],
+    });
+  });
+});
+
+describe("saveSspSystemDefinition", () => {
+  it("posts structured system definition payloads", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(baseEnvelope), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { saveSspSystemDefinition } = await import("./sspWorkspace");
+    await saveSspSystemDefinition(session, workspace, {
+      boundaryNarrative:
+        "The authorization boundary includes all production application hosts.",
+      diagramLinks: [],
+      components: confirmedSystemDefinition.components,
+      interconnections: confirmedSystemDefinition.interconnections,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "/api/v1/ssp-workspaces/10000000-0000-4000-8000-000000000001/system-definition",
+    );
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      expected_revision_id: workspace.revisionId,
+      boundary_narrative:
+        "The authorization boundary includes all production application hosts.",
+      components: [
+        expect.objectContaining({ name: "Web tier", placement: "inside" }),
+      ],
+      interconnections: [
+        expect.objectContaining({
+          connected_system: "Identity broker",
+          direction: "inbound",
+        }),
+      ],
+    });
+
+    vi.unstubAllGlobals();
+  });
+});
 
 describe("mapAgencyDocxRenders", () => {
   it("maps agency docx render metadata and nested exceptions", () => {
@@ -387,6 +596,7 @@ const workspace: SspWorkspace = {
   questions: [],
   patches: [],
   agencyDocxRenders: [],
+  systemDefinition: confirmedSystemDefinition,
 };
 
 describe("agency docx render API helpers", () => {

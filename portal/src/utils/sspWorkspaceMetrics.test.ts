@@ -3,6 +3,39 @@ import type { SspWorkspace } from "@/sspWorkspaceTypes";
 import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
 import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
 
+const confirmedSystemDefinition = {
+  status: "confirmed" as const,
+  boundaryNarrative:
+    "The authorization boundary includes all production application hosts.",
+  diagramLinks: [],
+  components: [
+    {
+      componentId: "web",
+      name: "Web tier",
+      purpose: "Public UI",
+      placement: "inside" as const,
+      evidence: [],
+    },
+  ],
+  interconnections: [
+    {
+      interconnectionId: "ic-1",
+      connectedOrganization: "Partner agency",
+      connectedSystem: "Identity broker",
+      direction: "inbound" as const,
+      dataTypes: ["authentication"],
+      interfaceProtocol: "HTTPS",
+      connectionOwner: "System owner",
+      agreementType: "ISA",
+      agreementId: "",
+      agreementStatus: "",
+      agreementExpiration: "",
+      boundaryProtections: "TLS and IP allowlisting",
+      evidence: [],
+    },
+  ],
+};
+
 function workspaceFixture(): SspWorkspace {
   return {
     id: "workspace-1",
@@ -135,6 +168,7 @@ function workspaceFixture(): SspWorkspace {
     ],
     patches: [],
     agencyDocxRenders: [],
+    systemDefinition: confirmedSystemDefinition,
   };
 }
 
@@ -158,6 +192,8 @@ describe("calculateSspWorkspaceMetrics", () => {
       requiredItemsResolved: true,
       controlsResolved: true,
       agentControlsGrounded: true,
+      systemDefinitionConfirmed: true,
+      systemDefinitionStale: false,
       reviewable: true,
     });
   });
@@ -204,6 +240,34 @@ describe("calculateSspWorkspaceMetrics", () => {
     const metrics = calculateSspWorkspaceMetrics(workspace);
 
     expect(metrics.agentControlsGrounded).toBe(false);
+    expect(metrics.reviewable).toBe(false);
+  });
+
+  it("is not reviewable when system definition is unconfirmed", () => {
+    const workspace = workspaceFixture();
+    workspace.systemDefinition = {
+      ...confirmedSystemDefinition,
+      status: "unconfirmed",
+    };
+
+    const metrics = calculateSspWorkspaceMetrics(workspace);
+
+    expect(metrics.systemDefinitionConfirmed).toBe(false);
+    expect(metrics.systemDefinitionStale).toBe(false);
+    expect(metrics.reviewable).toBe(false);
+  });
+
+  it("is not reviewable when system definition is stale", () => {
+    const workspace = workspaceFixture();
+    workspace.systemDefinition = {
+      ...confirmedSystemDefinition,
+      status: "stale",
+    };
+
+    const metrics = calculateSspWorkspaceMetrics(workspace);
+
+    expect(metrics.systemDefinitionConfirmed).toBe(false);
+    expect(metrics.systemDefinitionStale).toBe(true);
     expect(metrics.reviewable).toBe(false);
   });
 });

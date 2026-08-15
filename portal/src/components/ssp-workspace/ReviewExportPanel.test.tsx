@@ -47,6 +47,14 @@ const workspace: SspWorkspace = {
   questions: [],
   patches: [],
   agencyDocxRenders: [],
+  systemDefinition: {
+    status: "confirmed",
+    boundaryNarrative:
+      "The authorization boundary includes all production application hosts.",
+    diagramLinks: [],
+    components: [],
+    interconnections: [],
+  },
 };
 
 function metricsFixture(approved: boolean): SspWorkspaceMetrics {
@@ -68,6 +76,8 @@ function metricsFixture(approved: boolean): SspWorkspaceMetrics {
     agentControlsGrounded: true,
     categorizationConfirmed: true,
     categorizationStale: false,
+    systemDefinitionConfirmed: true,
+    systemDefinitionStale: false,
     reviewable: true,
   };
 }
@@ -123,6 +133,51 @@ describe("ReviewExportPanel", () => {
     expect(
       screen.getByText(
         "Schema-checked draft; not qualified/customer-ready.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows stale system definition messaging before approve", () => {
+    render(
+      <ReviewExportPanel
+        workspace={workspace}
+        metrics={{
+          ...metricsFixture(false),
+          systemDefinitionConfirmed: false,
+          systemDefinitionStale: true,
+          reviewable: false,
+        }}
+        onApprove={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Re-confirm the system definition after structured boundary, component, or interconnection edits before approving.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Approve working content" }),
+    ).toBeDisabled();
+  });
+
+  it("shows unconfirmed system definition messaging before approve", () => {
+    render(
+      <ReviewExportPanel
+        workspace={workspace}
+        metrics={{
+          ...metricsFixture(false),
+          systemDefinitionConfirmed: false,
+          systemDefinitionStale: false,
+          reviewable: false,
+        }}
+        onApprove={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Confirm the authorization boundary, component inventory, and interconnection register before approving.",
       ),
     ).toBeInTheDocument();
   });

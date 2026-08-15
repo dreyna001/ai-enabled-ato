@@ -20,6 +20,7 @@ import {
   saveSspCategorization,
   saveSspControl,
   saveSspSection,
+  saveSspSystemDefinition,
   uploadSspEvidence,
   type SspProfile,
 } from "@/api/sspWorkspace";
@@ -238,6 +239,10 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           onSaveCategorization: (change) =>
             void run((current) =>
               saveSspCategorization(session, current, change),
+            ),
+          onSaveSystemDefinition: (change) =>
+            void run((current) =>
+              saveSspSystemDefinition(session, current, change),
             ),
           onAskAgent: (context, message) =>
             void run((current) =>

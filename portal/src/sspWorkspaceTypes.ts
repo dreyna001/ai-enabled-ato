@@ -160,6 +160,66 @@ export type SystemCategorization = {
   confirmed: boolean;
 };
 
+export type SystemDefinitionStatus = "unconfirmed" | "confirmed" | "stale";
+
+export type BoundaryPlacement = "inside" | "outside" | "crossing";
+
+export type InterconnectionDirection = "inbound" | "outbound" | "bidirectional";
+
+export type SystemDefinitionEvidenceRef = {
+  artifactId: string;
+  locator: Record<string, unknown>;
+};
+
+export type SystemDefinitionDiagramLink = SystemDefinitionEvidenceRef & {
+  label?: string;
+};
+
+export type SystemDefinitionComponent = {
+  componentId: string;
+  name: string;
+  purpose: string;
+  placement: BoundaryPlacement;
+  evidence: SystemDefinitionEvidenceRef[];
+};
+
+export type SystemDefinitionInterconnection = {
+  interconnectionId: string;
+  connectedOrganization: string;
+  connectedSystem: string;
+  direction: InterconnectionDirection;
+  dataTypes: string[];
+  interfaceProtocol: string;
+  connectionOwner: string;
+  agreementType: string;
+  agreementId: string;
+  agreementStatus: string;
+  agreementExpiration: string;
+  boundaryProtections: string;
+  evidence: SystemDefinitionEvidenceRef[];
+};
+
+export type SystemDefinition = {
+  status: SystemDefinitionStatus | null;
+  boundaryNarrative: string;
+  diagramLinks: SystemDefinitionDiagramLink[];
+  components: SystemDefinitionComponent[];
+  interconnections: SystemDefinitionInterconnection[];
+};
+
+export type SystemDefinitionChange = {
+  boundaryNarrative: string;
+  diagramLinks: SystemDefinitionDiagramLink[];
+  components: SystemDefinitionComponent[];
+  interconnections: SystemDefinitionInterconnection[];
+};
+
+export const STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS = new Set([
+  "system.authorization_boundary",
+  "system.components",
+  "system.interconnections",
+]);
+
 export type SspWorkspace = {
   id: string;
   name: string;
@@ -168,6 +228,7 @@ export type SspWorkspace = {
   impactLevel: string;
   provisionalImpactLevel: ImpactLevel;
   categorization: SystemCategorization;
+  systemDefinition: SystemDefinition;
   authorizationPath: string;
   profile: ProfileSummary;
   controlResponse: ControlResponseOptions;
@@ -222,6 +283,7 @@ export type SspWorkspaceActions = {
   onSaveControl?: (change: ControlStatementChange) => void;
   onAnswerQuestion?: (change: QuestionAnswer) => void;
   onSaveCategorization?: (change: CategorizationChange) => void;
+  onSaveSystemDefinition?: (change: SystemDefinitionChange) => void;
   onAskAgent?: (context: AgentContext, message: string) => void;
   onApplyPatch?: (patchId: string) => void;
   onRejectPatch?: (patchId: string) => void;

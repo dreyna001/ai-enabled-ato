@@ -3,6 +3,7 @@ import type {
   EvidenceArtifact,
   SspSection,
   SspWorkspace,
+  SystemDefinition,
 } from "@/sspWorkspaceTypes";
 
 const SCREENSHOT_MEDIA_TYPES = new Set([
@@ -57,6 +58,19 @@ function satisfiedRequiredIds(sections: SspSection[]): Set<string> {
   );
 }
 
+/** Mirror backend approval gate for structured system definition status. */
+export function systemDefinitionConfirmed(
+  systemDefinition: SystemDefinition,
+): boolean {
+  return systemDefinition.status === "confirmed";
+}
+
+export function systemDefinitionStale(
+  systemDefinition: SystemDefinition,
+): boolean {
+  return systemDefinition.status === "stale";
+}
+
 export type SspWorkspaceMetrics = {
   evidence: number;
   processedEvidence: number;
@@ -75,6 +89,8 @@ export type SspWorkspaceMetrics = {
   agentControlsGrounded: boolean;
   categorizationConfirmed: boolean;
   categorizationStale: boolean;
+  systemDefinitionConfirmed: boolean;
+  systemDefinitionStale: boolean;
   reviewable: boolean;
 };
 
@@ -91,6 +107,7 @@ export function calculateSspWorkspaceMetrics({
   approvedContentHash,
   controlResponse,
   categorization,
+  systemDefinition,
 }: Pick<
   SspWorkspace,
   | "requirements"
@@ -105,6 +122,7 @@ export function calculateSspWorkspaceMetrics({
   | "approvedContentHash"
   | "controlResponse"
   | "categorization"
+  | "systemDefinition"
 >): SspWorkspaceMetrics {
   const required = requirements.filter((requirement) => requirement.required);
   const satisfiedIds = satisfiedRequiredIds(sections);
@@ -143,6 +161,8 @@ export function calculateSspWorkspaceMetrics({
       controlResponse.evidenceRequiredForAgentStatement,
     ),
   );
+  const definitionConfirmed = systemDefinitionConfirmed(systemDefinition);
+  const definitionStale = systemDefinitionStale(systemDefinition);
 
   const categorizationConfirmed = categorization.status === "confirmed";
   const categorizationStale = categorization.status === "stale";
@@ -182,6 +202,8 @@ export function calculateSspWorkspaceMetrics({
     agentControlsGrounded,
     categorizationConfirmed,
     categorizationStale,
+    systemDefinitionConfirmed: definitionConfirmed,
+    systemDefinitionStale: definitionStale,
     reviewable:
       processingJobsTerminal &&
       requiredItemsResolved &&
@@ -189,6 +211,8 @@ export function calculateSspWorkspaceMetrics({
       agentControlsGrounded &&
       categorizationConfirmed &&
       !categorizationStale &&
+      definitionConfirmed &&
+      !definitionStale &&
       revisionSaved &&
       internallyConsistent,
   };

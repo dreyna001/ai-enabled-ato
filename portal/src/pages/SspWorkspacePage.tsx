@@ -6,6 +6,7 @@ import {
   FolderOpen,
   HelpCircle,
   LayoutDashboard,
+  Network,
   Plus,
   ShieldCheck,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { EvidencePanel } from "@/components/ssp-workspace/EvidencePanel";
 import { QuestionsPanel } from "@/components/ssp-workspace/QuestionsPanel";
 import { ReviewExportPanel } from "@/components/ssp-workspace/ReviewExportPanel";
 import { SspDocumentPanel } from "@/components/ssp-workspace/SspDocumentPanel";
+import { SystemDefinitionPanel } from "@/components/ssp-workspace/SystemDefinitionPanel";
 import { WorkspaceOverview } from "@/components/ssp-workspace/WorkspaceOverview";
 import {
   WorkspaceEmptyState,
@@ -30,11 +32,13 @@ import type {
   SspWorkspace,
   SspWorkspaceActions,
 } from "@/sspWorkspaceTypes";
+import { STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS } from "@/sspWorkspaceTypes";
 import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
 
 type WorkspaceView =
   | "overview"
   | "evidence"
+  | "system-definition"
   | "ssp"
   | "controls"
   | "questions"
@@ -61,6 +65,7 @@ const NAV_ITEMS: Array<{
 }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "evidence", label: "Intake & evidence", icon: FileStack },
+  { id: "system-definition", label: "System definition", icon: Network },
   { id: "ssp", label: "SSP document", icon: FileText },
   { id: "controls", label: "Controls", icon: ShieldCheck },
   { id: "questions", label: "Questions", icon: HelpCircle },
@@ -94,8 +99,11 @@ function SspWorkspaceSuccess({
   actionsBusy?: boolean;
 }) {
   const [view, setView] = useState<WorkspaceView>(initialView);
+  const documentSections = workspace.sections.filter(
+    (section) => !STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS.has(section.id),
+  );
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
-    workspace.sections[0]?.id ?? null,
+    documentSections[0]?.id ?? null,
   );
   const [selectedControlId, setSelectedControlId] = useState<string | null>(
     workspace.controls.find(
@@ -237,9 +245,16 @@ function SspWorkspaceSuccess({
               removalAllowed={evidenceRemovalAllowed}
             />
           ) : null}
+          {view === "system-definition" ? (
+            <SystemDefinitionPanel
+              systemDefinition={workspace.systemDefinition}
+              evidence={workspace.evidence}
+              onSave={actions.onSaveSystemDefinition}
+            />
+          ) : null}
           {view === "ssp" ? (
             <SspDocumentPanel
-              sections={workspace.sections}
+              sections={documentSections}
               selectedSectionId={selectedSectionId}
               onSelectSection={setSelectedSectionId}
               onSave={actions.onSaveSection}

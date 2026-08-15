@@ -112,6 +112,38 @@ function workspaceFixture(): SspWorkspace {
       },
     ],
     agencyDocxRenders: [],
+    systemDefinition: {
+      status: "confirmed",
+      boundaryNarrative:
+        "The authorization boundary includes all production application hosts.",
+      diagramLinks: [],
+      components: [
+        {
+          componentId: "web",
+          name: "Web tier",
+          purpose: "Public UI",
+          placement: "inside",
+          evidence: [],
+        },
+      ],
+      interconnections: [
+        {
+          interconnectionId: "ic-1",
+          connectedOrganization: "Partner agency",
+          connectedSystem: "Identity broker",
+          direction: "inbound",
+          dataTypes: ["authentication"],
+          interfaceProtocol: "HTTPS",
+          connectionOwner: "System owner",
+          agreementType: "ISA",
+          agreementId: "",
+          agreementStatus: "",
+          agreementExpiration: "",
+          boundaryProtections: "TLS and IP allowlisting",
+          evidence: [],
+        },
+      ],
+    },
   };
 }
 
@@ -446,6 +478,35 @@ describe("SspWorkspacePage", () => {
     expect(
       screen.getByText("Evidence cannot be removed after analysis has started."),
     ).toBeInTheDocument();
+  });
+
+  it("opens the system definition editor and forwards confirmation", () => {
+    const onSaveSystemDefinition = vi.fn();
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspaceFixture()}
+        initialView="system-definition"
+        actions={{ onSaveSystemDefinition }}
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("main")).getByRole("button", {
+        name: "Confirm system definition",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByRole("main")).getByRole("button", {
+        name: "Confirm system definition",
+      }),
+    );
+    expect(onSaveSystemDefinition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boundaryNarrative:
+          "The authorization boundary includes all production application hosts.",
+      }),
+    );
   });
 
   it("shows agency template upload only after ISSO approval on review view", () => {

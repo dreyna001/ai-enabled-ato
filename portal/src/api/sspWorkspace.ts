@@ -11,6 +11,13 @@ import type {
   ControlStatementChange,
   QuestionAnswer,
   SspSectionChange,
+  SystemDefinition,
+  SystemDefinitionChange,
+  SystemDefinitionComponent,
+  SystemDefinitionDiagramLink,
+  SystemDefinitionEvidenceRef,
+  SystemDefinitionInterconnection,
+  SystemDefinitionStatus,
   SspWorkspace,
 } from "@/sspWorkspaceTypes";
 import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
@@ -301,6 +308,171 @@ export function mapAgencyDocxRenders(raw: unknown): AgencyDocxRender[] {
   });
 }
 
+function parseJsonObject(content: string): Record<string, unknown> | null {
+  if (!content.trim()) return null;
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseSystemDefinitionEvidenceRef(
+  raw: unknown,
+): SystemDefinitionEvidenceRef | null {
+  const item = record(raw);
+  const artifactId = text(item.artifact_id);
+  const locator = record(item.locator);
+  if (!artifactId || Object.keys(locator).length === 0) return null;
+  return { artifactId, locator };
+}
+
+function parseSystemDefinitionComponent(raw: unknown): SystemDefinitionComponent | null {
+  const item = record(raw);
+  const name = text(item.name);
+  const purpose = text(item.purpose);
+  const placement = text(item.placement);
+  if (!name || !purpose) return null;
+  if (placement !== "inside" && placement !== "outside" && placement !== "crossing") {
+    return null;
+  }
+  const evidence = Array.isArray(item.evidence)
+    ? item.evidence.flatMap((entry) => {
+        const mapped = parseSystemDefinitionEvidenceRef(entry);
+        return mapped ? [mapped] : [];
+      })
+    : [];
+  return {
+    componentId: text(item.component_id),
+    name,
+    purpose,
+    placement,
+    evidence,
+  };
+}
+
+function parseSystemDefinitionInterconnection(
+  raw: unknown,
+): SystemDefinitionInterconnection | null {
+  const item = record(raw);
+  const connectedOrganization = text(item.connected_organization);
+  const connectedSystem = text(item.connected_system);
+  const direction = text(item.direction);
+  const interfaceProtocol = text(item.interface_protocol);
+  const connectionOwner = text(item.connection_owner);
+  const agreementType = text(item.agreement_type);
+  const boundaryProtections = text(item.boundary_protections);
+  if (
+    !connectedOrganization ||
+    !connectedSystem ||
+    !interfaceProtocol ||
+    !connectionOwner ||
+    !agreementType ||
+    !boundaryProtections
+  ) {
+    return null;
+  }
+  if (
+    direction !== "inbound" &&
+    direction !== "outbound" &&
+    direction !== "bidirectional"
+  ) {
+    return null;
+  }
+  const dataTypes = Array.isArray(item.data_types)
+    ? item.data_types.map(String).filter((value) => value.trim())
+    : [];
+  const evidence = Array.isArray(item.evidence)
+    ? item.evidence.flatMap((entry) => {
+        const mapped = parseSystemDefinitionEvidenceRef(entry);
+        return mapped ? [mapped] : [];
+      })
+    : [];
+  return {
+    interconnectionId: text(item.interconnection_id),
+    connectedOrganization,
+    connectedSystem,
+    direction,
+    dataTypes,
+    interfaceProtocol,
+    connectionOwner,
+    agreementType,
+    agreementId: text(item.agreement_id),
+    agreementStatus: text(item.agreement_status),
+    agreementExpiration: text(item.agreement_expiration),
+    boundaryProtections,
+    evidence,
+  };
+}
+
+export function mapSystemDefinition(
+  facts: Array<Record<string, unknown>>,
+  sections: Array<Record<string, unknown>>,
+): SystemDefinition {
+  const statusRaw = factValue(facts, "system.system_definition_status");
+  const status: SystemDefinitionStatus | null =
+    statusRaw === "unconfirmed" ||
+    statusRaw === "confirmed" ||
+    statusRaw === "stale"
+      ? statusRaw
+      : null;
+
+  const sectionContent = new Map(
+    sections.map((section) => [text(section.key), text(section.content)]),
+  );
+
+  const boundaryContent =
+    sectionContent.get("system.authorization_boundary") ?? "";
+  const boundaryObject = parseJsonObject(boundaryContent);
+  let boundaryNarrative = "";
+  let diagramLinks: SystemDefinitionDiagramLink[] = [];
+  if (boundaryObject) {
+    boundaryNarrative = text(boundaryObject.narrative);
+    if (Array.isArray(boundaryObject.diagram_links)) {
+      diagramLinks = boundaryObject.diagram_links.flatMap((entry) => {
+        const mapped = parseSystemDefinitionEvidenceRef(entry);
+        if (!mapped) return [];
+        const label = text(record(entry).label);
+        return label ? [{ ...mapped, label }] : [mapped];
+      });
+    }
+  } else if (boundaryContent.trim()) {
+    boundaryNarrative = boundaryContent.trim();
+  }
+
+  const componentsContent = sectionContent.get("system.components") ?? "";
+  const componentsObject = parseJsonObject(componentsContent);
+  const components = componentsObject && Array.isArray(componentsObject.components)
+    ? componentsObject.components.flatMap((entry) => {
+        const mapped = parseSystemDefinitionComponent(entry);
+        return mapped ? [mapped] : [];
+      })
+    : [];
+
+  const interconnectionsContent =
+    sectionContent.get("system.interconnections") ?? "";
+  const interconnectionsObject = parseJsonObject(interconnectionsContent);
+  const interconnections =
+    interconnectionsObject &&
+    Array.isArray(interconnectionsObject.interconnections)
+      ? interconnectionsObject.interconnections.flatMap((entry) => {
+          const mapped = parseSystemDefinitionInterconnection(entry);
+          return mapped ? [mapped] : [];
+        })
+      : [];
+
+  return {
+    status,
+    boundaryNarrative,
+    diagramLinks,
+    components,
+    interconnections,
+  };
+}
+
 export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
   const envelope = envelopeSchema.parse(raw);
   const revision = envelope.current_revision;
@@ -365,6 +537,7 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
           : "unconfirmed",
       confirmed: categorizationConfirmed,
     },
+    systemDefinition: mapSystemDefinition(facts, content.sections),
     authorizationPath: factValue(facts, "system.authorization_path"),
     profile: {
       id: envelope.profile.profile_version_id,
@@ -549,6 +722,63 @@ export function saveSspCategorization(
       confidentiality_evidence: toEvidencePayload(change.confidentialityEvidence),
       integrity_evidence: toEvidencePayload(change.integrityEvidence),
       availability_evidence: toEvidencePayload(change.availabilityEvidence),
+    },
+  );
+}
+
+function mapSystemDefinitionEvidencePayload(
+  evidence: SystemDefinitionEvidenceRef[],
+): Array<{ artifact_id: string; locator: Record<string, unknown> }> {
+  return evidence.map((item) => ({
+    artifact_id: item.artifactId,
+    locator: item.locator,
+  }));
+}
+
+export function saveSspSystemDefinition(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  change: SystemDefinitionChange,
+) {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    "/system-definition",
+    "POST",
+    {
+      expected_revision_id: workspace.revisionId,
+      boundary_narrative: change.boundaryNarrative,
+      diagram_links: change.diagramLinks.map((link) => ({
+        artifact_id: link.artifactId,
+        locator: link.locator,
+        ...(link.label?.trim() ? { label: link.label.trim() } : {}),
+      })),
+      components: change.components.map((component) => ({
+        ...(component.componentId.trim()
+          ? { component_id: component.componentId.trim() }
+          : {}),
+        name: component.name,
+        purpose: component.purpose,
+        placement: component.placement,
+        evidence: mapSystemDefinitionEvidencePayload(component.evidence),
+      })),
+      interconnections: change.interconnections.map((interconnection) => ({
+        ...(interconnection.interconnectionId.trim()
+          ? { interconnection_id: interconnection.interconnectionId.trim() }
+          : {}),
+        connected_organization: interconnection.connectedOrganization,
+        connected_system: interconnection.connectedSystem,
+        direction: interconnection.direction,
+        data_types: interconnection.dataTypes,
+        interface_protocol: interconnection.interfaceProtocol,
+        connection_owner: interconnection.connectionOwner,
+        agreement_type: interconnection.agreementType,
+        agreement_id: interconnection.agreementId,
+        agreement_status: interconnection.agreementStatus,
+        agreement_expiration: interconnection.agreementExpiration,
+        boundary_protections: interconnection.boundaryProtections,
+        evidence: mapSystemDefinitionEvidencePayload(interconnection.evidence),
+      })),
     },
   );
 }

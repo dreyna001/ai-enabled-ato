@@ -68,6 +68,14 @@ function workspace(id: string, name: string): SspWorkspace {
     questions: [],
     patches: [],
     agencyDocxRenders: [],
+    systemDefinition: {
+      status: "confirmed",
+      boundaryNarrative:
+        "The authorization boundary includes all production application hosts.",
+      diagramLinks: [],
+      components: [],
+      interconnections: [],
+    },
   };
 }
 

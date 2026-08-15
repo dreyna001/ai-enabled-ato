@@ -88,6 +88,10 @@ export function ReviewExportPanel({
               satisfied={metrics.agentControlsGrounded}
             />
             <ReviewCheck
+              label="System definition is confirmed"
+              satisfied={metrics.systemDefinitionConfirmed}
+            />
+            <ReviewCheck
               label="Working revision is saved and internally consistent"
               satisfied={workspace.revisionSaved && workspace.internallyConsistent}
             />
@@ -123,6 +127,17 @@ export function ReviewExportPanel({
                     <>
                       Confirm FIPS 199 categorization with supporting evidence
                       on Overview before approving.
+                    </>
+                  ) : !metrics.approved && metrics.systemDefinitionStale ? (
+                    <>
+                      Re-confirm the system definition after structured boundary,
+                      component, or interconnection edits before approving.
+                    </>
+                  ) : !metrics.approved &&
+                    !metrics.systemDefinitionConfirmed ? (
+                    <>
+                      Confirm the authorization boundary, component inventory, and
+                      interconnection register before approving.
                     </>
                   ) : !metrics.approved && !metrics.agentControlsGrounded ? (
                     <>
