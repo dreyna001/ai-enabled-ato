@@ -143,6 +143,7 @@ function workspaceFixture(): SspWorkspace {
           evidence: [],
         },
       ],
+      proposal: null,
     },
     informationTypes: {
       status: "confirmed",

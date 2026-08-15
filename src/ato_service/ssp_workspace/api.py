@@ -56,6 +56,7 @@ from ato_service.ssp_workspace.service import (
     apply_proposed_patch,
     approve_agency_docx_render,
     approve_workspace_revision,
+    analyze_workspace_diagram,
     create_agency_docx_render,
     create_initialized_workspace,
     generate_workspace_draft,
@@ -200,6 +201,11 @@ class SaveSystemDefinitionRequest(ExpectedRevisionRequest):
     diagram_links: tuple[DiagramLinkRequest, ...] = ()
     components: tuple[SystemComponentRequest, ...] = Field(min_length=1)
     interconnections: tuple[InterconnectionRequest, ...] = Field(min_length=1)
+
+
+class AnalyzeDiagramRequest(ExpectedRevisionRequest):
+    artifact_id: uuid.UUID
+    page_number: int = Field(default=1, ge=1, le=500)
 
 
 class InformationTypeMappingRequest(BaseModel):
@@ -548,6 +554,58 @@ def build_ssp_workspace_router() -> APIRouter:
             ProfileBundleError,
             ValueError,
         ) as exc:
+            return _error_response(exc)
+
+    @router.post("/ssp-workspaces/{workspace_id}/diagram-analysis")
+    async def post_diagram_analysis(
+        workspace_id: uuid.UUID,
+        payload: AnalyzeDiagramRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+        blob_store: Annotated[BlobStore, Depends(get_blob_store)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session,
+                principal=principal,
+                workspace_id=workspace_id,
+                roles=("isso",),
+            )
+            await analyze_workspace_diagram(
+                session,
+                workspace_id=workspace_id,
+                expected_revision_id=payload.expected_revision_id,
+                artifact_id=payload.artifact_id,
+                page_number=payload.page_number,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+                blob_store=blob_store,
+                config=runtime_state.config,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(
+                    session, workspace_id=workspace_id
+                ),
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            ProfileBundleError,
+            ValueError,
+        ) as exc:
+            message = str(exc)
+            if "vision model is not configured" in message:
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": "model_not_configured",
+                        "error_code": "model_not_configured",
+                    },
+                )
             return _error_response(exc)
 
     @router.post("/ssp-workspaces/{workspace_id}/information-types")

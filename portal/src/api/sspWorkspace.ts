@@ -478,6 +478,35 @@ export function mapSystemDefinition(
     diagramLinks,
     components,
     interconnections,
+    proposal: mapSystemDefinitionProposal(facts),
+  };
+}
+
+export function mapSystemDefinitionProposal(
+  facts: Array<Record<string, unknown>>,
+): SystemDefinitionProposal | null {
+  const raw = factValue(facts, "system.system_definition_proposal");
+  if (!raw.trim()) return null;
+  const parsed = parseJsonObject(raw);
+  if (!parsed) return null;
+  const conflicts = Array.isArray(parsed.conflicts)
+    ? parsed.conflicts.flatMap((entry) => {
+        const item = record(entry);
+        const field = text(item.field);
+        const diagramValue = text(item.diagram_value);
+        const textValue = text(item.text_value);
+        const note = text(item.note);
+        if (!field || !note) return [];
+        return [{ field, diagramValue, textValue, note }];
+      })
+    : [];
+  const artifactId = text(parsed.artifact_id);
+  if (!artifactId) return null;
+  return {
+    source: text(parsed.source) || "diagram_analysis",
+    artifactId,
+    displayFilename: text(parsed.display_filename),
+    conflicts,
   };
 }
 
@@ -955,6 +984,25 @@ export function saveSspSystemDefinition(
         boundary_protections: interconnection.boundaryProtections,
         evidence: mapSystemDefinitionEvidencePayload(interconnection.evidence),
       })),
+    },
+  );
+}
+
+export function analyzeSspDiagram(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  artifactId: string,
+  pageNumber: number,
+) {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    "/diagram-analysis",
+    "POST",
+    {
+      expected_revision_id: workspace.revisionId,
+      artifact_id: artifactId,
+      page_number: pageNumber,
     },
   );
 }

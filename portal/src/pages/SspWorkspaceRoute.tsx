@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerSspQuestion,
+  analyzeSspDiagram,
   applySspPatch,
   approveSspWorkspace,
   askSspAgent,
@@ -244,6 +245,10 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           onSaveSystemDefinition: (change) =>
             void run((current) =>
               saveSspSystemDefinition(session, current, change),
+            ),
+          onAnalyzeDiagram: (artifactId, pageNumber) =>
+            void run((current) =>
+              analyzeSspDiagram(session, current, artifactId, pageNumber),
             ),
           onSaveInformationTypes: (change) =>
             void run((current) =>

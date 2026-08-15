@@ -1392,6 +1392,135 @@ async def save_system_definition(
     )
 
 
+async def analyze_workspace_diagram(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+    artifact_id: uuid.UUID,
+    page_number: int,
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+    blob_store: Any,
+    config: Any,
+) -> Any:
+    """Analyze one architecture diagram artifact and propose system definition draft."""
+
+    from ato_service.blobs import BlobStore
+    from ato_service.db.models import SspEvidenceArtifact
+    from ato_service.extraction.detect import media_type_for_format
+    from ato_service.extraction.pdf import render_page_png
+    from ato_service.ssp_workspace.diagram_analysis import (
+        DiagramAnalysisError,
+        analyze_architecture_diagram,
+        apply_system_definition_proposal,
+        build_system_definition_from_analysis,
+        collect_text_evidence_context,
+        proposal_metadata_from_analysis,
+    )
+    from ato_service.ssp_workspace.vision import (
+        VisionConfigurationError,
+        build_vision_model_client,
+    )
+
+    if not isinstance(blob_store, BlobStore):
+        raise TypeError("blob_store must be a BlobStore")
+    if page_number < 1:
+        raise ValueError("page_number must be >= 1")
+
+    revision = await _load_exact_current_revision(
+        session, workspace_id=workspace_id, revision_id=expected_revision_id
+    )
+    content = RevisionContent.model_validate(revision.content)
+    artifact = (
+        await session.execute(
+            select(SspEvidenceArtifact).where(
+                SspEvidenceArtifact.workspace_id == workspace_id,
+                SspEvidenceArtifact.evidence_artifact_id == artifact_id,
+                SspEvidenceArtifact.removed_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if artifact is None:
+        raise ValueError("diagram evidence artifact not found")
+    if artifact.status != "processed":
+        raise ValueError("diagram evidence must be processed before analysis")
+
+    payload = _read_blob_bytes(blob_store, artifact.storage_key, artifact.sha256)
+    detected_format = artifact.detected_format or ""
+    locator: dict[str, Any] = {"page": page_number}
+    if detected_format == "pdf":
+        image_bytes = render_page_png(
+            payload,
+            page_number=page_number,
+            limits=config.extraction_limits,
+        )
+        media_type = media_type_for_format("png")
+        locator = {"page": page_number, "kind": "rendered_page"}
+    elif detected_format in {"png", "jpeg", "webp"}:
+        image_bytes = payload
+        media_type = media_type_for_format(detected_format)
+        locator = {"kind": "image", "page": page_number}
+    else:
+        raise ValueError(
+            "diagram analysis requires PNG, JPEG, WebP, or PDF evidence"
+        )
+
+    text_context = collect_text_evidence_context(content, artifact_id=artifact_id)
+    try:
+        vision_client = build_vision_model_client(config)
+    except VisionConfigurationError as exc:
+        raise ValueError("vision model is not configured for diagram analysis") from exc
+
+    try:
+        analysis = await analyze_architecture_diagram(
+            artifact_id=artifact_id,
+            image_bytes=image_bytes,
+            media_type=media_type,
+            text_context=text_context,
+            model=vision_client,
+        )
+    except DiagramAnalysisError as exc:
+        raise ValueError(str(exc)) from exc
+
+    boundary, components, interconnections = build_system_definition_from_analysis(
+        analysis,
+        artifact_id=artifact_id,
+        locator=locator,
+        diagram_label=artifact.display_filename,
+    )
+    metadata = proposal_metadata_from_analysis(
+        analysis,
+        artifact_id=artifact_id,
+        locator=locator,
+        display_filename=artifact.display_filename,
+    )
+    updated = apply_system_definition_proposal(
+        content,
+        boundary=boundary,
+        components=components,
+        interconnections=interconnections,
+        proposal_metadata=metadata,
+    )
+    return await _save_edited_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=expected_revision_id,
+        content=updated,
+        actor_id=actor_id,
+        now=now,
+        audit_hmac_key=audit_hmac_key,
+        action="ssp_diagram_analysis_applied",
+        metadata={
+            "artifact_id": str(artifact_id),
+            "component_count": len(components),
+            "interconnection_count": len(interconnections),
+            "conflict_count": len(analysis.conflicts),
+        },
+    )
+
+
 async def save_information_types(
     session: AsyncSession,
     *,

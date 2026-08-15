@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,18 +116,35 @@ function isComplete(change: SystemDefinitionChange): boolean {
   });
 }
 
+function isDiagramEvidence(artifact: EvidenceArtifact): boolean {
+  if (artifact.state !== "processed") return false;
+  const name = artifact.name.toLowerCase();
+  return (
+    name.endsWith(".png") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".webp") ||
+    name.endsWith(".pdf")
+  );
+}
+
 export function SystemDefinitionPanel({
   systemDefinition,
   evidence,
   onSave,
+  onAnalyzeDiagram,
+  analyzeBusy = false,
 }: {
   systemDefinition: SystemDefinition;
   evidence: EvidenceArtifact[];
   onSave?: (change: SystemDefinitionChange) => void;
+  onAnalyzeDiagram?: (artifactId: string, pageNumber: number) => void;
+  analyzeBusy?: boolean;
 }) {
   const processedEvidence = evidence.filter(
     (artifact) => artifact.state === "processed",
   );
+  const diagramEvidence = processedEvidence.filter(isDiagramEvidence);
   const [values, setValues] = useState<SystemDefinitionChange>({
     boundaryNarrative: systemDefinition.boundaryNarrative,
     diagramLinks: systemDefinition.diagramLinks,
@@ -141,10 +158,31 @@ export function SystemDefinitionPanel({
         : [emptyInterconnection()],
   });
   const [diagramArtifactId, setDiagramArtifactId] = useState(
-    processedEvidence[0]?.id ?? "",
+    diagramEvidence[0]?.id ?? processedEvidence[0]?.id ?? "",
   );
   const [diagramLocator, setDiagramLocator] = useState(DEFAULT_LOCATOR);
   const [diagramLabel, setDiagramLabel] = useState("");
+  const [analyzePageNumber, setAnalyzePageNumber] = useState("1");
+
+  useEffect(() => {
+    setValues({
+      boundaryNarrative: systemDefinition.boundaryNarrative,
+      diagramLinks: systemDefinition.diagramLinks,
+      components:
+        systemDefinition.components.length > 0
+          ? systemDefinition.components
+          : [emptyComponent()],
+      interconnections:
+        systemDefinition.interconnections.length > 0
+          ? systemDefinition.interconnections
+          : [emptyInterconnection()],
+    });
+  }, [
+    systemDefinition.boundaryNarrative,
+    systemDefinition.components,
+    systemDefinition.diagramLinks,
+    systemDefinition.interconnections,
+  ]);
   const complete = isComplete(values);
 
   const updateComponent = (
@@ -216,6 +254,74 @@ export function SystemDefinitionPanel({
               Save boundary narrative, at least one component, and at least one
               interconnection to confirm the system definition.
             </p>
+          ) : null}
+          {systemDefinition.proposal ? (
+            <div className="space-y-2 rounded-sm border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-muted-foreground">
+              <p>
+                Draft generated from{" "}
+                <span className="font-medium text-foreground">
+                  {systemDefinition.proposal.displayFilename || "diagram"}
+                </span>
+                . Review every field before confirming.
+              </p>
+              {systemDefinition.proposal.conflicts.length > 0 ? (
+                <ul className="list-disc space-y-1 pl-4">
+                  {systemDefinition.proposal.conflicts.map((conflict) => (
+                    <li key={`${conflict.field}-${conflict.note}`}>
+                      <span className="font-medium text-foreground">
+                        {conflict.field}:
+                      </span>{" "}
+                      diagram shows {conflict.diagramValue || "—"}; text says{" "}
+                      {conflict.textValue || "—"}. {conflict.note}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          {onAnalyzeDiagram && diagramEvidence.length > 0 ? (
+            <div className="flex flex-wrap items-end gap-2 rounded-sm border bg-muted/20 p-3">
+              <label className="text-sm">
+                <span className="mb-1 block font-medium">Analyze diagram</span>
+                <select
+                  aria-label="Diagram artifact"
+                  className="w-full min-w-48 rounded-sm border bg-background px-2 py-1.5 text-sm"
+                  value={diagramArtifactId}
+                  onChange={(event) => setDiagramArtifactId(event.target.value)}
+                >
+                  {diagramEvidence.map((artifact) => (
+                    <option key={artifact.id} value={artifact.id}>
+                      {artifact.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium">PDF page</span>
+                <Input
+                  aria-label="Diagram page number"
+                  className="w-20"
+                  inputMode="numeric"
+                  value={analyzePageNumber}
+                  onChange={(event) => setAnalyzePageNumber(event.target.value)}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={analyzeBusy || !diagramArtifactId}
+                onClick={() => {
+                  const pageNumber = Number.parseInt(analyzePageNumber, 10);
+                  if (!diagramArtifactId || !Number.isFinite(pageNumber) || pageNumber < 1) {
+                    return;
+                  }
+                  onAnalyzeDiagram(diagramArtifactId, pageNumber);
+                }}
+              >
+                {analyzeBusy ? "Analyzing…" : "Analyze from diagram"}
+              </Button>
+            </div>
           ) : null}
 
           <label className="block text-sm">

@@ -9,6 +9,7 @@ const systemDefinition: SystemDefinition = {
   diagramLinks: [],
   components: [],
   interconnections: [],
+  proposal: null,
 };
 
 afterEach(cleanup);
@@ -100,5 +101,27 @@ describe("SystemDefinitionPanel", () => {
         ],
       }),
     );
+  });
+
+  it("calls analyze handler for diagram evidence", () => {
+    const onAnalyzeDiagram = vi.fn();
+    render(
+      <SystemDefinitionPanel
+        systemDefinition={systemDefinition}
+        evidence={[
+          {
+            id: "artifact-1",
+            name: "architecture.png",
+            mediaType: "image/png",
+            state: "processed",
+            uploadedAt: "2026-07-27",
+          },
+        ]}
+        onAnalyzeDiagram={onAnalyzeDiagram}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Analyze from diagram" }));
+    expect(onAnalyzeDiagram).toHaveBeenCalledWith("artifact-1", 1);
   });
 });

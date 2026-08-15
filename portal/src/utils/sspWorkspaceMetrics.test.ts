@@ -55,6 +55,7 @@ const confirmedSystemDefinition = {
       evidence: [],
     },
   ],
+  proposal: null,
 };
 
 function workspaceFixture(): SspWorkspace {

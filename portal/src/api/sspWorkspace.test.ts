@@ -46,6 +46,7 @@ const confirmedSystemDefinition = {
       evidence: [],
     },
   ],
+  proposal: null,
 };
 
 describe("mapWorkspaceEnvelope", () => {
@@ -518,6 +519,7 @@ describe("mapSystemDefinition", () => {
       diagramLinks: [],
       components: [],
       interconnections: [],
+      proposal: null,
     });
   });
 });

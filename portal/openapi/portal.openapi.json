@@ -1,6 +1,34 @@
 {
   "components": {
     "schemas": {
+      "AnalyzeDiagramRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "format": "uuid",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "expected_revision_id": {
+            "format": "uuid",
+            "title": "Expected Revision Id",
+            "type": "string"
+          },
+          "page_number": {
+            "default": 1,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision_id",
+          "artifact_id"
+        ],
+        "title": "AnalyzeDiagramRequest",
+        "type": "object"
+      },
       "AnswerQuestionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -312,6 +340,97 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "InformationTypeMappingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "adjusted_availability": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "moderate",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjusted Availability"
+          },
+          "adjusted_confidentiality": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "moderate",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjusted Confidentiality"
+          },
+          "adjusted_integrity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "moderate",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjusted Integrity"
+          },
+          "adjustment_rationale": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Adjustment Rationale",
+            "type": "string"
+          },
+          "catalog_identifier": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Catalog Identifier",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "entry_id": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EvidenceLinkRequest"
+            },
+            "title": "Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "catalog_identifier",
+          "description"
+        ],
+        "title": "InformationTypeMappingRequest",
+        "type": "object"
+      },
       "InterconnectionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -542,6 +661,30 @@
           "availability_evidence"
         ],
         "title": "SaveCategorizationRequest",
+        "type": "object"
+      },
+      "SaveInformationTypesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision_id": {
+            "format": "uuid",
+            "title": "Expected Revision Id",
+            "type": "string"
+          },
+          "information_types": {
+            "items": {
+              "$ref": "#/components/schemas/InformationTypeMappingRequest"
+            },
+            "minItems": 1,
+            "title": "Information Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_revision_id",
+          "information_types"
+        ],
+        "title": "SaveInformationTypesRequest",
         "type": "object"
       },
       "SaveSystemDefinitionRequest": {
@@ -1350,6 +1493,25 @@
           }
         },
         "summary": "Post Workspace",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/sp800-60-catalog": {
+      "get": {
+        "operationId": "get_sp800_60_catalog_api_v1_ssp_workspaces_sp800_60_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Sp800 60 Catalog",
         "tags": [
           "SSP Workspaces"
         ]
@@ -2264,6 +2426,89 @@
         ]
       }
     },
+    "/ssp-workspaces/{workspace_id}/diagram-analysis": {
+      "post": {
+        "operationId": "post_diagram_analysis_api_v1_ssp_workspaces__workspace_id__diagram_analysis_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeDiagramRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Diagram Analysis",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
     "/ssp-workspaces/{workspace_id}/evidence": {
       "post": {
         "operationId": "post_evidence_api_v1_ssp_workspaces__workspace_id__evidence_post",
@@ -2592,6 +2837,89 @@
           }
         },
         "summary": "Post Generate",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/{workspace_id}/information-types": {
+      "post": {
+        "operationId": "post_information_types_api_v1_ssp_workspaces__workspace_id__information_types_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInformationTypesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Information Types",
         "tags": [
           "SSP Workspaces"
         ]

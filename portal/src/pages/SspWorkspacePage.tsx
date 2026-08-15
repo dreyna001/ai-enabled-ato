@@ -261,6 +261,8 @@ function SspWorkspaceSuccess({
               systemDefinition={workspace.systemDefinition}
               evidence={workspace.evidence}
               onSave={actions.onSaveSystemDefinition}
+              onAnalyzeDiagram={actions.onAnalyzeDiagram}
+              analyzeBusy={actionsBusy}
             />
           ) : null}
           {view === "information-types" ? (

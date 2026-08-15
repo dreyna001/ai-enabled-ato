@@ -54,6 +54,7 @@ const workspace: SspWorkspace = {
     diagramLinks: [],
     components: [],
     interconnections: [],
+    proposal: null,
   },
   informationTypes: {
     status: "confirmed",

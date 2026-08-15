@@ -41,8 +41,8 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
 - [ ] Require the boundary narrative to reference diagram artifact, version, and page or image.
 - [ ] Identify components inside, outside, and crossing the authorization boundary.
 - [ ] Identify trust zones, trust boundaries, shared services, and external services.
-- [ ] Extract labeled nodes, connections, directions, protocols, and data flows from diagrams.
-- [ ] Reconcile diagram-derived facts with text evidence.
+- [x] Extract labeled nodes, connections, directions, protocols, and data flows from diagrams (first slice: `POST /diagram-analysis` on PNG/JPEG/WebP/PDF).
+- [x] Reconcile diagram-derived facts with text evidence (conflict list in proposal; ISSO confirms manually).
 - [ ] Flag conflicts, unreadable diagrams, and low-confidence extraction for review.
 - [ ] Preserve artifact hash and precise image-region or page locators.
 - [ ] Allow manual correction of extracted diagram structure.
@@ -69,7 +69,7 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
 - [ ] Add a provider-neutral diagram-analysis contract for OpenAI, Bedrock, and local models.
 - [ ] Define diagram extraction requirements inside the pinned profile.
 - [ ] Validate structured nodes, edges, trust boundaries, and data flows before persistence.
-- [ ] Add rendered-page vision support for diagrams embedded in PDFs.
+- [x] Add rendered-page vision support for diagrams embedded in PDFs (diagram analysis renders PDF pages via pypdfium2).
 - [ ] Show analysis coverage and failures in the UI.
 - [ ] Never label a diagram **Analyzed** when only file ingestion or OCR completed.
 - [ ] Add synthetic diagram evaluation fixtures and expected graph assertions.

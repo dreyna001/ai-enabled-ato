@@ -205,6 +205,21 @@ export type SystemDefinition = {
   diagramLinks: SystemDefinitionDiagramLink[];
   components: SystemDefinitionComponent[];
   interconnections: SystemDefinitionInterconnection[];
+  proposal: SystemDefinitionProposal | null;
+};
+
+export type SystemDefinitionProposalConflict = {
+  field: string;
+  diagramValue: string;
+  textValue: string;
+  note: string;
+};
+
+export type SystemDefinitionProposal = {
+  source: string;
+  artifactId: string;
+  displayFilename: string;
+  conflicts: SystemDefinitionProposalConflict[];
 };
 
 export type SystemDefinitionChange = {
@@ -338,6 +353,7 @@ export type SspWorkspaceActions = {
   onSaveCategorization?: (change: CategorizationChange) => void;
   onSaveInformationTypes?: (change: InformationTypesChange) => void;
   onSaveSystemDefinition?: (change: SystemDefinitionChange) => void;
+  onAnalyzeDiagram?: (artifactId: string, pageNumber: number) => void;
   onAskAgent?: (context: AgentContext, message: string) => void;
   onApplyPatch?: (patchId: string) => void;
   onRejectPatch?: (patchId: string) => void;

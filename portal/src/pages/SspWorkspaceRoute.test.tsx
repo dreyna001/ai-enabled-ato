@@ -75,6 +75,7 @@ function workspace(id: string, name: string): SspWorkspace {
       diagramLinks: [],
       components: [],
       interconnections: [],
+      proposal: null,
     },
     informationTypes: {
       status: "confirmed",
