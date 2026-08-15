@@ -29,12 +29,12 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
 - [ ] Add profile-defined FIPS 199 categorization fields.
 - [ ] Map system information types to the agency-approved NIST SP 800-60 version.
 - [x] Capture confidentiality, integrity, and availability impact separately.
-- [ ] Require a rationale and evidence references for each impact value.
+- [x] Require a rationale and evidence references for each impact value (confirm gate + export block; profile schema fields still open).
 - [ ] Record information-type adjustments and adjustment rationale.
 - [x] Compute the system high-water mark deterministically.
 - [x] Treat agent output as a proposal until human confirmation.
-- [ ] Mark categorization stale when data types, mission, or boundary change.
-- [ ] Export the information-type mapping, C/I/A rationale, adjustments, and final category.
+- [x] Mark categorization stale when data types, mission, or boundary change.
+- [ ] Export the information-type mapping, C/I/A rationale, adjustments, and final category (C/I/A rationale + evidence exported; SP 800-60 mapping still open).
 
 ## Authorization Boundary and Diagrams
 
