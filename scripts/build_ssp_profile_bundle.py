@@ -209,6 +209,7 @@ def _metadata_version(document: dict[str, Any], *, label: str) -> str:
 
 def _ssp_requirements(*, profile_version: str = PROFILE_VERSION) -> dict[str, Any]:
     structured = profile_version >= "1.3.0"
+    information_type_structured = profile_version >= "1.4.0"
     impact_levels = ["low", "moderate", "high"]
     items = [
         _string_item(
@@ -290,6 +291,8 @@ def _ssp_requirements(*, profile_version: str = PROFILE_VERSION) -> dict[str, An
             "system.data_types",
             "Information Types",
             standard_refs=["table1.system-information-types"],
+            minimum_entries=1 if structured else None,
+            structured_kind="information_type_register" if information_type_structured else None,
         ),
         _string_list_item(
             "system.user_roles",

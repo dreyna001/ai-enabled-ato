@@ -1,0 +1,114 @@
+{
+  "schema_version": "1.0.0",
+  "source_id": "nist-sp-800-60-rev2",
+  "title": "NIST SP 800-60 Rev. 2 Information Types (agency FISMA subset)",
+  "version": "2.0.0",
+  "reference": "https://doi.org/10.6028/NIST.SP.800-60v2r2",
+  "information_types": [
+    {
+      "identifier": "C.3.5.1",
+      "title": "General Support Systems",
+      "confidentiality": "low",
+      "integrity": "low",
+      "availability": "low"
+    },
+    {
+      "identifier": "C.3.5.8",
+      "title": "Human Resources",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "low"
+    },
+    {
+      "identifier": "C.3.5.9",
+      "title": "Payroll",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "D.14.1",
+      "title": "Financial Management — Budget Formulation",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "D.14.2",
+      "title": "Financial Management — Grants",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "D.14.3",
+      "title": "Financial Management — Accounting",
+      "confidentiality": "moderate",
+      "integrity": "high",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "P.1.1",
+      "title": "Privacy — Personally Identifiable Information",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "low"
+    },
+    {
+      "identifier": "P.1.4",
+      "title": "Privacy — Sensitive Personally Identifiable Information",
+      "confidentiality": "high",
+      "integrity": "moderate",
+      "availability": "low"
+    },
+    {
+      "identifier": "U.1.1",
+      "title": "User Productivity — Collaboration and Messaging",
+      "confidentiality": "low",
+      "integrity": "low",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "M.2.3",
+      "title": "Mission Delivery — Case Management",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "M.2.5",
+      "title": "Mission Delivery — Citizen Services",
+      "confidentiality": "moderate",
+      "integrity": "moderate",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "I.2.1",
+      "title": "Infrastructure — Network Operations",
+      "confidentiality": "low",
+      "integrity": "moderate",
+      "availability": "high"
+    },
+    {
+      "identifier": "I.2.2",
+      "title": "Infrastructure — Identity and Access Management",
+      "confidentiality": "moderate",
+      "integrity": "high",
+      "availability": "high"
+    },
+    {
+      "identifier": "S.1.1",
+      "title": "Security Management — Audit and Accountability",
+      "confidentiality": "moderate",
+      "integrity": "high",
+      "availability": "moderate"
+    },
+    {
+      "identifier": "S.1.2",
+      "title": "Security Management — Vulnerability Management",
+      "confidentiality": "moderate",
+      "integrity": "high",
+      "availability": "moderate"
+    }
+  ]
+}

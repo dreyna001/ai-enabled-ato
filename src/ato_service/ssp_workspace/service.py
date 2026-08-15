@@ -477,7 +477,7 @@ async def save_section_edit(
     requirement = profile_policy.sections.get(section_key)
     if requirement is not None and requirement.structured_kind:
         raise WorkspaceProfileValidationError(
-            "structured system definition sections must be saved via /system-definition"
+            "structured SSP sections must be saved via dedicated confirm endpoints"
         )
     updated = edit_section(
         RevisionContent.model_validate(revision.content),
@@ -864,6 +864,19 @@ async def approve_workspace_revision(
     if system_definition_status != "confirmed":
         raise WorkspaceNotReviewableError(
             "system definition must be explicitly confirmed before approval"
+        )
+    from ato_service.ssp_workspace.information_types import (
+        active_information_types_status,
+    )
+
+    information_types_status = active_information_types_status(facts_by_key)
+    if information_types_status == "stale":
+        raise WorkspaceNotReviewableError(
+            "information type mapping must be re-confirmed before approval"
+        )
+    if information_types_status != "confirmed":
+        raise WorkspaceNotReviewableError(
+            "information type mapping must be explicitly confirmed before approval"
         )
     from ato_service.db.models import SspProfileVersion, SspWorkspace
 
@@ -1372,6 +1385,70 @@ async def save_system_definition(
     )
 
 
+async def save_information_types(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+    mappings: tuple[dict[str, Any], ...],
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> Any:
+    """Confirm SP 800-60 information type mappings."""
+
+    from ato_service.ssp_workspace.contracts import EvidenceLink
+    from ato_service.ssp_workspace.information_types import (
+        InformationTypeMapping,
+        apply_information_type_register,
+        resolve_workspace_evidence_links,
+    )
+
+    revision = await _load_exact_current_revision(
+        session, workspace_id=workspace_id, revision_id=expected_revision_id
+    )
+    content = RevisionContent.model_validate(revision.content)
+
+    parsed: list[InformationTypeMapping] = []
+    for raw in mappings:
+        evidence = tuple(
+            EvidenceLink(
+                artifact_id=uuid.UUID(str(item["artifact_id"])),
+                locator=dict(item["locator"]),
+            )
+            for item in raw.get("evidence") or ()
+        )
+        evidence = await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=evidence,
+        )
+        parsed.append(
+            InformationTypeMapping(
+                entry_id=str(raw.get("entry_id") or uuid.uuid4()),
+                catalog_identifier=str(raw.get("catalog_identifier") or ""),
+                description=str(raw.get("description") or ""),
+                adjusted_confidentiality=raw.get("adjusted_confidentiality"),
+                adjusted_integrity=raw.get("adjusted_integrity"),
+                adjusted_availability=raw.get("adjusted_availability"),
+                adjustment_rationale=str(raw.get("adjustment_rationale") or ""),
+                evidence=evidence,
+            )
+        )
+    updated = apply_information_type_register(content, mappings=tuple(parsed))
+    return await _save_edited_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=expected_revision_id,
+        content=updated,
+        actor_id=actor_id,
+        now=now,
+        audit_hmac_key=audit_hmac_key,
+        action="ssp_information_types_confirmed",
+        metadata={"mapping_count": len(parsed)},
+    )
+
+
 async def _save_edited_revision(
     session: AsyncSession,
     *,
@@ -1569,7 +1646,11 @@ def _metric_requirements(profile_row: Any) -> tuple[ProfileRequirement, ...]:
         structured_kind = item.get("structured_kind")
         if structured_kind == "authorization_boundary":
             value_type = "object"
-        elif structured_kind in {"component_inventory", "interconnection_register"}:
+        elif structured_kind in {
+            "component_inventory",
+            "interconnection_register",
+            "information_type_register",
+        }:
             value_type = "array"
         elif item["value_type"] == "string_list":
             value_type = "array"
@@ -1604,15 +1685,22 @@ def _effective_metric_facts(
         if requirement is None or not section.content.strip():
             continue
         if requirement.structured_kind:
-            from ato_service.ssp_workspace.system_definition import (
-                structured_section_metric_value,
-            )
+            if requirement.structured_kind == "information_type_register":
+                from ato_service.ssp_workspace.information_types import (
+                    structured_section_metric_value as information_types_metric_value,
+                )
 
-            value = structured_section_metric_value(
-                section.key,
-                section.content,
-                structured_kind=requirement.structured_kind,
-            )
+                value = information_types_metric_value(section.content)
+            else:
+                from ato_service.ssp_workspace.system_definition import (
+                    structured_section_metric_value,
+                )
+
+                value = structured_section_metric_value(
+                    section.key,
+                    section.content,
+                    structured_kind=requirement.structured_kind,
+                )
             if value is None:
                 continue
         elif requirement.value_type == "array":
@@ -1836,6 +1924,9 @@ async def _approved_export_snapshot(
     from ato_service.ssp_workspace.system_definition import (
         build_system_definition_export_block,
     )
+    from ato_service.ssp_workspace.information_types import (
+        build_information_types_export_block,
+    )
 
     return {
         "workspace_id": str(workspace.workspace_id),
@@ -1883,6 +1974,10 @@ async def _approved_export_snapshot(
         "control_order": [control.control_id for control in resolved_profile.controls],
         "evidence_catalog": evidence_catalog,
         "system_definition": build_system_definition_export_block(
+            sections=section_content,
+            evidence_catalog=evidence_catalog,
+        ),
+        "information_types": build_information_types_export_block(
             sections=section_content,
             evidence_catalog=evidence_catalog,
         ),

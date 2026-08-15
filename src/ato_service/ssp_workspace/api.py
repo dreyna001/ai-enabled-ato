@@ -71,6 +71,7 @@ from ato_service.ssp_workspace.service import (
     restore_workspace_revision,
     save_system_categorization,
     save_system_definition,
+    save_information_types,
     save_control_edit,
     save_question_answer,
     save_section_edit,
@@ -199,6 +200,23 @@ class SaveSystemDefinitionRequest(ExpectedRevisionRequest):
     diagram_links: tuple[DiagramLinkRequest, ...] = ()
     components: tuple[SystemComponentRequest, ...] = Field(min_length=1)
     interconnections: tuple[InterconnectionRequest, ...] = Field(min_length=1)
+
+
+class InformationTypeMappingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entry_id: str = Field(default="", max_length=128)
+    catalog_identifier: str = Field(min_length=1, max_length=64)
+    description: str = Field(min_length=1, max_length=4_000)
+    adjusted_confidentiality: Literal["low", "moderate", "high"] | None = None
+    adjusted_integrity: Literal["low", "moderate", "high"] | None = None
+    adjusted_availability: Literal["low", "moderate", "high"] | None = None
+    adjustment_rationale: str = Field(default="", max_length=4_000)
+    evidence: tuple[EvidenceLinkRequest, ...] = ()
+
+
+class SaveInformationTypesRequest(ExpectedRevisionRequest):
+    information_types: tuple[InformationTypeMappingRequest, ...] = Field(min_length=1)
 
 
 class ProposePatchRequest(ExpectedRevisionRequest):
@@ -417,6 +435,15 @@ def build_ssp_workspace_router() -> APIRouter:
         except (AuthorizationDeniedError, ProfilePersistenceError) as exc:
             return _error_response(exc)
 
+    @router.get("/ssp-workspaces/sp800-60-catalog")
+    async def get_sp800_60_catalog(
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+    ) -> Response:
+        from ato_service.ssp_workspace.sp800_60_catalog import catalog_document_for_api
+
+        _ = principal
+        return JSONResponse(status_code=200, content=catalog_document_for_api())
+
     @router.get("/ssp-workspaces")
     async def get_workspaces(
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
@@ -504,6 +531,46 @@ def build_ssp_workspace_router() -> APIRouter:
                 ),
                 interconnections=tuple(
                     item.model_dump(mode="json") for item in payload.interconnections
+                ),
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(
+                    session, workspace_id=workspace_id
+                ),
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            ProfileBundleError,
+            ValueError,
+        ) as exc:
+            return _error_response(exc)
+
+    @router.post("/ssp-workspaces/{workspace_id}/information-types")
+    async def post_information_types(
+        workspace_id: uuid.UUID,
+        payload: SaveInformationTypesRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session,
+                principal=principal,
+                workspace_id=workspace_id,
+                roles=("isso",),
+            )
+            await save_information_types(
+                session,
+                workspace_id=workspace_id,
+                expected_revision_id=payload.expected_revision_id,
+                mappings=tuple(
+                    item.model_dump(mode="json") for item in payload.information_types
                 ),
                 actor_id=principal.actor_id,
                 now=_utc_now(),

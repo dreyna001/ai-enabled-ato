@@ -318,7 +318,7 @@ async def ensure_builtin_profile(
         project_root
         / "reference"
         / "ssp_profiles"
-        / "agency-fisma-nist-sp800-53-rev5-1.3.0"
+        / "agency-fisma-nist-sp800-53-rev5-1.4.0"
     )
     document = serialize_profile_bundle(bundle)
     canonical = json.dumps(

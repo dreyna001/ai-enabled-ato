@@ -72,6 +72,9 @@ def render_sp800_18_docx(document: DocxDocument, snapshot: dict[str, Any]) -> No
         if requirement_id == "table1.information-exchanges-summary":
             _render_interconnection_register(document, snapshot)
             continue
+        if requirement_id == "table1.system-information-types":
+            _render_information_types_table(document, snapshot)
+            continue
 
         item_ids = entry.get("item_ids") or []
         for item_id in item_ids:
@@ -431,6 +434,48 @@ def _render_interconnection_register(
             document.add_paragraph(
                 f"Evidence: {_format_object_evidence_links(evidence, catalog)}"
             )
+
+
+def _information_types_block(snapshot: dict[str, Any]) -> dict[str, Any]:
+    block = snapshot.get("information_types")
+    if isinstance(block, dict):
+        return block
+    return {}
+
+
+def _render_information_types_table(
+    document: DocxDocument,
+    snapshot: dict[str, Any],
+) -> None:
+    entries = _information_types_block(snapshot).get("entries") or []
+    if not entries:
+        item_values = _item_value_lookup(snapshot)
+        document.add_paragraph(_format_item_text(item_values.get("system.data_types")))
+        return
+    table = document.add_table(rows=1, cols=7)
+    table.style = "Table Grid"
+    header = table.rows[0].cells
+    header[0].text = "Information Type"
+    header[1].text = "Description"
+    header[2].text = "Confidentiality"
+    header[3].text = "Integrity"
+    header[4].text = "Availability"
+    header[5].text = "Adjustment Rationale"
+    header[6].text = "Evidence"
+    catalog = snapshot.get("evidence_catalog") or {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        row = table.add_row().cells
+        title = entry.get("catalog_title") or entry.get("catalog_identifier")
+        row[0].text = _format_item_text(title)
+        row[1].text = _format_item_text(entry.get("description"))
+        row[2].text = _format_item_text(entry.get("effective_confidentiality"))
+        row[3].text = _format_item_text(entry.get("effective_integrity"))
+        row[4].text = _format_item_text(entry.get("effective_availability"))
+        row[5].text = _format_item_text(entry.get("adjustment_rationale"))
+        evidence = entry.get("evidence") or []
+        row[6].text = _format_object_evidence_links(evidence, catalog)
 
 
 def _format_object_evidence_links(

@@ -1084,6 +1084,18 @@ def _validate_section_content_against_policy(
             except ValueError as exc:
                 raise GenerationContractError(str(exc), failure_kind="schema") from exc
             return
+        if requirement.structured_kind == "information_type_register":
+            from ato_service.ssp_workspace.information_types import (
+                parse_information_type_register,
+                validate_information_type_register,
+            )
+
+            try:
+                mappings = parse_information_type_register(content)
+                validate_information_type_register(mappings)
+            except ValueError as exc:
+                raise GenerationContractError(str(exc), failure_kind="schema") from exc
+            return
     if requirement.value_type == "string_list":
         items = _normalized_string_list_items(content)
         if len(items) < requirement.min_length:

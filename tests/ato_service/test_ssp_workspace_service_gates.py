@@ -204,6 +204,11 @@ def test_approval_accepts_explicitly_confirmed_categorization() -> None:
                 value="confirmed",
                 provenance=Provenance.ISSO_ENTERED,
             ),
+            FactContent(
+                key="system.information_types_status",
+                value="confirmed",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
         )
     )
     revision = SimpleNamespace(content=content.model_dump(mode="json"))

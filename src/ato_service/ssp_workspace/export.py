@@ -117,6 +117,7 @@ def normalize_export_snapshot(
     evidence_catalog = _normalize_evidence_catalog(snapshot.get("evidence_catalog"))
     categorization = _normalize_categorization(snapshot.get("categorization"))
     system_definition = _normalize_system_definition(snapshot.get("system_definition"))
+    information_types = _normalize_information_types(snapshot.get("information_types"))
 
     normalized: dict[str, Any] = {
         "schema_version": EXPORT_SCHEMA_VERSION,
@@ -162,6 +163,8 @@ def normalize_export_snapshot(
         normalized["categorization"] = categorization
     if system_definition:
         normalized["system_definition"] = system_definition
+    if information_types:
+        normalized["information_types"] = information_types
     return normalized
 
 
@@ -251,6 +254,29 @@ def _normalize_system_definition(value: Any) -> dict[str, Any] | None:
             maximum=500,
         ),
     }
+
+
+def _normalize_information_types(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise WorkspaceExportValidationError("information_types must be an object")
+    status = _required_text(value, "status", max_length=32)
+    if status not in {"confirmed", "stale", "unconfirmed"}:
+        raise WorkspaceExportValidationError("information_types status is invalid")
+    normalized: dict[str, Any] = {
+        "status": status,
+        "catalog_version": _optional_text(value, "catalog_version", max_length=64) or "",
+        "entries": _bounded_object_list(
+            value.get("entries"),
+            field_name="information_types.entries",
+            maximum=500,
+        ),
+    }
+    catalog_source_id = value.get("catalog_source_id")
+    if isinstance(catalog_source_id, str) and catalog_source_id.strip():
+        normalized["catalog_source_id"] = catalog_source_id.strip()
+    return normalized
 
 
 def _normalize_sections(value: Any) -> list[dict[str, Any]]:

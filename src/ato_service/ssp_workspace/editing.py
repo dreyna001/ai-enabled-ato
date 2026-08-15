@@ -19,6 +19,9 @@ from ato_service.ssp_workspace.contracts import (
     SectionState,
 )
 from ato_service.ssp_workspace.categorization import mark_categorization_stale_if_needed
+from ato_service.ssp_workspace.information_types import (
+    mark_information_types_stale_if_needed,
+)
 from ato_service.ssp_workspace.generation_contracts import (
     GenerationResult,
     PatchResult,
@@ -252,6 +255,10 @@ def apply_agent_patch(
                 updated,
                 section_key=patch.target_id,
             )
+            updated = mark_information_types_stale_if_needed(
+                updated,
+                section_key=patch.target_id,
+            )
     return updated
 
 
@@ -288,7 +295,11 @@ def edit_section(
                 updated,
                 section_key=section_key,
             )
-            return mark_system_definition_stale_if_needed(
+            updated = mark_system_definition_stale_if_needed(
+                updated,
+                section_key=section_key,
+            )
+            return mark_information_types_stale_if_needed(
                 updated,
                 section_key=section_key,
             )
