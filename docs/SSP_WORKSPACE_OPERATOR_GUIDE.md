@@ -57,15 +57,21 @@ or C-SCRM plans. Draft OSCAL JSON export is structural working material only.
 21. Select **Confirm system definition**.
     - Edits to boundary, components, or interconnections after confirmation mark the register **stale** until re-confirmed.
     - Approval is blocked while system definition is unconfirmed or stale.
-22. Open **SSP document**.
-23. Review each populated SSP section and its evidence references.
-24. Edit unsupported, incomplete, or incorrect text and save the section.
-25. Use **Ask agent** only when evidence-supported rewriting or synthesis is needed.
+22. Open **Information types**.
+23. Select one or more NIST SP 800-60 catalog entries, describe how each applies to the system, and adjust catalog C/I/A values when warranted.
+24. Provide adjustment rationale when any catalog impact differs from the effective value.
+25. Select **Confirm information types**.
+    - Edits to the information-type register after confirmation mark it **stale** until re-confirmed.
+    - Approval is blocked while information types are unconfirmed or stale.
+26. Open **SSP document**.
+27. Review each populated SSP section and its evidence references.
+28. Edit unsupported, incomplete, or incorrect text and save the section.
+29. Use **Ask agent** only when evidence-supported rewriting or synthesis is needed.
     - The agent returns a proposed edit for review; it does not silently overwrite the section.
-26. Open **Controls**.
-27. Clear **Needs attention only** to see controls already populated by generation.
-28. Search or select a control.
-29. Review its implementation status, responsibility, statement, and evidence.
+30. Open **Controls**.
+31. Clear **Needs attention only** to see controls already populated by generation.
+32. Search or select a control.
+33. Review its implementation status, responsibility, statement, and evidence.
     - Status and responsibility choices come from the pinned profile allowlists.
     - Statement drafting follows the pinned profile's implementation-statement
       policy (implementation, responsibility, scope when material, timing only when
@@ -77,26 +83,26 @@ or C-SCRM plans. Draft OSCAL JSON export is structural working material only.
     - Controls whose profile requirement text includes organization-defined
       parameter placeholders may show follow-up questions. Answer those on
       **Questions** before expecting a complete statement.
-30. Edit and save the control when needed.
-31. Use **Ask agent** for a selected control only when additional evidence-grounded drafting is needed.
+34. Edit and save the control when needed.
+35. Use **Ask agent** for a selected control only when additional evidence-grounded drafting is needed.
     - The agent must not leave OSCAL `{{ insert: param, ... }}` placeholder syntax
       in the implementation statement; if generation rejects placeholder text, fix
       the statement directly or answer the linked question and regenerate or patch.
-32. Open **Questions**.
-33. Enter confirmed answers directly and select **Save answer**.
+36. Open **Questions**.
+37. Enter confirmed answers directly and select **Save answer**.
     - For organization-defined parameter questions, provide the agency-selected
       value in plain language (not OSCAL insert tokens).
     - Simple answers do not use an LLM.
     - Matching SSP fields and duplicate questions are updated automatically when supported.
-34. Upload additional evidence when important information is still missing.
-35. Return to **Overview** and select **Generate or update documents** again.
+38. Upload additional evidence when important information is still missing.
+39. Return to **Overview** and select **Generate or update documents** again.
     - This is another LLM call using the updated evidence and workspace content.
-36. Recheck the SSP, controls, categorization, system definition, and open questions.
-37. Open **Review & export**.
-38. Confirm evidence processing is complete, categorization is confirmed (not stale), system definition is confirmed (not stale), and the working revision is ready.
-39. Select **Approve** to create the ISSO-approved revision snapshot.
+40. Recheck the SSP, controls, categorization, system definition, information types, and open questions.
+41. Open **Review & export**.
+42. Confirm evidence processing is complete, categorization is confirmed (not stale), system definition is confirmed (not stale), information types are confirmed (not stale), and the working revision is ready.
+43. Select **Approve** to create the ISSO-approved revision snapshot.
     - No LLM call occurs.
-40. Export the approved package as **DOCX**, **JSON**, or **Export draft OSCAL JSON**.
+44. Export the approved package as **DOCX**, **JSON**, or **Export draft OSCAL JSON**.
     - No LLM call occurs.
     - **JSON** includes a normalized `categorization` block with per-objective
       rationales and evidence references.
@@ -107,8 +113,8 @@ or C-SCRM plans. Draft OSCAL JSON export is structural working material only.
       agency template parity (**HS-002**), and does not close authority review
       (**HS-001**). Missing SSP sections appear as explicit unresolved text in
       the export rather than invented content.
-41. Optional — **Agency-shaped draft** (customer agency `.docx` template only):
-    - Requires step **39** (ISSO-approved revision). Upload is disabled until approval.
+45. Optional — **Agency-shaped draft** (customer agency `.docx` template only):
+    - Requires step **43** (ISSO-approved revision). Upload is disabled until approval.
     - Upload the customer-provided agency `.docx` in **Review & export** → **Generate agency-shaped draft**.
     - The API runs synchronously in the request: template outline extraction, agent mapping plan, deterministic server render (with draft notice), and reviewer exceptions. There is no background worker.
     - Review **blocker** and **warning** exceptions on the render card. **Review failed** means at least one blocker; approval stays disabled until blockers are cleared.

@@ -92,6 +92,10 @@ export function ReviewExportPanel({
               satisfied={metrics.systemDefinitionConfirmed}
             />
             <ReviewCheck
+              label="SP 800-60 information types are confirmed"
+              satisfied={metrics.informationTypesConfirmed}
+            />
+            <ReviewCheck
               label="Working revision is saved and internally consistent"
               satisfied={workspace.revisionSaved && workspace.internallyConsistent}
             />
@@ -138,6 +142,17 @@ export function ReviewExportPanel({
                     <>
                       Confirm the authorization boundary, component inventory, and
                       interconnection register before approving.
+                    </>
+                  ) : !metrics.approved && metrics.informationTypesStale ? (
+                    <>
+                      Re-confirm SP 800-60 information type mappings after
+                      structured edits before approving.
+                    </>
+                  ) : !metrics.approved &&
+                    !metrics.informationTypesConfirmed ? (
+                    <>
+                      Confirm SP 800-60 information type mappings before
+                      approving.
                     </>
                   ) : !metrics.approved && !metrics.agentControlsGrounded ? (
                     <>

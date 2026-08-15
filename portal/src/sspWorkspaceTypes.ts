@@ -220,6 +220,58 @@ export const STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS = new Set([
   "system.interconnections",
 ]);
 
+export const STRUCTURED_INFORMATION_TYPES_SECTION_IDS = new Set([
+  "system.data_types",
+]);
+
+export type InformationTypesStatus = "unconfirmed" | "confirmed" | "stale";
+
+export type InformationTypeEvidenceRef = {
+  artifactId: string;
+  locator: Record<string, unknown>;
+};
+
+export type InformationTypeMappingEntry = {
+  entryId: string;
+  catalogIdentifier: string;
+  catalogTitle: string;
+  description: string;
+  catalogConfidentiality: ImpactLevel;
+  catalogIntegrity: ImpactLevel;
+  catalogAvailability: ImpactLevel;
+  adjustedConfidentiality: ImpactLevel | "";
+  adjustedIntegrity: ImpactLevel | "";
+  adjustedAvailability: ImpactLevel | "";
+  adjustmentRationale: string;
+  evidence: InformationTypeEvidenceRef[];
+};
+
+export type InformationTypes = {
+  status: InformationTypesStatus | null;
+  entries: InformationTypeMappingEntry[];
+  confirmed: boolean;
+};
+
+export type InformationTypesChange = {
+  entries: InformationTypeMappingEntry[];
+};
+
+export type Sp80060CatalogEntry = {
+  identifier: string;
+  title: string;
+  confidentiality: ImpactLevel;
+  integrity: ImpactLevel;
+  availability: ImpactLevel;
+};
+
+export type Sp80060Catalog = {
+  sourceId: string;
+  title: string;
+  version: string;
+  reference: string;
+  informationTypes: Sp80060CatalogEntry[];
+};
+
 export type SspWorkspace = {
   id: string;
   name: string;
@@ -228,6 +280,7 @@ export type SspWorkspace = {
   impactLevel: string;
   provisionalImpactLevel: ImpactLevel;
   categorization: SystemCategorization;
+  informationTypes: InformationTypes;
   systemDefinition: SystemDefinition;
   authorizationPath: string;
   profile: ProfileSummary;
@@ -283,6 +336,7 @@ export type SspWorkspaceActions = {
   onSaveControl?: (change: ControlStatementChange) => void;
   onAnswerQuestion?: (change: QuestionAnswer) => void;
   onSaveCategorization?: (change: CategorizationChange) => void;
+  onSaveInformationTypes?: (change: InformationTypesChange) => void;
   onSaveSystemDefinition?: (change: SystemDefinitionChange) => void;
   onAskAgent?: (context: AgentContext, message: string) => void;
   onApplyPatch?: (patchId: string) => void;

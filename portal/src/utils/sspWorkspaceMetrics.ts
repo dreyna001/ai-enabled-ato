@@ -1,6 +1,7 @@
 import type {
   ControlStatement,
   EvidenceArtifact,
+  InformationTypes,
   SspSection,
   SspWorkspace,
   SystemDefinition,
@@ -71,6 +72,19 @@ export function systemDefinitionStale(
   return systemDefinition.status === "stale";
 }
 
+/** Mirror backend approval gate for structured information type mapping status. */
+export function informationTypesConfirmed(
+  informationTypes: InformationTypes,
+): boolean {
+  return informationTypes.status === "confirmed";
+}
+
+export function informationTypesStale(
+  informationTypes: InformationTypes,
+): boolean {
+  return informationTypes.status === "stale";
+}
+
 export type SspWorkspaceMetrics = {
   evidence: number;
   processedEvidence: number;
@@ -91,6 +105,9 @@ export type SspWorkspaceMetrics = {
   categorizationStale: boolean;
   systemDefinitionConfirmed: boolean;
   systemDefinitionStale: boolean;
+  informationTypesConfirmed: boolean;
+  informationTypesStale: boolean;
+  informationTypesCount: number;
   reviewable: boolean;
 };
 
@@ -108,6 +125,7 @@ export function calculateSspWorkspaceMetrics({
   controlResponse,
   categorization,
   systemDefinition,
+  informationTypes,
 }: Pick<
   SspWorkspace,
   | "requirements"
@@ -123,6 +141,7 @@ export function calculateSspWorkspaceMetrics({
   | "controlResponse"
   | "categorization"
   | "systemDefinition"
+  | "informationTypes"
 >): SspWorkspaceMetrics {
   const required = requirements.filter((requirement) => requirement.required);
   const satisfiedIds = satisfiedRequiredIds(sections);
@@ -163,6 +182,8 @@ export function calculateSspWorkspaceMetrics({
   );
   const definitionConfirmed = systemDefinitionConfirmed(systemDefinition);
   const definitionStale = systemDefinitionStale(systemDefinition);
+  const typesConfirmed = informationTypesConfirmed(informationTypes);
+  const typesStale = informationTypesStale(informationTypes);
 
   const categorizationConfirmed = categorization.status === "confirmed";
   const categorizationStale = categorization.status === "stale";
@@ -204,6 +225,9 @@ export function calculateSspWorkspaceMetrics({
     categorizationStale,
     systemDefinitionConfirmed: definitionConfirmed,
     systemDefinitionStale: definitionStale,
+    informationTypesConfirmed: typesConfirmed,
+    informationTypesStale: typesStale,
+    informationTypesCount: informationTypes.entries.length,
     reviewable:
       processingJobsTerminal &&
       requiredItemsResolved &&
@@ -213,6 +237,8 @@ export function calculateSspWorkspaceMetrics({
       !categorizationStale &&
       definitionConfirmed &&
       !definitionStale &&
+      typesConfirmed &&
+      !typesStale &&
       revisionSaved &&
       internallyConsistent,
   };

@@ -19,6 +19,7 @@ import {
   rejectSspPatch,
   saveSspCategorization,
   saveSspControl,
+  saveSspInformationTypes,
   saveSspSection,
   saveSspSystemDefinition,
   uploadSspEvidence,
@@ -243,6 +244,10 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           onSaveSystemDefinition: (change) =>
             void run((current) =>
               saveSspSystemDefinition(session, current, change),
+            ),
+          onSaveInformationTypes: (change) =>
+            void run((current) =>
+              saveSspInformationTypes(session, current, change),
             ),
           onAskAgent: (context, message) =>
             void run((current) =>

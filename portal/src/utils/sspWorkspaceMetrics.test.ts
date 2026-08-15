@@ -3,6 +3,27 @@ import type { SspWorkspace } from "@/sspWorkspaceTypes";
 import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
 import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
 
+const confirmedInformationTypes = {
+  status: "confirmed" as const,
+  entries: [
+    {
+      entryId: "entry-1",
+      catalogIdentifier: "D.14.2",
+      catalogTitle: "Financial Management — Grants",
+      description: "The system processes grant application data.",
+      catalogConfidentiality: "moderate" as const,
+      catalogIntegrity: "moderate" as const,
+      catalogAvailability: "moderate" as const,
+      adjustedConfidentiality: "" as const,
+      adjustedIntegrity: "" as const,
+      adjustedAvailability: "" as const,
+      adjustmentRationale: "",
+      evidence: [],
+    },
+  ],
+  confirmed: true,
+};
+
 const confirmedSystemDefinition = {
   status: "confirmed" as const,
   boundaryNarrative:
@@ -169,6 +190,7 @@ function workspaceFixture(): SspWorkspace {
     patches: [],
     agencyDocxRenders: [],
     systemDefinition: confirmedSystemDefinition,
+    informationTypes: confirmedInformationTypes,
   };
 }
 
@@ -194,6 +216,9 @@ describe("calculateSspWorkspaceMetrics", () => {
       agentControlsGrounded: true,
       systemDefinitionConfirmed: true,
       systemDefinitionStale: false,
+      informationTypesConfirmed: true,
+      informationTypesStale: false,
+      informationTypesCount: 1,
       reviewable: true,
     });
   });
@@ -268,6 +293,36 @@ describe("calculateSspWorkspaceMetrics", () => {
 
     expect(metrics.systemDefinitionConfirmed).toBe(false);
     expect(metrics.systemDefinitionStale).toBe(true);
+    expect(metrics.reviewable).toBe(false);
+  });
+
+  it("is not reviewable when information types are unconfirmed", () => {
+    const workspace = workspaceFixture();
+    workspace.informationTypes = {
+      status: "unconfirmed",
+      entries: [],
+      confirmed: false,
+    };
+
+    const metrics = calculateSspWorkspaceMetrics(workspace);
+
+    expect(metrics.informationTypesConfirmed).toBe(false);
+    expect(metrics.informationTypesStale).toBe(false);
+    expect(metrics.reviewable).toBe(false);
+  });
+
+  it("is not reviewable when information types are stale", () => {
+    const workspace = workspaceFixture();
+    workspace.informationTypes = {
+      ...confirmedInformationTypes,
+      status: "stale",
+      confirmed: false,
+    };
+
+    const metrics = calculateSspWorkspaceMetrics(workspace);
+
+    expect(metrics.informationTypesConfirmed).toBe(false);
+    expect(metrics.informationTypesStale).toBe(true);
     expect(metrics.reviewable).toBe(false);
   });
 });

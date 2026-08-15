@@ -1,6 +1,7 @@
 import {
   Bot,
   ClipboardCheck,
+  Database,
   FileStack,
   FileText,
   FolderOpen,
@@ -14,6 +15,7 @@ import { useState } from "react";
 import { ContextualAgentDrawer } from "@/components/ssp-workspace/ContextualAgentDrawer";
 import { ControlWorkbench } from "@/components/ssp-workspace/ControlWorkbench";
 import { EvidencePanel } from "@/components/ssp-workspace/EvidencePanel";
+import { InformationTypesPanel } from "@/components/ssp-workspace/InformationTypesPanel";
 import { QuestionsPanel } from "@/components/ssp-workspace/QuestionsPanel";
 import { ReviewExportPanel } from "@/components/ssp-workspace/ReviewExportPanel";
 import { SspDocumentPanel } from "@/components/ssp-workspace/SspDocumentPanel";
@@ -32,13 +34,14 @@ import type {
   SspWorkspace,
   SspWorkspaceActions,
 } from "@/sspWorkspaceTypes";
-import { STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS } from "@/sspWorkspaceTypes";
+import { STRUCTURED_INFORMATION_TYPES_SECTION_IDS, STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS } from "@/sspWorkspaceTypes";
 import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
 
 type WorkspaceView =
   | "overview"
   | "evidence"
   | "system-definition"
+  | "information-types"
   | "ssp"
   | "controls"
   | "questions"
@@ -66,6 +69,7 @@ const NAV_ITEMS: Array<{
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "evidence", label: "Intake & evidence", icon: FileStack },
   { id: "system-definition", label: "System definition", icon: Network },
+  { id: "information-types", label: "Information types", icon: Database },
   { id: "ssp", label: "SSP document", icon: FileText },
   { id: "controls", label: "Controls", icon: ShieldCheck },
   { id: "questions", label: "Questions", icon: HelpCircle },
@@ -77,6 +81,11 @@ function countForView(
   metrics: ReturnType<typeof calculateSspWorkspaceMetrics>,
 ): string | null {
   if (view === "evidence") return String(metrics.evidence);
+  if (view === "information-types") {
+    return metrics.informationTypesCount > 0
+      ? String(metrics.informationTypesCount)
+      : null;
+  }
   if (view === "ssp") return `${metrics.sspCompletion}%`;
   if (view === "controls") return String(metrics.selectedControls);
   if (view === "questions") return String(metrics.openQuestions);
@@ -100,7 +109,9 @@ function SspWorkspaceSuccess({
 }) {
   const [view, setView] = useState<WorkspaceView>(initialView);
   const documentSections = workspace.sections.filter(
-    (section) => !STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS.has(section.id),
+    (section) =>
+      !STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS.has(section.id) &&
+      !STRUCTURED_INFORMATION_TYPES_SECTION_IDS.has(section.id),
   );
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     documentSections[0]?.id ?? null,
@@ -250,6 +261,13 @@ function SspWorkspaceSuccess({
               systemDefinition={workspace.systemDefinition}
               evidence={workspace.evidence}
               onSave={actions.onSaveSystemDefinition}
+            />
+          ) : null}
+          {view === "information-types" ? (
+            <InformationTypesPanel
+              informationTypes={workspace.informationTypes}
+              evidence={workspace.evidence}
+              onSave={actions.onSaveInformationTypes}
             />
           ) : null}
           {view === "ssp" ? (

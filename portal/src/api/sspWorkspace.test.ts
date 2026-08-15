@@ -6,6 +6,7 @@ import {
   downloadSspExport,
   mapAgencyDocxRenders,
   mapControlResponse,
+  mapInformationTypes,
   mapSystemDefinition,
   mapWorkspaceEnvelope,
   previewAgencyDocxRender,
@@ -356,6 +357,159 @@ const baseEnvelope = {
   metrics: {},
 };
 
+describe("mapInformationTypes", () => {
+  it("returns empty defaults when structured section is absent", () => {
+    expect(mapInformationTypes([], [])).toEqual({
+      status: null,
+      entries: [],
+      confirmed: false,
+    });
+  });
+
+  it("maps status facts and structured register content", () => {
+    expect(
+      mapInformationTypes(
+        [
+          {
+            key: "system.information_types_status",
+            value: "confirmed",
+          },
+        ],
+        [
+          {
+            key: "system.data_types",
+            content: JSON.stringify({
+              information_types: [
+                {
+                  entry_id: "entry-1",
+                  catalog_identifier: "D.14.2",
+                  catalog_title: "Financial Management — Grants",
+                  description: "Grant intake data.",
+                  catalog_confidentiality: "moderate",
+                  catalog_integrity: "moderate",
+                  catalog_availability: "moderate",
+                  adjusted_confidentiality: null,
+                  adjusted_integrity: null,
+                  adjusted_availability: null,
+                  adjustment_rationale: "",
+                  evidence: [],
+                },
+              ],
+            }),
+          },
+        ],
+      ),
+    ).toEqual({
+      status: "confirmed",
+      confirmed: true,
+      entries: [
+        expect.objectContaining({
+          entryId: "entry-1",
+          catalogIdentifier: "D.14.2",
+          description: "Grant intake data.",
+        }),
+      ],
+    });
+  });
+});
+
+describe("saveSspInformationTypes", () => {
+  it("posts structured information type payloads", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(baseEnvelope), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { saveSspInformationTypes } = await import("./sspWorkspace");
+    await saveSspInformationTypes(session, workspace, {
+      entries: [
+        {
+          entryId: "entry-1",
+          catalogIdentifier: "D.14.2",
+          catalogTitle: "Financial Management — Grants",
+          description: "Grant intake data.",
+          catalogConfidentiality: "moderate",
+          catalogIntegrity: "moderate",
+          catalogAvailability: "moderate",
+          adjustedConfidentiality: "",
+          adjustedIntegrity: "",
+          adjustedAvailability: "",
+          adjustmentRationale: "",
+          evidence: [],
+        },
+      ],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "/api/v1/ssp-workspaces/10000000-0000-4000-8000-000000000001/information-types",
+    );
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      expected_revision_id: workspace.revisionId,
+      information_types: [
+        expect.objectContaining({
+          catalog_identifier: "D.14.2",
+          description: "Grant intake data.",
+        }),
+      ],
+    });
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("fetchSp80060Catalog", () => {
+  it("maps catalog picker data from the API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          source_id: "nist-sp-800-60-rev2",
+          title: "NIST SP 800-60",
+          version: "2.0.0",
+          reference: "https://example.test/sp800-60",
+          information_types: [
+            {
+              identifier: "D.14.2",
+              title: "Financial Management — Grants",
+              confidentiality: "moderate",
+              integrity: "moderate",
+              availability: "moderate",
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchSp80060Catalog } = await import("./sspWorkspace");
+    await expect(fetchSp80060Catalog()).resolves.toEqual({
+      sourceId: "nist-sp-800-60-rev2",
+      title: "NIST SP 800-60",
+      version: "2.0.0",
+      reference: "https://example.test/sp800-60",
+      informationTypes: [
+        {
+          identifier: "D.14.2",
+          title: "Financial Management — Grants",
+          confidentiality: "moderate",
+          integrity: "moderate",
+          availability: "moderate",
+        },
+      ],
+    });
+
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("mapSystemDefinition", () => {
   it("returns empty defaults when structured sections are absent", () => {
     expect(mapSystemDefinition([], [])).toEqual({
@@ -597,6 +751,11 @@ const workspace: SspWorkspace = {
   patches: [],
   agencyDocxRenders: [],
   systemDefinition: confirmedSystemDefinition,
+  informationTypes: {
+    status: "confirmed",
+    entries: [],
+    confirmed: true,
+  },
 };
 
 describe("agency docx render API helpers", () => {

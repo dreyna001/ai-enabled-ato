@@ -76,6 +76,11 @@ function workspace(id: string, name: string): SspWorkspace {
       components: [],
       interconnections: [],
     },
+    informationTypes: {
+      status: "confirmed",
+      entries: [],
+      confirmed: true,
+    },
   };
 }
 

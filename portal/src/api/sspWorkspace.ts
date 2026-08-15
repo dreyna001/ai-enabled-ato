@@ -9,7 +9,15 @@ import type {
   CategorizationChange,
   ControlResponseOptions,
   ControlStatementChange,
+  ImpactLevel,
+  InformationTypeEvidenceRef,
+  InformationTypeMappingEntry,
+  InformationTypes,
+  InformationTypesChange,
+  InformationTypesStatus,
   QuestionAnswer,
+  Sp80060Catalog,
+  Sp80060CatalogEntry,
   SspSectionChange,
   SystemDefinition,
   SystemDefinitionChange,
@@ -473,6 +481,173 @@ export function mapSystemDefinition(
   };
 }
 
+function parseImpactLevel(value: unknown): ImpactLevel | "" {
+  if (value === "low" || value === "moderate" || value === "high") {
+    return value;
+  }
+  return "";
+}
+
+function parseOptionalImpactLevel(value: unknown): ImpactLevel | "" {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  return parseImpactLevel(value);
+}
+
+function parseInformationTypeEvidenceRef(
+  raw: unknown,
+): InformationTypeEvidenceRef | null {
+  const item = record(raw);
+  const artifactId = text(item.artifact_id);
+  const locator = record(item.locator);
+  if (!artifactId || Object.keys(locator).length === 0) return null;
+  return { artifactId, locator };
+}
+
+function parseInformationTypeMappingEntry(
+  raw: unknown,
+): InformationTypeMappingEntry | null {
+  const item = record(raw);
+  const catalogIdentifier = text(item.catalog_identifier);
+  if (!catalogIdentifier) return null;
+  const evidence = Array.isArray(item.evidence)
+    ? item.evidence.flatMap((entry) => {
+        const mapped = parseInformationTypeEvidenceRef(entry);
+        return mapped ? [mapped] : [];
+      })
+    : [];
+  const catalogConfidentiality = parseImpactLevel(item.catalog_confidentiality);
+  const catalogIntegrity = parseImpactLevel(item.catalog_integrity);
+  const catalogAvailability = parseImpactLevel(item.catalog_availability);
+  return {
+    entryId: text(item.entry_id),
+    catalogIdentifier,
+    catalogTitle: text(item.catalog_title),
+    description: text(item.description),
+    catalogConfidentiality: catalogConfidentiality || "low",
+    catalogIntegrity: catalogIntegrity || "low",
+    catalogAvailability: catalogAvailability || "low",
+    adjustedConfidentiality: parseOptionalImpactLevel(
+      item.adjusted_confidentiality,
+    ),
+    adjustedIntegrity: parseOptionalImpactLevel(item.adjusted_integrity),
+    adjustedAvailability: parseOptionalImpactLevel(item.adjusted_availability),
+    adjustmentRationale: text(item.adjustment_rationale),
+    evidence,
+  };
+}
+
+export function mapInformationTypes(
+  facts: Array<Record<string, unknown>>,
+  sections: Array<Record<string, unknown>>,
+): InformationTypes {
+  const statusRaw = factValue(facts, "system.information_types_status");
+  const status: InformationTypesStatus | null =
+    statusRaw === "unconfirmed" ||
+    statusRaw === "confirmed" ||
+    statusRaw === "stale"
+      ? statusRaw
+      : null;
+
+  const sectionContent = new Map(
+    sections.map((section) => [text(section.key), text(section.content)]),
+  );
+  const dataTypesContent = sectionContent.get("system.data_types") ?? "";
+  const dataTypesObject = parseJsonObject(dataTypesContent);
+  const entries =
+    dataTypesObject && Array.isArray(dataTypesObject.information_types)
+      ? dataTypesObject.information_types.flatMap((entry) => {
+          const mapped = parseInformationTypeMappingEntry(entry);
+          return mapped ? [mapped] : [];
+        })
+      : [];
+
+  return {
+    status,
+    entries,
+    confirmed: status === "confirmed",
+  };
+}
+
+const sp80060CatalogSchema = z.object({
+  source_id: z.string(),
+  title: z.string(),
+  version: z.string(),
+  reference: z.string(),
+  information_types: z.array(
+    z.object({
+      identifier: z.string(),
+      title: z.string(),
+      confidentiality: z.enum(["low", "moderate", "high"]),
+      integrity: z.enum(["low", "moderate", "high"]),
+      availability: z.enum(["low", "moderate", "high"]),
+    }),
+  ),
+});
+
+function mapSp80060CatalogEntry(raw: z.infer<typeof sp80060CatalogSchema>["information_types"][number]): Sp80060CatalogEntry {
+  return {
+    identifier: raw.identifier,
+    title: raw.title,
+    confidentiality: raw.confidentiality,
+    integrity: raw.integrity,
+    availability: raw.availability,
+  };
+}
+
+export async function fetchSp80060Catalog(): Promise<Sp80060Catalog> {
+  const result = await apiRequest("/ssp-workspaces/sp800-60-catalog", sp80060CatalogSchema);
+  return {
+    sourceId: result.source_id,
+    title: result.title,
+    version: result.version,
+    reference: result.reference,
+    informationTypes: result.information_types.map(mapSp80060CatalogEntry),
+  };
+}
+
+function mapInformationTypeEvidencePayload(
+  evidence: InformationTypeEvidenceRef[],
+): Array<{ artifact_id: string; locator: Record<string, unknown> }> {
+  return evidence.map((item) => ({
+    artifact_id: item.artifactId,
+    locator: item.locator,
+  }));
+}
+
+export function saveSspInformationTypes(
+  session: SessionInfo,
+  workspace: SspWorkspace,
+  change: InformationTypesChange,
+) {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    "/information-types",
+    "POST",
+    {
+      expected_revision_id: workspace.revisionId,
+      information_types: change.entries.map((entry) => ({
+        ...(entry.entryId.trim() ? { entry_id: entry.entryId.trim() } : {}),
+        catalog_identifier: entry.catalogIdentifier,
+        description: entry.description,
+        ...(entry.adjustedConfidentiality
+          ? { adjusted_confidentiality: entry.adjustedConfidentiality }
+          : {}),
+        ...(entry.adjustedIntegrity
+          ? { adjusted_integrity: entry.adjustedIntegrity }
+          : {}),
+        ...(entry.adjustedAvailability
+          ? { adjusted_availability: entry.adjustedAvailability }
+          : {}),
+        adjustment_rationale: entry.adjustmentRationale,
+        evidence: mapInformationTypeEvidencePayload(entry.evidence),
+      })),
+    },
+  );
+}
+
 export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
   const envelope = envelopeSchema.parse(raw);
   const revision = envelope.current_revision;
@@ -538,6 +713,7 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
       confirmed: categorizationConfirmed,
     },
     systemDefinition: mapSystemDefinition(facts, content.sections),
+    informationTypes: mapInformationTypes(facts, content.sections),
     authorizationPath: factValue(facts, "system.authorization_path"),
     profile: {
       id: envelope.profile.profile_version_id,

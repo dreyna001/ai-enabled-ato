@@ -55,6 +55,11 @@ const workspace: SspWorkspace = {
     components: [],
     interconnections: [],
   },
+  informationTypes: {
+    status: "confirmed",
+    entries: [],
+    confirmed: true,
+  },
 };
 
 function metricsFixture(approved: boolean): SspWorkspaceMetrics {
@@ -78,6 +83,9 @@ function metricsFixture(approved: boolean): SspWorkspaceMetrics {
     categorizationStale: false,
     systemDefinitionConfirmed: true,
     systemDefinitionStale: false,
+    informationTypesConfirmed: true,
+    informationTypesStale: false,
+    informationTypesCount: 0,
     reviewable: true,
   };
 }
@@ -178,6 +186,48 @@ describe("ReviewExportPanel", () => {
     expect(
       screen.getByText(
         "Confirm the authorization boundary, component inventory, and interconnection register before approving.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows stale information types messaging before approve", () => {
+    render(
+      <ReviewExportPanel
+        workspace={workspace}
+        metrics={{
+          ...metricsFixture(false),
+          informationTypesConfirmed: false,
+          informationTypesStale: true,
+          reviewable: false,
+        }}
+        onApprove={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Re-confirm SP 800-60 information type mappings after structured edits before approving.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows unconfirmed information types messaging before approve", () => {
+    render(
+      <ReviewExportPanel
+        workspace={workspace}
+        metrics={{
+          ...metricsFixture(false),
+          informationTypesConfirmed: false,
+          informationTypesStale: false,
+          reviewable: false,
+        }}
+        onApprove={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Confirm SP 800-60 information type mappings before approving.",
       ),
     ).toBeInTheDocument();
   });
