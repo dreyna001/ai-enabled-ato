@@ -18,6 +18,16 @@ function workspaceFixture(): SspWorkspace {
       confidentialityRationale: "Confirmed rationale.",
       integrityRationale: "Confirmed rationale.",
       availabilityRationale: "Confirmed rationale.",
+      confidentialityEvidence: [
+        { id: "artifact-1:0", artifactId: "artifact-1", locator: "{}" },
+      ],
+      integrityEvidence: [
+        { id: "artifact-1:1", artifactId: "artifact-1", locator: "{}" },
+      ],
+      availabilityEvidence: [
+        { id: "artifact-1:2", artifactId: "artifact-1", locator: "{}" },
+      ],
+      status: "confirmed",
       confirmed: true,
     },
     authorizationPath: "Agency ATO",

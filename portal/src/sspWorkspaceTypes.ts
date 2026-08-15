@@ -153,6 +153,10 @@ export type SystemCategorization = {
   confidentialityRationale: string;
   integrityRationale: string;
   availabilityRationale: string;
+  confidentialityEvidence: EvidenceLink[];
+  integrityEvidence: EvidenceLink[];
+  availabilityEvidence: EvidenceLink[];
+  status: "unconfirmed" | "confirmed" | "stale";
   confirmed: boolean;
 };
 
@@ -201,7 +205,10 @@ export type QuestionAnswer = {
   answer: string;
 };
 
-export type CategorizationChange = Omit<SystemCategorization, "confirmed">;
+export type CategorizationChange = Omit<
+  SystemCategorization,
+  "confirmed" | "status"
+>;
 
 export type SspWorkspaceActions = {
   onRetry?: () => void;

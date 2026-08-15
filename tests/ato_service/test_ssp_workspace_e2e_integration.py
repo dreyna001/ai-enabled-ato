@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ato_service.auth_context import AuthenticatedPrincipal
+from ato_service.ssp_workspace.contracts import EvidenceLink
 from ato_service.ssp_workspace.evidence import (
     EvidenceRemovalError,
     ingest_workspace_evidence,
@@ -110,28 +111,12 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 workspace_id=workspace.workspace_id,
             )
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
-            categorized, _ = await save_system_categorization(
-                harness.session,
-                workspace_id=workspace.workspace_id,
-                expected_revision_id=revision_id,
-                confidentiality="low",
-                integrity="low",
-                availability="low",
-                confidentiality_rationale="The system processes low-impact records.",
-                integrity_rationale="Incorrect records have a limited adverse effect.",
-                availability_rationale="Short outages have a limited adverse effect.",
-                actor_id=ACTOR_ID,
-                now=harness.now,
-                audit_hmac_key=harness.hmac_key,
-            )
-            revision_id = categorized.revision_id
-
             evidence_text = (
                 b"The agency operates the system on premises to process federal "
                 b"grant records. The authorization boundary includes the web "
                 b"application, application server, and PostgreSQL database."
             )
-            await ingest_workspace_evidence(
+            overview_artifact = await ingest_workspace_evidence(
                 harness.session,
                 workspace_id=workspace.workspace_id,
                 expected_revision_id=revision_id,
@@ -144,6 +129,34 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 config=harness.config,
                 audit_hmac_key=harness.hmac_key,
             )
+            envelope = await load_workspace_envelope(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+            )
+            revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            evidence_link = EvidenceLink(
+                artifact_id=overview_artifact.evidence_artifact_id,
+                locator={"kind": "categorization_attestation"},
+            )
+            categorized, _ = await save_system_categorization(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                expected_revision_id=revision_id,
+                confidentiality="low",
+                integrity="low",
+                availability="low",
+                confidentiality_rationale="The system processes low-impact records.",
+                integrity_rationale="Incorrect records have a limited adverse effect.",
+                availability_rationale="Short outages have a limited adverse effect.",
+                confidentiality_evidence=(evidence_link,),
+                integrity_evidence=(evidence_link,),
+                availability_evidence=(evidence_link,),
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                audit_hmac_key=harness.hmac_key,
+            )
+            revision_id = categorized.revision_id
+
             envelope = await load_workspace_envelope(
                 harness.session,
                 workspace_id=workspace.workspace_id,

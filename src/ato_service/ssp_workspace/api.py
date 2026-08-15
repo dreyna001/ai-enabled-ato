@@ -27,6 +27,7 @@ from ato_service.auth_context import (
 )
 from ato_service.blobs import BlobStore, BlobStoreError
 from ato_service.package_rbac import principal_has_role, require_any_package_role
+from ato_service.ssp_workspace.contracts import EvidenceLink
 from ato_service.ssp_workspace.evidence import (
     EvidenceRemovalError,
     EvidenceUploadError,
@@ -126,6 +127,13 @@ class AnswerQuestionRequest(ExpectedRevisionRequest):
     answer: str = Field(min_length=1, max_length=20_000)
 
 
+class CategorizationEvidenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: uuid.UUID
+    locator: dict[str, Any] = Field(min_length=1)
+
+
 class SaveCategorizationRequest(ExpectedRevisionRequest):
     confidentiality: str = Field(pattern=r"^(low|moderate|high)$")
     integrity: str = Field(pattern=r"^(low|moderate|high)$")
@@ -133,6 +141,13 @@ class SaveCategorizationRequest(ExpectedRevisionRequest):
     confidentiality_rationale: str = Field(min_length=1, max_length=4_000)
     integrity_rationale: str = Field(min_length=1, max_length=4_000)
     availability_rationale: str = Field(min_length=1, max_length=4_000)
+    confidentiality_evidence: tuple[CategorizationEvidenceRequest, ...] = Field(
+        min_length=1
+    )
+    integrity_evidence: tuple[CategorizationEvidenceRequest, ...] = Field(min_length=1)
+    availability_evidence: tuple[CategorizationEvidenceRequest, ...] = Field(
+        min_length=1
+    )
 
 
 class ProposePatchRequest(ExpectedRevisionRequest):
@@ -435,6 +450,27 @@ def build_ssp_workspace_router() -> APIRouter:
                 confidentiality_rationale=payload.confidentiality_rationale,
                 integrity_rationale=payload.integrity_rationale,
                 availability_rationale=payload.availability_rationale,
+                confidentiality_evidence=tuple(
+                    EvidenceLink(
+                        artifact_id=item.artifact_id,
+                        locator=item.locator,
+                    )
+                    for item in payload.confidentiality_evidence
+                ),
+                integrity_evidence=tuple(
+                    EvidenceLink(
+                        artifact_id=item.artifact_id,
+                        locator=item.locator,
+                    )
+                    for item in payload.integrity_evidence
+                ),
+                availability_evidence=tuple(
+                    EvidenceLink(
+                        artifact_id=item.artifact_id,
+                        locator=item.locator,
+                    )
+                    for item in payload.availability_evidence
+                ),
                 actor_id=principal.actor_id,
                 now=_utc_now(),
                 audit_hmac_key=audit_hmac_key,

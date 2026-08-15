@@ -131,6 +131,11 @@ def _render_fips199_table(
     item_values: dict[str, Any],
     snapshot: dict[str, Any],
 ) -> None:
+    categorization = snapshot.get("categorization")
+    if isinstance(categorization, dict):
+        _render_fips199_table_from_categorization(document, categorization)
+        return
+
     rows = [
         ("Confidentiality", _format_item_text(item_values.get("system.confidentiality_impact"))),
         ("Integrity", _format_item_text(item_values.get("system.integrity_impact"))),
@@ -148,10 +153,70 @@ def _render_fips199_table(
 
     overall = item_values.get("system.impact_level") or snapshot["profile"]["impact_level"]
     document.add_paragraph(f"Overall FIPS 199 impact level: {_format_item_text(overall)}")
+    _render_legacy_categorization_rationales(document, item_values)
+
+
+def _render_fips199_table_from_categorization(
+    document: DocxDocument,
+    categorization: dict[str, Any],
+) -> None:
+    table = document.add_table(rows=1 + 3, cols=2)
+    table.style = "Table Grid"
+    header = table.rows[0].cells
+    header[0].text = "Security Objective"
+    header[1].text = "Impact Level"
+    for index, dimension in enumerate(
+        ("confidentiality", "integrity", "availability"),
+        start=1,
+    ):
+        block = categorization[dimension]
+        row = table.rows[index].cells
+        row[0].text = dimension.capitalize()
+        row[1].text = _format_item_text(block["impact"])
+
+    document.add_paragraph(
+        "Overall FIPS 199 impact level: "
+        f"{_format_item_text(categorization['overall_impact'])}"
+    )
+    for dimension in ("confidentiality", "integrity", "availability"):
+        block = categorization[dimension]
+        document.add_heading(f"{dimension.capitalize()} rationale", level=2)
+        document.add_paragraph(_format_item_text(block["rationale"]))
+        evidence_text = _format_categorization_evidence(block.get("evidence") or [])
+        if evidence_text:
+            document.add_paragraph(f"Evidence: {evidence_text}")
+
+
+def _render_legacy_categorization_rationales(
+    document: DocxDocument,
+    item_values: dict[str, Any],
+) -> None:
+    rationale_pairs = (
+        ("Confidentiality", "system.confidentiality_impact_rationale"),
+        ("Integrity", "system.integrity_impact_rationale"),
+        ("Availability", "system.availability_impact_rationale"),
+    )
+    for label, key in rationale_pairs:
+        rationale = item_values.get(key)
+        if rationale is not None:
+            document.add_heading(f"{label} rationale", level=2)
+            document.add_paragraph(_format_item_text(rationale))
     rationale = item_values.get("system.categorization_rationale")
     if rationale is not None:
         document.add_heading("Categorization Rationale", level=2)
         document.add_paragraph(_format_item_text(rationale))
+
+
+def _format_categorization_evidence(items: list[dict[str, Any]]) -> str:
+    formatted: list[str] = []
+    for item in items:
+        filename = item.get("display_filename") or item.get("artifact_id")
+        locator = item.get("locator")
+        if isinstance(locator, dict):
+            formatted.append(f"{filename} ({item['artifact_id']}:{json.dumps(locator, sort_keys=True)})")
+        else:
+            formatted.append(str(filename))
+    return "; ".join(formatted)
 
 
 def _render_control_details_chapter(

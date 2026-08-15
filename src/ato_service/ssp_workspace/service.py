@@ -14,9 +14,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ato_service.audit import append_audit_event
+from ato_service.ssp_workspace.categorization import (
+    CategorizationEvidenceInput,
+    active_categorization_status,
+    build_categorization_export_block,
+    build_confirmed_categorization_facts,
+    high_water_mark_impact,
+    resolve_workspace_evidence_links,
+    validate_categorization_evidence,
+    validate_categorization_impacts,
+    validate_categorization_rationales,
+)
 from ato_service.ssp_workspace.contracts import (
     ControlContent,
     ControlState,
+    EvidenceLink,
     EvidenceState,
     FactContent,
     FactState,
@@ -825,12 +837,15 @@ async def approve_workspace_revision(
     if revision is None:
         raise WorkspaceNotReviewableError("current revision is unavailable")
     content = RevisionContent.model_validate(revision.content)
-    if not any(
-        fact.key == "system.categorization_status"
-        and fact.value == "confirmed"
-        and fact.state is FactState.ACTIVE
-        for fact in content.facts
-    ):
+    facts_by_key = {
+        item.key: item for item in content.facts if item.state is FactState.ACTIVE
+    }
+    categorization_status = active_categorization_status(facts_by_key)
+    if categorization_status == "stale":
+        raise WorkspaceNotReviewableError(
+            "system categorization must be re-confirmed before approval"
+        )
+    if categorization_status != "confirmed":
         raise WorkspaceNotReviewableError(
             "system categorization must be explicitly confirmed before approval"
         )
@@ -1017,7 +1032,7 @@ async def migrate_workspace_profile(
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
-    categorization: dict[str, str] | None = None,
+    categorization: dict[str, FactContent] | None = None,
     audit_action: str = "ssp_profile_migrated",
 ) -> tuple[Any, Any]:
     """Create a new working revision reconciled to an active profile version."""
@@ -1080,12 +1095,8 @@ async def migrate_workspace_profile(
         )
     if categorization is not None:
         facts.pop("system.provisional_impact_level", None)
-        for key, value in categorization.items():
-            facts[key] = FactContent(
-                key=key,
-                value=value,
-                provenance=Provenance.ISSO_ENTERED,
-            )
+        for key, fact in categorization.items():
+            facts[key] = fact
     migrated = replace(
         content,
         facts=tuple(facts[key] for key in sorted(facts)),
@@ -1150,6 +1161,9 @@ async def save_system_categorization(
     confidentiality_rationale: str,
     integrity_rationale: str,
     availability_rationale: str,
+    confidentiality_evidence: tuple[EvidenceLink, ...],
+    integrity_evidence: tuple[EvidenceLink, ...],
+    availability_evidence: tuple[EvidenceLink, ...],
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
@@ -1158,32 +1172,43 @@ async def save_system_categorization(
 
     from ato_service.db.models import SspWorkspace
 
-    impacts = (confidentiality, integrity, availability)
-    if any(value not in {"low", "moderate", "high"} for value in impacts):
-        raise ValueError("categorization impacts must be low, moderate, or high")
-    rationales = (
-        confidentiality_rationale.strip(),
-        integrity_rationale.strip(),
-        availability_rationale.strip(),
+    validate_categorization_impacts(confidentiality, integrity, availability)
+    rationales = validate_categorization_rationales(
+        confidentiality_rationale,
+        integrity_rationale,
+        availability_rationale,
     )
-    if any(not value for value in rationales):
-        raise ValueError("categorization rationale is required for each impact")
+    evidence = CategorizationEvidenceInput(
+        confidentiality=await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=confidentiality_evidence,
+        ),
+        integrity=await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=integrity_evidence,
+        ),
+        availability=await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=availability_evidence,
+        ),
+    )
+    validate_categorization_evidence(evidence)
     workspace = (
         await session.execute(
             select(SspWorkspace).where(SspWorkspace.workspace_id == workspace_id)
         )
     ).scalar_one()
-    rank = {"low": 0, "moderate": 1, "high": 2}
-    overall = max(impacts, key=rank.__getitem__)
-    categorization = {
-        "system.categorization_status": "confirmed",
-        "system.confidentiality_impact": confidentiality,
-        "system.integrity_impact": integrity,
-        "system.availability_impact": availability,
-        "system.confidentiality_impact_rationale": rationales[0],
-        "system.integrity_impact_rationale": rationales[1],
-        "system.availability_impact_rationale": rationales[2],
-    }
+    overall = high_water_mark_impact(confidentiality, integrity, availability)
+    categorization = build_confirmed_categorization_facts(
+        confidentiality=confidentiality,
+        integrity=integrity,
+        availability=availability,
+        rationales=rationales,
+        evidence=evidence,
+    )
     return await migrate_workspace_profile(
         session,
         workspace_id=workspace_id,
@@ -1353,6 +1378,13 @@ def _impact_level(content: RevisionContent) -> str:
 
 
 def _confirmed_impact_level(content: RevisionContent) -> str | None:
+    facts = {
+        item.key: item
+        for item in content.facts
+        if item.state is FactState.ACTIVE
+    }
+    if active_categorization_status(facts) != "confirmed":
+        return None
     for fact in content.facts:
         if fact.key in {"system.impact_level", "impact_level"} and fact.value in {
             "low",
@@ -1593,10 +1625,18 @@ async def _approved_export_snapshot(
     impact_level = _impact_level(content)
     resolved_profile = resolve_stored_profile(profile, impact_level)
     stored_bundle = deserialize_profile_bundle(profile.bundle)
-    active_facts = {
-        item.key: item.value
+    active_fact_objects = {
+        item.key: item
         for item in content.facts
         if item.state is FactState.ACTIVE
+    }
+    active_facts = {
+        key: item.value for key, item in active_fact_objects.items()
+    }
+    fact_evidence = {
+        key: item.evidence
+        for key, item in active_fact_objects.items()
+        if item.evidence
     }
     document_title = active_facts.get("system.name")
     if not isinstance(document_title, str) or not document_title.strip():
@@ -1635,6 +1675,12 @@ async def _approved_export_snapshot(
             "impact_level": impact_level,
         },
         "facts": active_facts,
+        "categorization": build_categorization_export_block(
+            facts=active_facts,
+            fact_evidence=fact_evidence,
+            evidence_catalog=evidence_catalog,
+            overall_impact=impact_level,
+        ),
         "standard_coverage": [
             {
                 "source_id": entry.source_id,

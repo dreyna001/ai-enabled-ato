@@ -149,6 +149,43 @@ def test_approval_rejects_provisional_impact_without_confirmation() -> None:
     session.execute.assert_awaited_once()
 
 
+def test_approval_rejects_stale_categorization() -> None:
+    content = RevisionContent(
+        facts=(
+            FactContent(
+                key="system.categorization_status",
+                value="stale",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
+            FactContent(
+                key="system.impact_level",
+                value="moderate",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
+        )
+    )
+    revision = SimpleNamespace(content=content.model_dump(mode="json"))
+    revision_result = MagicMock()
+    revision_result.scalar_one_or_none.return_value = revision
+    session = AsyncMock()
+    session.execute.return_value = revision_result
+
+    with pytest.raises(
+        WorkspaceNotReviewableError,
+        match="re-confirmed before approval",
+    ):
+        asyncio.run(
+            approve_workspace_revision(
+                session,
+                workspace_id=WORKSPACE_ID,
+                revision_id=REVISION_ID,
+                actor_id="isso@example.gov",
+                now=NOW,
+                audit_hmac_key=b"test-audit-key",
+            )
+        )
+
+
 def test_approval_accepts_explicitly_confirmed_categorization() -> None:
     content = RevisionContent(
         facts=(

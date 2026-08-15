@@ -29,12 +29,12 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
 - [ ] Add profile-defined FIPS 199 categorization fields.
 - [ ] Map system information types to the agency-approved NIST SP 800-60 version.
 - [x] Capture confidentiality, integrity, and availability impact separately.
-- [ ] Require a rationale and evidence references for each impact value.
+- [x] Require a rationale and evidence references for each impact value (confirm gate + export block; profile schema fields still open).
 - [ ] Record information-type adjustments and adjustment rationale.
 - [x] Compute the system high-water mark deterministically.
 - [x] Treat agent output as a proposal until human confirmation.
-- [ ] Mark categorization stale when data types, mission, or boundary change.
-- [ ] Export the information-type mapping, C/I/A rationale, adjustments, and final category.
+- [x] Mark categorization stale when data types, mission, or boundary change.
+- [ ] Export the information-type mapping, C/I/A rationale, adjustments, and final category (C/I/A rationale + evidence exported; SP 800-60 mapping still open).
 
 ## Authorization Boundary and Diagrams
 
@@ -75,10 +75,19 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
 - [ ] Add synthetic diagram evaluation fixtures and expected graph assertions.
 - [ ] Measure node, connection, direction, trust-boundary, and data-flow extraction accuracy.
 
-## NIST SP 800-18 Rev. 2 SSP Coverage
+## NIST SP 800-18 Rev. 2 SSP Coverage (core)
+
+**Core rule:** the built-in `agency-fisma-nist-sp800-53-rev5` profile covers **Table 1
+only** (21 elements). Outline-only supplements and agency-specific extras belong in
+**overlay profiles** — see [Outline supplements and overlay-only (nice-to-have, not core)](#outline-supplements-and-overlay-only-nice-to-have-not-core).
+
+**What keeps the core SSP template up to date:** new immutable profile bundles
+(`scripts/build_ssp_profile_bundle.py`), offline import / diff / activate / migrate
+(see **Offline Profile Update Process** below). Built-in DOCX export follows Table 1
+`standard_coverage` chapter order from the pinned profile — not a separate Example
+Outline file.
 
 - [x] Record final NIST SP 800-18 Rev. 2 source provenance and exact Table 1 element coverage in the profile.
-- [ ] Pin the separate Security Plan Example Outline supplemental artifact.
 - [x] Add missing Table 1 profile requirements:
   - Laws, regulations, and policies
   - SSP approval and authorization decision
@@ -87,9 +96,7 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
   - Control assessment status
   - Digital identity acceptance statement
   - SSP review and change history
-- [ ] Add outline-only structures not represented by Table 1:
-  - General referenced-artifact register
-  - [x] Acronyms and glossary (profile item `ssp.acronyms_and_glossary`, **1.2.0**)
+- [x] Acronyms and glossary in core (product choice; outline-only in SP 800-18 but shipped as required profile item `ssp.acronyms_and_glossary`, **1.2.0**)
 - [ ] Define each requirement's:
   - Stable requirement ID
   - Required or optional status
@@ -99,6 +106,22 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
   - Export mapping
   - Migration behavior
 - [x] Add deterministic exact-set coverage tests against final SP 800-18r2 Table 1.
+
+## Outline supplements and overlay-only (nice-to-have, not core)
+
+**Not required** in the built-in agency FISMA profile. Document here for overlay
+profiles, customer packs, or later optional bundles — do **not** gate core ISSO
+approval or Table 1 completeness on these items.
+
+- [ ] **General referenced-artifact register (B8).** Optional overlay SSP item
+  (`ssp.referenced_artifacts`). Not a Table 1 element; agencies that want a formal
+  register add it via overlay profile with `required: false` unless the customer
+  explicitly requires it.
+
+**Out of scope (do not implement):** pinning the separate NIST Security Plan
+Example Outline supplemental artifact. Built-in export uses Table 1
+`standard_coverage` from the profile bundle for repeatable DOCX structure; the
+Example Outline file is not vendored and will not be added.
 
 ### TODO: Profile-Defined Control Fields
 

@@ -234,6 +234,7 @@ export function WorkspaceOverview({
       <SystemCategorizationPanel
         categorization={workspace.categorization}
         provisionalImpactLevel={workspace.provisionalImpactLevel}
+        evidence={workspace.evidence}
         onSave={onSaveCategorization}
       />
     </div>

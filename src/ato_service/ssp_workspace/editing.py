@@ -18,6 +18,7 @@ from ato_service.ssp_workspace.contracts import (
     SectionContent,
     SectionState,
 )
+from ato_service.ssp_workspace.categorization import mark_categorization_stale_if_needed
 from ato_service.ssp_workspace.generation_contracts import (
     GenerationResult,
     PatchResult,
@@ -234,12 +235,19 @@ def apply_agent_patch(
             owner_type=generated.owner_type,
         )
 
-    return RevisionContent(
+    updated = RevisionContent(
         facts=content.facts,
         sections=tuple(sections[key] for key in sorted(sections)),
         controls=tuple(controls[key] for key in sorted(controls)),
         questions=tuple(questions[key] for key in sorted(questions)),
     )
+    for patch in result.patches:
+        if patch.target_type == "ssp_section":
+            updated = mark_categorization_stale_if_needed(
+                updated,
+                section_key=patch.target_id,
+            )
+    return updated
 
 
 def edit_section(
@@ -264,12 +272,16 @@ def edit_section(
                 questions,
                 sections={item.key: item for item in sections},
             )
-            return _updated(
+            updated = _updated(
                 content,
                 sections=tuple(sections),
                 questions=tuple(
                     questions[key] for key in sorted(questions)
                 ),
+            )
+            return mark_categorization_stale_if_needed(
+                updated,
+                section_key=section_key,
             )
     raise WorkspaceEditError(f"unknown SSP section: {section_key}")
 

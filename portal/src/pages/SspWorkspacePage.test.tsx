@@ -25,6 +25,16 @@ function workspaceFixture(): SspWorkspace {
       confidentialityRationale: "Disclosure could cause serious mission harm.",
       integrityRationale: "Incorrect grant data could cause serious mission harm.",
       availabilityRationale: "Short outages can be handled manually.",
+      confidentialityEvidence: [
+        { id: "artifact-1:0", artifactId: "artifact-1", locator: "{}" },
+      ],
+      integrityEvidence: [
+        { id: "artifact-1:1", artifactId: "artifact-1", locator: "{}" },
+      ],
+      availabilityEvidence: [
+        { id: "artifact-1:2", artifactId: "artifact-1", locator: "{}" },
+      ],
+      status: "confirmed",
       confirmed: true,
     },
     authorizationPath: "Agency ATO",
@@ -196,8 +206,21 @@ describe("SspWorkspacePage", () => {
       confidentialityRationale: "",
       integrityRationale: "",
       availabilityRationale: "",
+      confidentialityEvidence: [],
+      integrityEvidence: [],
+      availabilityEvidence: [],
+      status: "unconfirmed",
       confirmed: false,
     };
+    workspace.evidence = [
+      {
+        id: "artifact-1",
+        name: "system-overview.txt",
+        mediaType: "text/plain",
+        state: "processed",
+        uploadedAt: "2026-07-27",
+      },
+    ];
 
     render(
       <SspWorkspacePage
@@ -225,6 +248,9 @@ describe("SspWorkspacePage", () => {
     });
 
     expect(screen.getByText("high")).toBeInTheDocument();
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      fireEvent.click(checkbox);
+    }
     fireEvent.click(
       screen.getByRole("button", { name: "Confirm categorization" }),
     );
@@ -236,6 +262,27 @@ describe("SspWorkspacePage", () => {
       integrityRationale: "Incorrect data could cause limited harm.",
       availabilityRationale:
         "An outage could stop time-critical grant payments.",
+      confidentialityEvidence: [
+        {
+          id: "artifact-1:categorization",
+          artifactId: "artifact-1",
+          locator: JSON.stringify({ kind: "categorization_attestation" }),
+        },
+      ],
+      integrityEvidence: [
+        {
+          id: "artifact-1:categorization",
+          artifactId: "artifact-1",
+          locator: JSON.stringify({ kind: "categorization_attestation" }),
+        },
+      ],
+      availabilityEvidence: [
+        {
+          id: "artifact-1:categorization",
+          artifactId: "artifact-1",
+          locator: JSON.stringify({ kind: "categorization_attestation" }),
+        },
+      ],
     });
   });
 
