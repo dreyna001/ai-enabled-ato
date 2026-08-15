@@ -19,6 +19,10 @@ const workspace: SspWorkspace = {
     confidentialityRationale: "",
     integrityRationale: "",
     availabilityRationale: "",
+    confidentialityEvidence: [],
+    integrityEvidence: [],
+    availabilityEvidence: [],
+    status: "confirmed",
     confirmed: true,
   },
   authorizationPath: "Agency ATO",
@@ -62,6 +66,8 @@ function metricsFixture(approved: boolean): SspWorkspaceMetrics {
     requiredItemsResolved: true,
     controlsResolved: true,
     agentControlsGrounded: true,
+    categorizationConfirmed: true,
+    categorizationStale: false,
     reviewable: true,
   };
 }

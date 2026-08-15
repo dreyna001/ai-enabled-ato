@@ -15,7 +15,7 @@ from ato_service.ssp_workspace.sp800_18_docx import (
     render_sp800_18_docx,
 )
 
-EXPORT_SCHEMA_VERSION = "1.1.0"
+EXPORT_SCHEMA_VERSION = "1.2.0"
 MAX_SECTIONS = 100
 MAX_CONTROLS = 2_000
 MAX_QUESTIONS = 2_000
@@ -115,6 +115,7 @@ def normalize_export_snapshot(
     ssp_items = _normalize_ssp_items(snapshot.get("ssp_items"))
     control_order = _normalize_control_order(snapshot.get("control_order"))
     evidence_catalog = _normalize_evidence_catalog(snapshot.get("evidence_catalog"))
+    categorization = _normalize_categorization(snapshot.get("categorization"))
 
     normalized: dict[str, Any] = {
         "schema_version": EXPORT_SCHEMA_VERSION,
@@ -156,6 +157,72 @@ def normalize_export_snapshot(
         normalized["control_order"] = control_order
     if evidence_catalog:
         normalized["evidence_catalog"] = evidence_catalog
+    if categorization:
+        normalized["categorization"] = categorization
+    return normalized
+
+
+def _normalize_categorization(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise WorkspaceExportValidationError("categorization must be an object")
+    overall = value.get("overall_impact")
+    if overall not in {"low", "moderate", "high"}:
+        raise WorkspaceExportValidationError(
+            "categorization.overall_impact must be low, moderate, or high"
+        )
+    normalized: dict[str, Any] = {
+        "status": _required_text(value, "status", max_length=32),
+        "overall_impact": overall,
+    }
+    for dimension in ("confidentiality", "integrity", "availability"):
+        block = value.get(dimension)
+        if not isinstance(block, dict):
+            raise WorkspaceExportValidationError(
+                f"categorization.{dimension} must be an object"
+            )
+        impact = block.get("impact")
+        if impact not in {"low", "moderate", "high"}:
+            raise WorkspaceExportValidationError(
+                f"categorization.{dimension}.impact must be low, moderate, or high"
+            )
+        rationale = block.get("rationale")
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise WorkspaceExportValidationError(
+                f"categorization.{dimension}.rationale must be a non-empty string"
+            )
+        evidence = block.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            raise WorkspaceExportValidationError(
+                f"categorization.{dimension}.evidence must be a non-empty array"
+            )
+        normalized_evidence: list[dict[str, Any]] = []
+        for index, item in enumerate(evidence):
+            if not isinstance(item, dict):
+                raise WorkspaceExportValidationError(
+                    f"categorization.{dimension}.evidence[{index}] must be an object"
+                )
+            normalized_evidence.append(
+                {
+                    "artifact_id": _required_text(
+                        item,
+                        "artifact_id",
+                        max_length=128,
+                    ),
+                    "locator": item.get("locator"),
+                    "display_filename": _optional_text(
+                        item,
+                        "display_filename",
+                        max_length=255,
+                    ),
+                }
+            )
+        normalized[dimension] = {
+            "impact": impact,
+            "rationale": rationale.strip(),
+            "evidence": normalized_evidence,
+        }
     return normalized
 
 

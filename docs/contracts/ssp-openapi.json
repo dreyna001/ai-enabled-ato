@@ -77,6 +77,28 @@
         "title": "Body_post_profile_import_api_v1_ssp_profiles_import_post",
         "type": "object"
       },
+      "CategorizationEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "format": "uuid",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "locator": {
+            "additionalProperties": true,
+            "minProperties": 1,
+            "title": "Locator",
+            "type": "object"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "locator"
+        ],
+        "title": "CategorizationEvidenceRequest",
+        "type": "object"
+      },
       "CreateSspSystemRequest": {
         "additionalProperties": false,
         "properties": {
@@ -297,6 +319,14 @@
             "title": "Availability",
             "type": "string"
           },
+          "availability_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CategorizationEvidenceRequest"
+            },
+            "minItems": 1,
+            "title": "Availability Evidence",
+            "type": "array"
+          },
           "availability_rationale": {
             "maxLength": 4000,
             "minLength": 1,
@@ -307,6 +337,14 @@
             "pattern": "^(low|moderate|high)$",
             "title": "Confidentiality",
             "type": "string"
+          },
+          "confidentiality_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CategorizationEvidenceRequest"
+            },
+            "minItems": 1,
+            "title": "Confidentiality Evidence",
+            "type": "array"
           },
           "confidentiality_rationale": {
             "maxLength": 4000,
@@ -324,6 +362,14 @@
             "title": "Integrity",
             "type": "string"
           },
+          "integrity_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CategorizationEvidenceRequest"
+            },
+            "minItems": 1,
+            "title": "Integrity Evidence",
+            "type": "array"
+          },
           "integrity_rationale": {
             "maxLength": 4000,
             "minLength": 1,
@@ -338,7 +384,10 @@
           "availability",
           "confidentiality_rationale",
           "integrity_rationale",
-          "availability_rationale"
+          "availability_rationale",
+          "confidentiality_evidence",
+          "integrity_evidence",
+          "availability_evidence"
         ],
         "title": "SaveCategorizationRequest",
         "type": "object"

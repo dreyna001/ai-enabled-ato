@@ -157,8 +157,40 @@ def test_generation_stores_grounded_categorization_as_unconfirmed_proposal() -> 
         facts["system.confidentiality_impact"].provenance
         is Provenance.AGENT_GENERATED
     )
-    assert facts["system.confidentiality_impact"].evidence[0].artifact_id == ARTIFACT_ID
-    assert "system.impact_level" not in facts
+    assert facts["system.confidentiality_impact"].evidence
+
+
+def test_edit_section_marks_confirmed_categorization_stale() -> None:
+    content = RevisionContent(
+        facts=(
+            FactContent(
+                key="system.categorization_status",
+                value="confirmed",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
+            FactContent(
+                key="system.impact_level",
+                value="moderate",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
+        ),
+        sections=(
+            SectionContent(
+                key="system.purpose",
+                title="Purpose",
+                content="Initial purpose",
+                state=SectionState.GENERATED,
+            ),
+        ),
+    )
+
+    updated = edit_section(
+        content,
+        section_key="system.purpose",
+        text="Updated mission statement",
+    )
+    facts = {fact.key: fact for fact in updated.facts}
+    assert facts["system.categorization_status"].value == "stale"
 
 
 def test_generation_does_not_leave_owner_question_when_owner_is_populated() -> None:

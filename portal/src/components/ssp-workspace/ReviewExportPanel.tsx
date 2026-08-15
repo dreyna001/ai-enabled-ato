@@ -68,6 +68,10 @@ export function ReviewExportPanel({
         <CardContent>
           <ul>
             <ReviewCheck
+              label="System categorization is confirmed with evidence"
+              satisfied={metrics.categorizationConfirmed}
+            />
+            <ReviewCheck
               label="Evidence processing is terminal"
               satisfied={workspace.processingJobsTerminal}
             />
@@ -110,7 +114,17 @@ export function ReviewExportPanel({
                       : "Current revision needs attention"}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {!metrics.approved && !metrics.agentControlsGrounded ? (
+                  {metrics.categorizationStale ? (
+                    <>
+                      Mission, boundary, or information types changed. Re-confirm
+                      categorization on Overview before approving.
+                    </>
+                  ) : !metrics.categorizationConfirmed ? (
+                    <>
+                      Confirm FIPS 199 categorization with supporting evidence
+                      on Overview before approving.
+                    </>
+                  ) : !metrics.approved && !metrics.agentControlsGrounded ? (
                     <>
                       Link evidence to each agent-drafted control, or edit the
                       control, add an unresolved reason, or track an open question

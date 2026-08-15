@@ -52,6 +52,47 @@ def _snapshot(*, include_sp800_18: bool = True) -> dict[str, object]:
             "system.integrity_impact": "moderate",
             "system.availability_impact": "moderate",
             "system.impact_level": "moderate",
+            "system.categorization_status": "confirmed",
+        },
+        "categorization": {
+            "status": "confirmed",
+            "overall_impact": "moderate",
+            "confidentiality": {
+                "impact": "moderate",
+                "rationale": "Disclosure could cause serious harm.",
+                "evidence": [
+                    {
+                        "artifact_id": "33333333-3333-4333-8333-333333333333",
+                        "locator": {"kind": "categorization_attestation"},
+                        "display_filename": "system-overview.txt",
+                    }
+                ],
+            },
+            "integrity": {
+                "impact": "moderate",
+                "rationale": "Incorrect records could cause serious harm.",
+                "evidence": [
+                    {
+                        "artifact_id": "33333333-3333-4333-8333-333333333333",
+                        "locator": {"kind": "categorization_attestation"},
+                        "display_filename": "system-overview.txt",
+                    }
+                ],
+            },
+            "availability": {
+                "impact": "moderate",
+                "rationale": "Short outages can be handled manually.",
+                "evidence": [
+                    {
+                        "artifact_id": "33333333-3333-4333-8333-333333333333",
+                        "locator": {"kind": "categorization_attestation"},
+                        "display_filename": "system-overview.txt",
+                    }
+                ],
+            },
+        },
+        "evidence_catalog": {
+            "33333333-3333-4333-8333-333333333333": "system-overview.txt",
         },
         "sections": [
             {
@@ -202,7 +243,8 @@ def test_json_export_is_canonical_and_filters_answered_questions() -> None:
         "system.purpose",
         "system.authorization_boundary",
     ]
-    assert payload["schema_version"] == "1.1.0"
+    assert payload["schema_version"] == "1.2.0"
+    assert payload["categorization"]["overall_impact"] == "moderate"
     assert payload["controls"][0]["evidence_links"] == [
         "artifact-1",
         "artifact-2",
@@ -229,6 +271,10 @@ def test_docx_export_contains_approved_snapshot_content() -> None:
     assert "AC-2 — Account Management" in text
     assert "identity-policy.pdf" in text
     assert "Control Implementation Status" in text
+    assert "Confidentiality rationale" in text
+    assert "Disclosure could cause serious harm." in text
+    assert "Evidence:" in text
+    assert "system-overview.txt" in text
     assert "What is the retention period?" in text
     assert "Who reviews accounts?" not in text
     assert document.core_properties.author == "isso@example.gov"

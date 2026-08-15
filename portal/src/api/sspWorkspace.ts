@@ -162,6 +162,14 @@ function evidenceLinks(value: unknown) {
   });
 }
 
+function factEvidenceLinks(
+  facts: Array<Record<string, unknown>>,
+  key: string,
+) {
+  const fact = facts.find((item) => text(item.key) === key);
+  return evidenceLinks(fact?.evidence);
+}
+
 function factValue(
   facts: Array<Record<string, unknown>>,
   key: string,
@@ -300,8 +308,9 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
   const facts = content.facts;
   const satisfied = new Set(envelope.satisfied_requirement_ids);
   const latestApproval = envelope.approvals[0];
-  const categorizationConfirmed =
-    factValue(facts, "system.categorization_status") === "confirmed";
+  const categorizationStatus = factValue(facts, "system.categorization_status");
+  const categorizationConfirmed = categorizationStatus === "confirmed";
+  const categorizationStale = categorizationStatus === "stale";
 
   return {
     id: envelope.workspace_id,
@@ -340,6 +349,20 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
         facts,
         "system.availability_impact_rationale",
       ),
+      confidentialityEvidence: factEvidenceLinks(
+        facts,
+        "system.confidentiality_impact",
+      ),
+      integrityEvidence: factEvidenceLinks(facts, "system.integrity_impact"),
+      availabilityEvidence: factEvidenceLinks(
+        facts,
+        "system.availability_impact",
+      ),
+      status: categorizationStale
+        ? "stale"
+        : categorizationConfirmed
+          ? "confirmed"
+          : "unconfirmed",
       confirmed: categorizationConfirmed,
     },
     authorizationPath: factValue(facts, "system.authorization_path"),
@@ -504,6 +527,12 @@ export function saveSspCategorization(
   workspace: SspWorkspace,
   change: CategorizationChange,
 ) {
+  const toEvidencePayload = (links: CategorizationChange["confidentialityEvidence"]) =>
+    links.map((link) => ({
+      artifact_id: link.artifactId,
+      locator: JSON.parse(link.locator) as Record<string, unknown>,
+    }));
+
   return workspaceMutation(
     session,
     workspace.id,
@@ -517,6 +546,9 @@ export function saveSspCategorization(
       confidentiality_rationale: change.confidentialityRationale,
       integrity_rationale: change.integrityRationale,
       availability_rationale: change.availabilityRationale,
+      confidentiality_evidence: toEvidencePayload(change.confidentialityEvidence),
+      integrity_evidence: toEvidencePayload(change.integrityEvidence),
+      availability_evidence: toEvidencePayload(change.availabilityEvidence),
     },
   );
 }

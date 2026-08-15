@@ -73,6 +73,8 @@ export type SspWorkspaceMetrics = {
   requiredItemsResolved: boolean;
   controlsResolved: boolean;
   agentControlsGrounded: boolean;
+  categorizationConfirmed: boolean;
+  categorizationStale: boolean;
   reviewable: boolean;
 };
 
@@ -88,6 +90,7 @@ export function calculateSspWorkspaceMetrics({
   currentContentHash,
   approvedContentHash,
   controlResponse,
+  categorization,
 }: Pick<
   SspWorkspace,
   | "requirements"
@@ -101,6 +104,7 @@ export function calculateSspWorkspaceMetrics({
   | "currentContentHash"
   | "approvedContentHash"
   | "controlResponse"
+  | "categorization"
 >): SspWorkspaceMetrics {
   const required = requirements.filter((requirement) => requirement.required);
   const satisfiedIds = satisfiedRequiredIds(sections);
@@ -140,6 +144,9 @@ export function calculateSspWorkspaceMetrics({
     ),
   );
 
+  const categorizationConfirmed = categorization.status === "confirmed";
+  const categorizationStale = categorization.status === "stale";
+
   return {
     evidence: evidence.length,
     processedEvidence: evidence.filter(
@@ -173,11 +180,15 @@ export function calculateSspWorkspaceMetrics({
     requiredItemsResolved,
     controlsResolved: controlsWithResolution,
     agentControlsGrounded,
+    categorizationConfirmed,
+    categorizationStale,
     reviewable:
       processingJobsTerminal &&
       requiredItemsResolved &&
       controlsWithResolution &&
       agentControlsGrounded &&
+      categorizationConfirmed &&
+      !categorizationStale &&
       revisionSaved &&
       internallyConsistent,
   };
