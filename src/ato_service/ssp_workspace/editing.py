@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from typing import Mapping
+from collections.abc import Mapping
 
 from pydantic import BaseModel
 
+from ato_service.ssp_workspace.categorization import mark_categorization_stale_if_needed
 from ato_service.ssp_workspace.contracts import (
     ControlState,
     EvidenceLink,
@@ -18,15 +19,16 @@ from ato_service.ssp_workspace.contracts import (
     SectionContent,
     SectionState,
 )
-from ato_service.ssp_workspace.categorization import mark_categorization_stale_if_needed
-from ato_service.ssp_workspace.information_types import (
-    mark_information_types_stale_if_needed,
-)
 from ato_service.ssp_workspace.generation_contracts import (
     GenerationResult,
     PatchResult,
 )
-from ato_service.ssp_workspace.system_definition import mark_system_definition_stale_if_needed
+from ato_service.ssp_workspace.information_types import (
+    mark_information_types_stale_if_needed,
+)
+from ato_service.ssp_workspace.system_definition import (
+    mark_system_definition_stale_if_needed,
+)
 
 _QUESTION_NAMESPACE = uuid.UUID("c2d1fae7-5965-477f-867d-41279b8f989d")
 _DIRECT_ANSWER_SECTION_KEYS = frozenset(
@@ -451,7 +453,9 @@ def _evidence_for_facts(
 
 
 def _question_identity(question: QuestionContent) -> str:
-    from ato_service.ssp_workspace.generation_contracts import deterministic_question_key
+    from ato_service.ssp_workspace.generation_contracts import (
+        deterministic_question_key,
+    )
 
     return deterministic_question_key(
         target_type=question.target_type,

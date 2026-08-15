@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 from io import BytesIO
-import hashlib
-import json
 from typing import Any
-import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,10 +50,8 @@ from ato_service.ssp_workspace.export import (
     build_workspace_docx_export,
     build_workspace_json_export,
 )
-from ato_service.ssp_workspace.oscal_export import build_draft_oscal_ssp_json_export
 from ato_service.ssp_workspace.generation import (
     ContextualEditRequest,
-    ControlState as GenerationControlState,
     EvidenceFact,
     InitialGenerationRequest,
     ModelCallable,
@@ -61,6 +59,9 @@ from ato_service.ssp_workspace.generation import (
     SspSectionState,
     generate_contextual_patch,
     generate_initial_ssp,
+)
+from ato_service.ssp_workspace.generation import (
+    ControlState as GenerationControlState,
 )
 from ato_service.ssp_workspace.generation_contracts import (
     GeneratedQuestion,
@@ -80,17 +81,21 @@ from ato_service.ssp_workspace.metrics import (
     controls_have_tracked_responses,
     requirement_is_satisfied,
 )
+from ato_service.ssp_workspace.oscal_export import build_draft_oscal_ssp_json_export
 from ato_service.ssp_workspace.persistence import (
     StaleWorkspaceRevisionError,
     approve_current_revision,
     create_workspace,
     save_revision,
 )
-from ato_service.ssp_workspace.profiles import deserialize_profile_bundle, resolve_stored_profile
 from ato_service.ssp_workspace.profile_bundles import (
     ControlResponsePolicy,
     ProfileDiff,
     diff_profiles,
+)
+from ato_service.ssp_workspace.profiles import (
+    deserialize_profile_bundle,
+    resolve_stored_profile,
 )
 
 
@@ -277,8 +282,8 @@ async def load_workspace_envelope(
 
     from ato_service.db.models import (
         SspAgencyDocxRender,
-        SspApprovalSnapshot,
         SspAgentPatch,
+        SspApprovalSnapshot,
         SspEvidenceArtifact,
         SspProfileVersion,
         SspWorkspace,
@@ -854,7 +859,9 @@ async def approve_workspace_revision(
         raise WorkspaceNotReviewableError(
             "system categorization must be explicitly confirmed before approval"
         )
-    from ato_service.ssp_workspace.system_definition import active_system_definition_status
+    from ato_service.ssp_workspace.system_definition import (
+        active_system_definition_status,
+    )
 
     system_definition_status = active_system_definition_status(facts_by_key)
     if system_definition_status == "stale":
@@ -1267,18 +1274,18 @@ async def save_system_definition(
 ) -> Any:
     """Confirm structured authorization boundary, components, and interconnections."""
 
+    from ato_service.ssp_workspace.contracts import EvidenceLink
     from ato_service.ssp_workspace.system_definition import (
         AuthorizationBoundary,
         DiagramLink,
         Interconnection,
         SystemComponent,
         apply_system_definition_sections,
+        resolve_workspace_evidence_links,
         validate_authorization_boundary,
         validate_component_inventory,
         validate_interconnection_register,
-        resolve_workspace_evidence_links,
     )
-    from ato_service.ssp_workspace.contracts import EvidenceLink
 
     revision = await _load_exact_current_revision(
         session, workspace_id=workspace_id, revision_id=expected_revision_id
@@ -1650,9 +1657,7 @@ def _metric_requirements(profile_row: Any) -> tuple[ProfileRequirement, ...]:
             "component_inventory",
             "interconnection_register",
             "information_type_register",
-        }:
-            value_type = "array"
-        elif item["value_type"] == "string_list":
+        } or item["value_type"] == "string_list":
             value_type = "array"
         else:
             value_type = "string"
@@ -1921,11 +1926,11 @@ async def _approved_export_snapshot(
     section_content = {
         item.key: item.content for item in content.sections if item.content.strip()
     }
-    from ato_service.ssp_workspace.system_definition import (
-        build_system_definition_export_block,
-    )
     from ato_service.ssp_workspace.information_types import (
         build_information_types_export_block,
+    )
+    from ato_service.ssp_workspace.system_definition import (
+        build_system_definition_export_block,
     )
 
     return {

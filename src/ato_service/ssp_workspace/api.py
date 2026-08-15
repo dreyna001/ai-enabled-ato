@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import datetime, timezone
-from typing import Annotated, Any, Literal
 import uuid
+from dataclasses import asdict
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
@@ -69,20 +69,20 @@ from ato_service.ssp_workspace.service import (
     reject_proposed_patch,
     render_approved_export,
     restore_workspace_revision,
-    save_system_categorization,
-    save_system_definition,
-    save_information_types,
     save_control_edit,
+    save_information_types,
     save_question_answer,
     save_section_edit,
+    save_system_categorization,
+    save_system_definition,
 )
+from ato_service.systems import create_system, list_systems
 from ato_service.text_llm import (
     ChatMessage,
     TextModelCallError,
     TextModelConfigurationError,
     build_text_model_client,
 )
-from ato_service.systems import create_system, list_systems
 
 
 class CreateWorkspaceRequest(BaseModel):
@@ -232,7 +232,7 @@ ExportFormat = Literal["json", "docx", "oscal-json"]
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def get_read_principal(request: Request) -> AuthenticatedPrincipal:
