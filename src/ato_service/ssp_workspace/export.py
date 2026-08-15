@@ -116,6 +116,7 @@ def normalize_export_snapshot(
     control_order = _normalize_control_order(snapshot.get("control_order"))
     evidence_catalog = _normalize_evidence_catalog(snapshot.get("evidence_catalog"))
     categorization = _normalize_categorization(snapshot.get("categorization"))
+    system_definition = _normalize_system_definition(snapshot.get("system_definition"))
 
     normalized: dict[str, Any] = {
         "schema_version": EXPORT_SCHEMA_VERSION,
@@ -159,6 +160,8 @@ def normalize_export_snapshot(
         normalized["evidence_catalog"] = evidence_catalog
     if categorization:
         normalized["categorization"] = categorization
+    if system_definition:
+        normalized["system_definition"] = system_definition
     return normalized
 
 
@@ -224,6 +227,30 @@ def _normalize_categorization(value: Any) -> dict[str, Any] | None:
             "evidence": normalized_evidence,
         }
     return normalized
+
+
+def _normalize_system_definition(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise WorkspaceExportValidationError("system_definition must be an object")
+    status = _required_text(value, "status", max_length=32)
+    if status not in {"confirmed", "stale", "unconfirmed"}:
+        raise WorkspaceExportValidationError("system_definition status is invalid")
+    return {
+        "status": status,
+        "authorization_boundary": value.get("authorization_boundary"),
+        "components": _bounded_object_list(
+            value.get("components"),
+            field_name="system_definition.components",
+            maximum=500,
+        ),
+        "interconnections": _bounded_object_list(
+            value.get("interconnections"),
+            field_name="system_definition.interconnections",
+            maximum=500,
+        ),
+    }
 
 
 def _normalize_sections(value: Any) -> list[dict[str, Any]]:

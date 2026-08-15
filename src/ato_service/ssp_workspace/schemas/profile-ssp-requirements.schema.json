@@ -14,7 +14,8 @@
       "enum": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ]
     },
     "control_response": {
@@ -235,6 +236,14 @@
           },
           "evidence_required_for_agent": {
             "type": "boolean"
+          },
+          "structured_kind": {
+            "type": "string",
+            "enum": [
+              "authorization_boundary",
+              "component_inventory",
+              "interconnection_register"
+            ]
           }
         }
       }

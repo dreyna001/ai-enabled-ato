@@ -136,6 +136,34 @@
         "title": "CreateWorkspaceRequest",
         "type": "object"
       },
+      "DiagramLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "format": "uuid",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Label",
+            "type": "string"
+          },
+          "locator": {
+            "additionalProperties": true,
+            "minProperties": 1,
+            "title": "Locator",
+            "type": "object"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "locator"
+        ],
+        "title": "DiagramLinkRequest",
+        "type": "object"
+      },
       "EditControlRequest": {
         "additionalProperties": false,
         "properties": {
@@ -202,6 +230,28 @@
         "title": "EditSectionRequest",
         "type": "object"
       },
+      "EvidenceLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "format": "uuid",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "locator": {
+            "additionalProperties": true,
+            "minProperties": 1,
+            "title": "Locator",
+            "type": "object"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "locator"
+        ],
+        "title": "EvidenceLinkRequest",
+        "type": "object"
+      },
       "ExpectedRevisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -260,6 +310,108 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "InterconnectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_expiration": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Agreement Expiration",
+            "type": "string"
+          },
+          "agreement_id": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Agreement Id",
+            "type": "string"
+          },
+          "agreement_status": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Agreement Status",
+            "type": "string"
+          },
+          "agreement_type": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Agreement Type",
+            "type": "string"
+          },
+          "boundary_protections": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Boundary Protections",
+            "type": "string"
+          },
+          "connected_organization": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Connected Organization",
+            "type": "string"
+          },
+          "connected_system": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Connected System",
+            "type": "string"
+          },
+          "connection_owner": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Connection Owner",
+            "type": "string"
+          },
+          "data_types": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Data Types",
+            "type": "array"
+          },
+          "direction": {
+            "enum": [
+              "inbound",
+              "outbound",
+              "bidirectional"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EvidenceLinkRequest"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "interconnection_id": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Interconnection Id",
+            "type": "string"
+          },
+          "interface_protocol": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Interface Protocol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connected_organization",
+          "connected_system",
+          "direction",
+          "data_types",
+          "interface_protocol",
+          "connection_owner",
+          "agreement_type",
+          "boundary_protections"
+        ],
+        "title": "InterconnectionRequest",
         "type": "object"
       },
       "MigrateProfileRequest": {
@@ -390,6 +542,101 @@
           "availability_evidence"
         ],
         "title": "SaveCategorizationRequest",
+        "type": "object"
+      },
+      "SaveSystemDefinitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary_narrative": {
+            "maxLength": 100000,
+            "minLength": 20,
+            "title": "Boundary Narrative",
+            "type": "string"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/SystemComponentRequest"
+            },
+            "minItems": 1,
+            "title": "Components",
+            "type": "array"
+          },
+          "diagram_links": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DiagramLinkRequest"
+            },
+            "title": "Diagram Links",
+            "type": "array"
+          },
+          "expected_revision_id": {
+            "format": "uuid",
+            "title": "Expected Revision Id",
+            "type": "string"
+          },
+          "interconnections": {
+            "items": {
+              "$ref": "#/components/schemas/InterconnectionRequest"
+            },
+            "minItems": 1,
+            "title": "Interconnections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_revision_id",
+          "boundary_narrative",
+          "components",
+          "interconnections"
+        ],
+        "title": "SaveSystemDefinitionRequest",
+        "type": "object"
+      },
+      "SystemComponentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "component_id": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Component Id",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EvidenceLinkRequest"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "placement": {
+            "enum": [
+              "inside",
+              "outside",
+              "crossing"
+            ],
+            "title": "Placement",
+            "type": "string"
+          },
+          "purpose": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "purpose",
+          "placement"
+        ],
+        "title": "SystemComponentRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -2706,6 +2953,89 @@
           }
         },
         "summary": "Patch Section",
+        "tags": [
+          "SSP Workspaces"
+        ]
+      }
+    },
+    "/ssp-workspaces/{workspace_id}/system-definition": {
+      "post": {
+        "operationId": "post_system_definition_api_v1_ssp_workspaces__workspace_id__system_definition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSystemDefinitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post System Definition",
         "tags": [
           "SSP Workspaces"
         ]

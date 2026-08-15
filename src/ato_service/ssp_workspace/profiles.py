@@ -97,6 +97,7 @@ def deserialize_profile_bundle(document: dict[str, Any]) -> ProfileBundle:
                     evidence_required_for_agent=item["evidence_required_for_agent"],
                     required=item.get("required", True),
                     standard_refs=tuple(item.get("standard_refs", ())),
+                    structured_kind=item.get("structured_kind"),
                 )
                 for item in document["ssp_required_items"]
             ),
@@ -317,7 +318,7 @@ async def ensure_builtin_profile(
         project_root
         / "reference"
         / "ssp_profiles"
-        / "agency-fisma-nist-sp800-53-rev5-1.2.0"
+        / "agency-fisma-nist-sp800-53-rev5-1.3.0"
     )
     document = serialize_profile_bundle(bundle)
     canonical = json.dumps(

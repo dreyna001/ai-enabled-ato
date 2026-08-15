@@ -70,6 +70,7 @@ from ato_service.ssp_workspace.service import (
     render_approved_export,
     restore_workspace_revision,
     save_system_categorization,
+    save_system_definition,
     save_control_edit,
     save_question_answer,
     save_section_edit,
@@ -148,6 +149,56 @@ class SaveCategorizationRequest(ExpectedRevisionRequest):
     availability_evidence: tuple[CategorizationEvidenceRequest, ...] = Field(
         min_length=1
     )
+
+
+class EvidenceLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: uuid.UUID
+    locator: dict[str, Any] = Field(min_length=1)
+
+
+class DiagramLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: uuid.UUID
+    locator: dict[str, Any] = Field(min_length=1)
+    label: str = Field(default="", max_length=255)
+
+
+class SystemComponentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    component_id: str = Field(default="", max_length=128)
+    name: str = Field(min_length=1, max_length=255)
+    purpose: str = Field(min_length=1, max_length=4_000)
+    placement: Literal["inside", "outside", "crossing"]
+    evidence: tuple[EvidenceLinkRequest, ...] = ()
+
+
+class InterconnectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    interconnection_id: str = Field(default="", max_length=128)
+    connected_organization: str = Field(min_length=1, max_length=255)
+    connected_system: str = Field(min_length=1, max_length=255)
+    direction: Literal["inbound", "outbound", "bidirectional"]
+    data_types: tuple[str, ...] = Field(min_length=1)
+    interface_protocol: str = Field(min_length=1, max_length=255)
+    connection_owner: str = Field(min_length=1, max_length=255)
+    agreement_type: str = Field(min_length=1, max_length=255)
+    agreement_id: str = Field(default="", max_length=255)
+    agreement_status: str = Field(default="", max_length=255)
+    agreement_expiration: str = Field(default="", max_length=64)
+    boundary_protections: str = Field(min_length=1, max_length=4_000)
+    evidence: tuple[EvidenceLinkRequest, ...] = ()
+
+
+class SaveSystemDefinitionRequest(ExpectedRevisionRequest):
+    boundary_narrative: str = Field(min_length=20, max_length=100_000)
+    diagram_links: tuple[DiagramLinkRequest, ...] = ()
+    components: tuple[SystemComponentRequest, ...] = Field(min_length=1)
+    interconnections: tuple[InterconnectionRequest, ...] = Field(min_length=1)
 
 
 class ProposePatchRequest(ExpectedRevisionRequest):
@@ -423,6 +474,53 @@ def build_ssp_workspace_router() -> APIRouter:
             )
             return JSONResponse(status_code=201, content=envelope)
         except (AuthorizationDeniedError, WorkspacePersistenceError, ProfileBundleError) as exc:
+            return _error_response(exc)
+
+    @router.post("/ssp-workspaces/{workspace_id}/system-definition")
+    async def post_system_definition(
+        workspace_id: uuid.UUID,
+        payload: SaveSystemDefinitionRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session,
+                principal=principal,
+                workspace_id=workspace_id,
+                roles=("isso",),
+            )
+            await save_system_definition(
+                session,
+                workspace_id=workspace_id,
+                expected_revision_id=payload.expected_revision_id,
+                boundary_narrative=payload.boundary_narrative,
+                diagram_links=tuple(
+                    link.model_dump(mode="json") for link in payload.diagram_links
+                ),
+                components=tuple(
+                    component.model_dump(mode="json") for component in payload.components
+                ),
+                interconnections=tuple(
+                    item.model_dump(mode="json") for item in payload.interconnections
+                ),
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(
+                    session, workspace_id=workspace_id
+                ),
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            ProfileBundleError,
+            ValueError,
+        ) as exc:
             return _error_response(exc)
 
     @router.post("/ssp-workspaces/{workspace_id}/categorization")

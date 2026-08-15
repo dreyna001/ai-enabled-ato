@@ -23,6 +23,7 @@ from ato_service.ssp_workspace.generation_contracts import (
     GenerationResult,
     PatchResult,
 )
+from ato_service.ssp_workspace.system_definition import mark_system_definition_stale_if_needed
 
 _QUESTION_NAMESPACE = uuid.UUID("c2d1fae7-5965-477f-867d-41279b8f989d")
 _DIRECT_ANSWER_SECTION_KEYS = frozenset(
@@ -247,6 +248,10 @@ def apply_agent_patch(
                 updated,
                 section_key=patch.target_id,
             )
+            updated = mark_system_definition_stale_if_needed(
+                updated,
+                section_key=patch.target_id,
+            )
     return updated
 
 
@@ -279,7 +284,11 @@ def edit_section(
                     questions[key] for key in sorted(questions)
                 ),
             )
-            return mark_categorization_stale_if_needed(
+            updated = mark_categorization_stale_if_needed(
+                updated,
+                section_key=section_key,
+            )
+            return mark_system_definition_stale_if_needed(
                 updated,
                 section_key=section_key,
             )

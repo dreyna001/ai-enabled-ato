@@ -165,6 +165,7 @@ class SspItemPolicy:
     min_length: int
     allowed_values: frozenset[str]
     standard_refs: tuple[str, ...]
+    structured_kind: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +212,7 @@ class SelectedProfilePolicy:
                 min_length=min_length,
                 allowed_values=frozenset(item.allowed_values),
                 standard_refs=tuple(getattr(item, "standard_refs", ()) or ()),
+                structured_kind=getattr(item, "structured_kind", None),
             )
         parameterized_control_ids = frozenset(
             control.control_id
@@ -1046,6 +1048,42 @@ def _validate_section_content_against_policy(
     content: str,
     requirement: SspItemPolicy,
 ) -> None:
+    if requirement.structured_kind:
+        from ato_service.ssp_workspace.system_definition import (
+            parse_authorization_boundary,
+            parse_component_inventory,
+            parse_interconnection_register,
+            validate_authorization_boundary,
+            validate_component_inventory,
+            validate_interconnection_register,
+        )
+
+        if requirement.structured_kind == "authorization_boundary":
+            boundary = parse_authorization_boundary(content)
+            if boundary is None:
+                raise GenerationContractError(
+                    f"section {section_id} requires authorization boundary content",
+                    failure_kind="schema",
+                )
+            try:
+                validate_authorization_boundary(boundary)
+            except ValueError as exc:
+                raise GenerationContractError(str(exc), failure_kind="schema") from exc
+            return
+        if requirement.structured_kind == "component_inventory":
+            try:
+                components = parse_component_inventory(content)
+                validate_component_inventory(components)
+            except ValueError as exc:
+                raise GenerationContractError(str(exc), failure_kind="schema") from exc
+            return
+        if requirement.structured_kind == "interconnection_register":
+            try:
+                interconnections = parse_interconnection_register(content)
+                validate_interconnection_register(interconnections)
+            except ValueError as exc:
+                raise GenerationContractError(str(exc), failure_kind="schema") from exc
+            return
     if requirement.value_type == "string_list":
         items = _normalized_string_list_items(content)
         if len(items) < requirement.min_length:

@@ -474,6 +474,11 @@ async def save_section_edit(
         validate_workspace_section_content(section_key, content, profile_policy)
     except ProfileValidationError as exc:
         raise WorkspaceProfileValidationError(str(exc)) from exc
+    requirement = profile_policy.sections.get(section_key)
+    if requirement is not None and requirement.structured_kind:
+        raise WorkspaceProfileValidationError(
+            "structured system definition sections must be saved via /system-definition"
+        )
     updated = edit_section(
         RevisionContent.model_validate(revision.content),
         section_key=section_key,
@@ -849,6 +854,17 @@ async def approve_workspace_revision(
         raise WorkspaceNotReviewableError(
             "system categorization must be explicitly confirmed before approval"
         )
+    from ato_service.ssp_workspace.system_definition import active_system_definition_status
+
+    system_definition_status = active_system_definition_status(facts_by_key)
+    if system_definition_status == "stale":
+        raise WorkspaceNotReviewableError(
+            "system definition must be re-confirmed before approval"
+        )
+    if system_definition_status != "confirmed":
+        raise WorkspaceNotReviewableError(
+            "system definition must be explicitly confirmed before approval"
+        )
     from ato_service.db.models import SspProfileVersion, SspWorkspace
 
     profile_row = (
@@ -1223,6 +1239,139 @@ async def save_system_categorization(
     )
 
 
+async def save_system_definition(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+    boundary_narrative: str,
+    diagram_links: tuple[dict[str, Any], ...],
+    components: tuple[dict[str, Any], ...],
+    interconnections: tuple[dict[str, Any], ...],
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> Any:
+    """Confirm structured authorization boundary, components, and interconnections."""
+
+    from ato_service.ssp_workspace.system_definition import (
+        AuthorizationBoundary,
+        DiagramLink,
+        Interconnection,
+        SystemComponent,
+        apply_system_definition_sections,
+        validate_authorization_boundary,
+        validate_component_inventory,
+        validate_interconnection_register,
+        resolve_workspace_evidence_links,
+    )
+    from ato_service.ssp_workspace.contracts import EvidenceLink
+
+    revision = await _load_exact_current_revision(
+        session, workspace_id=workspace_id, revision_id=expected_revision_id
+    )
+    content = RevisionContent.model_validate(revision.content)
+
+    links = tuple(
+        DiagramLink(
+            artifact_id=uuid.UUID(str(entry["artifact_id"])),
+            locator=dict(entry["locator"]),
+            label=str(entry.get("label") or ""),
+        )
+        for entry in diagram_links
+    )
+    boundary = AuthorizationBoundary(narrative=boundary_narrative, diagram_links=links)
+    validate_authorization_boundary(boundary)
+
+    parsed_components: list[SystemComponent] = []
+    for raw in components:
+        evidence = tuple(
+            EvidenceLink(
+                artifact_id=uuid.UUID(str(item["artifact_id"])),
+                locator=dict(item["locator"]),
+            )
+            for item in raw.get("evidence") or ()
+        )
+        evidence = await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=evidence,
+        )
+        parsed_components.append(
+            SystemComponent(
+                component_id=str(raw.get("component_id") or uuid.uuid4()),
+                name=str(raw.get("name") or ""),
+                purpose=str(raw.get("purpose") or ""),
+                placement=raw.get("placement"),  # type: ignore[arg-type]
+                evidence=evidence,
+            )
+        )
+    component_tuple = tuple(parsed_components)
+    validate_component_inventory(component_tuple)
+
+    parsed_interconnections: list[Interconnection] = []
+    for raw in interconnections:
+        evidence = tuple(
+            EvidenceLink(
+                artifact_id=uuid.UUID(str(item["artifact_id"])),
+                locator=dict(item["locator"]),
+            )
+            for item in raw.get("evidence") or ()
+        )
+        evidence = await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=evidence,
+        )
+        parsed_interconnections.append(
+            Interconnection(
+                interconnection_id=str(raw.get("interconnection_id") or uuid.uuid4()),
+                connected_organization=str(raw.get("connected_organization") or ""),
+                connected_system=str(raw.get("connected_system") or ""),
+                direction=raw.get("direction"),  # type: ignore[arg-type]
+                data_types=tuple(str(item) for item in raw.get("data_types") or ()),
+                interface_protocol=str(raw.get("interface_protocol") or ""),
+                connection_owner=str(raw.get("connection_owner") or ""),
+                agreement_type=str(raw.get("agreement_type") or ""),
+                agreement_id=str(raw.get("agreement_id") or ""),
+                agreement_status=str(raw.get("agreement_status") or ""),
+                agreement_expiration=str(raw.get("agreement_expiration") or ""),
+                boundary_protections=str(raw.get("boundary_protections") or ""),
+                evidence=evidence,
+            )
+        )
+    interconnection_tuple = tuple(parsed_interconnections)
+    validate_interconnection_register(interconnection_tuple)
+
+    for link in links:
+        await resolve_workspace_evidence_links(
+            session,
+            workspace_id=workspace_id,
+            links=(EvidenceLink(artifact_id=link.artifact_id, locator=link.locator),),
+        )
+
+    updated = apply_system_definition_sections(
+        content,
+        boundary=boundary,
+        components=component_tuple,
+        interconnections=interconnection_tuple,
+    )
+    return await _save_edited_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=expected_revision_id,
+        content=updated,
+        actor_id=actor_id,
+        now=now,
+        audit_hmac_key=audit_hmac_key,
+        action="ssp_system_definition_confirmed",
+        metadata={
+            "component_count": len(component_tuple),
+            "interconnection_count": len(interconnection_tuple),
+        },
+    )
+
+
 async def _save_edited_revision(
     session: AsyncSession,
     *,
@@ -1415,19 +1564,31 @@ def _impact_profile_diff(old: Any, new: Any) -> ProfileDiff:
 def _metric_requirements(profile_row: Any) -> tuple[ProfileRequirement, ...]:
     bundle = profile_row.bundle
     raw_items = bundle.get("ssp_required_items", []) if isinstance(bundle, dict) else []
-    return tuple(
-        ProfileRequirement(
-            key=item["item_id"],
-            value_type="array" if item["value_type"] == "string_list" else "string",
-            required=item.get("required", True),
-            enum_values=tuple(item.get("allowed_values", ())),
-            min_length=item.get("min_length") or 1,
-            evidence_required_for_agent_value=item.get(
-                "evidence_required_for_agent", True
-            ),
+    requirements: list[ProfileRequirement] = []
+    for item in raw_items:
+        structured_kind = item.get("structured_kind")
+        if structured_kind == "authorization_boundary":
+            value_type = "object"
+        elif structured_kind in {"component_inventory", "interconnection_register"}:
+            value_type = "array"
+        elif item["value_type"] == "string_list":
+            value_type = "array"
+        else:
+            value_type = "string"
+        requirements.append(
+            ProfileRequirement(
+                key=item["item_id"],
+                value_type=value_type,
+                required=item.get("required", True),
+                enum_values=tuple(item.get("allowed_values", ())),
+                min_length=item.get("min_length") or 1,
+                evidence_required_for_agent_value=item.get(
+                    "evidence_required_for_agent", True
+                ),
+                structured_kind=structured_kind,
+            )
         )
-        for item in raw_items
-    )
+    return tuple(requirements)
 
 
 def _effective_metric_facts(
@@ -1442,7 +1603,19 @@ def _effective_metric_facts(
         requirement = requirements_by_key.get(section.key)
         if requirement is None or not section.content.strip():
             continue
-        if requirement.value_type == "array":
+        if requirement.structured_kind:
+            from ato_service.ssp_workspace.system_definition import (
+                structured_section_metric_value,
+            )
+
+            value = structured_section_metric_value(
+                section.key,
+                section.content,
+                structured_kind=requirement.structured_kind,
+            )
+            if value is None:
+                continue
+        elif requirement.value_type == "array":
             value: Any = [
                 line.strip().lstrip("-*•").strip()
                 for line in section.content.splitlines()
@@ -1657,6 +1830,12 @@ async def _approved_export_snapshot(
     evidence_catalog = {
         str(row.evidence_artifact_id): row.display_filename for row in evidence_rows
     }
+    section_content = {
+        item.key: item.content for item in content.sections if item.content.strip()
+    }
+    from ato_service.ssp_workspace.system_definition import (
+        build_system_definition_export_block,
+    )
 
     return {
         "workspace_id": str(workspace.workspace_id),
@@ -1703,6 +1882,10 @@ async def _approved_export_snapshot(
         ],
         "control_order": [control.control_id for control in resolved_profile.controls],
         "evidence_catalog": evidence_catalog,
+        "system_definition": build_system_definition_export_block(
+            sections=section_content,
+            evidence_catalog=evidence_catalog,
+        ),
         "sections": [
             {
                 "section_id": item.key,

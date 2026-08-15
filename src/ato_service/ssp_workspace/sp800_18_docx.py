@@ -63,6 +63,16 @@ def render_sp800_18_docx(document: DocxDocument, snapshot: dict[str, Any]) -> No
             _render_fips199_table(document, item_values, snapshot)
             continue
 
+        if requirement_id == "table1.authorization-boundary-description":
+            _render_authorization_boundary(document, snapshot)
+            continue
+        if requirement_id == "table1.system-component-inventory":
+            _render_component_inventory(document, snapshot)
+            continue
+        if requirement_id == "table1.information-exchanges-summary":
+            _render_interconnection_register(document, snapshot)
+            continue
+
         item_ids = entry.get("item_ids") or []
         for item_id in item_ids:
             label = _item_title(snapshot, item_id)
@@ -322,3 +332,117 @@ def render_sp800_18_cover(document: DocxDocument, snapshot: dict[str, Any]) -> N
     )
     document.add_paragraph(f"Content SHA-256: {snapshot['content_sha256']}")
     document.add_page_break()
+
+
+def _system_definition_block(snapshot: dict[str, Any]) -> dict[str, Any]:
+    block = snapshot.get("system_definition")
+    if isinstance(block, dict):
+        return block
+    return {}
+
+
+def _render_authorization_boundary(
+    document: DocxDocument,
+    snapshot: dict[str, Any],
+) -> None:
+    block = _system_definition_block(snapshot).get("authorization_boundary")
+    if not isinstance(block, dict):
+        item_values = _item_value_lookup(snapshot)
+        document.add_paragraph(
+            _format_item_text(item_values.get("system.authorization_boundary"))
+        )
+        return
+    narrative = block.get("narrative")
+    document.add_paragraph(_format_item_text(narrative))
+    links = block.get("diagram_links") or []
+    if links:
+        document.add_heading("Diagram References", level=2)
+        for link in links:
+            if not isinstance(link, dict):
+                continue
+            label = link.get("label") or link.get("display_filename") or link.get(
+                "artifact_id"
+            )
+            locator = link.get("locator")
+            document.add_paragraph(f"- {label}: {json.dumps(locator, sort_keys=True)}")
+
+
+def _render_component_inventory(
+    document: DocxDocument,
+    snapshot: dict[str, Any],
+) -> None:
+    components = _system_definition_block(snapshot).get("components") or []
+    if not components:
+        item_values = _item_value_lookup(snapshot)
+        document.add_paragraph(_format_item_text(item_values.get("system.components")))
+        return
+    table = document.add_table(rows=1, cols=4)
+    table.style = "Table Grid"
+    header = table.rows[0].cells
+    header[0].text = "Component"
+    header[1].text = "Purpose"
+    header[2].text = "Boundary Placement"
+    header[3].text = "Evidence"
+    catalog = snapshot.get("evidence_catalog") or {}
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        row = table.add_row().cells
+        row[0].text = _format_item_text(component.get("name"))
+        row[1].text = _format_item_text(component.get("purpose"))
+        row[2].text = _format_item_text(component.get("placement"))
+        evidence = component.get("evidence") or []
+        row[3].text = _format_object_evidence_links(evidence, catalog)
+
+
+def _render_interconnection_register(
+    document: DocxDocument,
+    snapshot: dict[str, Any],
+) -> None:
+    interconnections = _system_definition_block(snapshot).get("interconnections") or []
+    if not interconnections:
+        item_values = _item_value_lookup(snapshot)
+        document.add_paragraph(
+            _format_item_text(item_values.get("system.interconnections"))
+        )
+        return
+    catalog = snapshot.get("evidence_catalog") or {}
+    for index, item in enumerate(interconnections, start=1):
+        if not isinstance(item, dict):
+            continue
+        document.add_heading(f"Interconnection {index}", level=2)
+        fields = (
+            ("Connected organization", "connected_organization"),
+            ("Connected system", "connected_system"),
+            ("Direction", "direction"),
+            ("Data types", "data_types"),
+            ("Interface / protocol", "interface_protocol"),
+            ("Connection owner", "connection_owner"),
+            ("Agreement type", "agreement_type"),
+            ("Agreement ID", "agreement_id"),
+            ("Agreement status", "agreement_status"),
+            ("Agreement expiration", "agreement_expiration"),
+            ("Boundary protections", "boundary_protections"),
+        )
+        for label, key in fields:
+            document.add_paragraph(f"{label}: {_format_item_text(item.get(key))}")
+        evidence = item.get("evidence") or []
+        if evidence:
+            document.add_paragraph(
+                f"Evidence: {_format_object_evidence_links(evidence, catalog)}"
+            )
+
+
+def _format_object_evidence_links(
+    evidence: list[Any],
+    catalog: dict[str, Any],
+) -> str:
+    formatted: list[str] = []
+    for link in evidence:
+        if not isinstance(link, dict):
+            continue
+        artifact_id = str(link.get("artifact_id") or "")
+        label = link.get("display_filename") or catalog.get(artifact_id) or artifact_id
+        locator = link.get("locator")
+        formatted.append(f"{label} ({json.dumps(locator, sort_keys=True)})")
+    return ", ".join(formatted) if formatted else "Not provided."

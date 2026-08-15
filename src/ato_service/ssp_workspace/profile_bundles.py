@@ -168,6 +168,7 @@ class SspRequiredItem:
     evidence_required_for_agent: bool
     required: bool = True
     standard_refs: tuple[str, ...] = ()
+    structured_kind: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -795,6 +796,7 @@ def _load_ssp_requirements(
             evidence_required_for_agent=item["evidence_required_for_agent"],
             required=item.get("required", True),
             standard_refs=tuple(item.get("standard_refs", ())),
+            structured_kind=item.get("structured_kind"),
         )
         for item in document["items"]
     )

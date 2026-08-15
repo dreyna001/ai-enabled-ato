@@ -52,7 +52,12 @@ class BuildProfileBundleError(ValueError):
     """Raised when pinned content cannot produce the expected local bundle."""
 
 
-def build_bundle(*, archive_path: Path, output_dir: Path) -> None:
+def build_bundle(
+    *,
+    archive_path: Path,
+    output_dir: Path,
+    profile_version: str = PROFILE_VERSION,
+) -> None:
     archive_path = archive_path.resolve()
     output_dir = output_dir.resolve()
     if not archive_path.is_file() or archive_path.is_symlink():
@@ -120,12 +125,15 @@ def build_bundle(*, archive_path: Path, output_dir: Path) -> None:
     generated_files = {
         "catalog.json": catalog_bytes,
         "baselines.json": _canonical_json_bytes(baselines),
-        "ssp-requirements.json": _canonical_json_bytes(_ssp_requirements()),
+        "ssp-requirements.json": _canonical_json_bytes(
+            _ssp_requirements(profile_version=profile_version)
+        ),
     }
     manifest = _manifest(
         archive_path=archive_path,
         catalog_version=catalog_version,
         generated_files=generated_files,
+        profile_version=profile_version,
     )
     generated_files["manifest.json"] = _canonical_json_bytes(manifest)
 
@@ -199,7 +207,8 @@ def _metadata_version(document: dict[str, Any], *, label: str) -> str:
     return version.strip()
 
 
-def _ssp_requirements() -> dict[str, Any]:
+def _ssp_requirements(*, profile_version: str = PROFILE_VERSION) -> dict[str, Any]:
+    structured = profile_version >= "1.3.0"
     impact_levels = ["low", "moderate", "high"]
     items = [
         _string_item(
@@ -249,6 +258,7 @@ def _ssp_requirements() -> dict[str, Any]:
             "Authorization Boundary",
             20,
             standard_refs=["table1.authorization-boundary-description"],
+            structured_kind="authorization_boundary" if structured else None,
         ),
         _string_item(
             "system.environment",
@@ -266,11 +276,15 @@ def _ssp_requirements() -> dict[str, Any]:
             "system.components",
             "Major System Components",
             standard_refs=["table1.system-component-inventory"],
+            minimum_entries=1 if structured else None,
+            structured_kind="component_inventory" if structured else None,
         ),
         _string_list_item(
             "system.interconnections",
             "System Interconnections",
             standard_refs=["table1.information-exchanges-summary"],
+            minimum_entries=1 if structured else None,
+            structured_kind="interconnection_register" if structured else None,
         ),
         _string_list_item(
             "system.data_types",
@@ -409,7 +423,7 @@ def _ssp_requirements() -> dict[str, Any]:
         ),
     ]
     return {
-        "schema_version": SSP_REQUIREMENTS_SCHEMA_VERSION,
+        "schema_version": profile_version if profile_version >= "1.3.0" else SSP_REQUIREMENTS_SCHEMA_VERSION,
         "control_response": {
             "implementation_statuses": [
                 "implemented",
@@ -689,6 +703,7 @@ def _string_item(
     allowed_values: list[str] | None = None,
     required: bool = True,
     standard_refs: list[str] | None = None,
+    structured_kind: str | None = None,
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "item_id": item_id,
@@ -703,6 +718,8 @@ def _string_item(
         item["allowed_values"] = allowed_values
     if standard_refs is not None:
         item["standard_refs"] = standard_refs
+    if structured_kind is not None:
+        item["structured_kind"] = structured_kind
     return item
 
 
@@ -713,6 +730,7 @@ def _string_list_item(
     required: bool = True,
     standard_refs: list[str] | None = None,
     minimum_entries: int | None = None,
+    structured_kind: str | None = None,
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "item_id": item_id,
@@ -725,6 +743,8 @@ def _string_list_item(
         item["min_length"] = minimum_entries
     if standard_refs is not None:
         item["standard_refs"] = standard_refs
+    if structured_kind is not None:
+        item["structured_kind"] = structured_kind
     return item
 
 
@@ -733,6 +753,7 @@ def _manifest(
     archive_path: Path,
     catalog_version: str,
     generated_files: dict[str, bytes],
+    profile_version: str = PROFILE_VERSION,
 ) -> dict[str, Any]:
     archive_sha256 = hashlib.sha256(archive_path.read_bytes()).hexdigest()
     baseline_members = ", ".join(
@@ -741,7 +762,7 @@ def _manifest(
     return {
         "schema_version": "1.0.0",
         "profile_id": "agency-fisma-nist-sp800-53-rev5",
-        "profile_version": PROFILE_VERSION,
+        "profile_version": profile_version,
         "nist_control_catalog_release": catalog_version,
         "display_name": ("Agency FISMA — NIST SP 800-53 Revision 5 Low/Moderate/High"),
         "sources": [
@@ -845,9 +866,18 @@ def main() -> int:
         type=Path,
         default=root / BUNDLE_RELATIVE_PATH,
     )
+    parser.add_argument(
+        "--profile-version",
+        default=PROFILE_VERSION,
+        help="Profile bundle version to build (default: 1.2.0)",
+    )
     args = parser.parse_args()
     try:
-        build_bundle(archive_path=args.archive, output_dir=args.output)
+        build_bundle(
+            archive_path=args.archive,
+            output_dir=args.output,
+            profile_version=args.profile_version,
+        )
     except BuildProfileBundleError as exc:
         parser.error(str(exc))
     return 0

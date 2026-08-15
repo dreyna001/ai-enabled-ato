@@ -235,6 +235,7 @@ class ProfileRequirement(StrictContract):
     enum_values: tuple[str, ...] = ()
     min_length: int = Field(default=1, ge=0, le=100_000)
     evidence_required_for_agent_value: bool = True
+    structured_kind: str | None = None
 
     @model_validator(mode="after")
     def enum_applies_only_to_string(self) -> ProfileRequirement:
