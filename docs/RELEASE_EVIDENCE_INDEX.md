@@ -1,14 +1,13 @@
 # Release Evidence Index
 
-**Status:** Phase 6 integration and release gate (2026-07-14); upload-first intake **P0–P7** doc reconciliation (2026-07-17); **metadata-first create** doc reconciliation (2026-07-21)  
-**Repository tip:** snapshot at Phase 6 reconciliation; branch name is historical (`cursor/phase-6-integration-and-release-gate-f4f1`)  
-**Alembic head:** `20260728_0016` (`migrations/versions/20260728_0016_ssp_agency_docx_renders.py`) — workspace-scoped agency DOCX render persistence; prior SSP and package migrations remain retained for compatibility
+**Status:** Release and gate evidence index (maintained on `main`)  
+**Alembic head:** `20260728_0016` — run `alembic heads` on your branch if this drifts
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
 
-## Upload-first intake plan (bounded index note)
+## Legacy upload-first intake (evidence index)
 
-Implementation plan [`UPLOAD_FIRST_INTAKE_PLAN.md`](UPLOAD_FIRST_INTAKE_PLAN.md) records **P0–P7 complete** (2026-07-18). **Metadata-first create** (2026-07-21) superseded the 2026-07-17 path-metadata deferral while retaining upload-before-confirm, MAP/REDUCE, and migration `20260717_0013`. Relevant automated evidence includes:
+Implementation delivery for legacy package intake (**P0–P7 complete**, 2026-07-18; metadata-first create reconciled 2026-07-21) is recorded in gate records below and retained code paths. Relevant automated evidence includes:
 
 | Area | Representative paths | Classification |
 | --- | --- | --- |

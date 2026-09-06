@@ -1847,7 +1847,6 @@
         "src/ato_service/ssp_workspace/metrics.py",
         "src/ato_service/ssp_workspace/service.py",
         "src/ato_service/ssp_workspace/schemas/profile-ssp-requirements.schema.json",
-        "docs/CONTROL_IMPLEMENTATION_STATEMENT_IMPROVEMENTS.md",
         "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md",
         "docs/SSP_WORKSPACE_OPERATOR_GUIDE.md"
       ],

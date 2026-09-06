@@ -14,7 +14,7 @@ dependencies = [
     "fastapi",
     "httpx",
     "jsonschema[format]",
-    # pypdf: primary PDF text-layer extraction (PACKAGE_EDITOR_PLAN Section 5).
+    # pypdf: primary PDF text-layer extraction (ATO_TECHNICAL_SPEC intake contract).
     "pypdf==6.14.2",
     # pypdfium2: bounded PDF page rendering for governed vision intake.
     "pypdfium2==5.11.0",

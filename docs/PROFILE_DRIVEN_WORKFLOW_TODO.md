@@ -8,31 +8,31 @@
 > rules, draft OSCAL JSON export, and profile-bound implementation-statement policy
 > (bundle **1.2.0**) do **not** check off the broader items below.
 
-**Last audited:** 2026-08-13 against repository state on `main`.
+**Last audited:** 2026-09-06 against repository state on `main`.
 
 ## Current state summary
 
-**Shipped (agency FISMA profile 1.2.0):**
+**Shipped (agency FISMA profile through **1.4.0**):**
 
 - Internal SSP workflow cut over; Increments A–D delivered (see NEW_INTERNAL plan).
 - Profile bundle drives control enums, SSP item constraints, generation/patch
   contracts, and `implementation_statement_policy`.
-- Basic **FIPS 199 categorization**: separate C/I/A, high-water mark, agent proposal
-  with human confirm, approval gate, portal panel, and partial DOCX export.
+- **FIPS 199 categorization** with SP 800-60 information types, per-axis impact,
+  high-water mark, agent proposal with human confirm, staleness, and export block.
+- **Diagram analysis first slice:** `POST /diagram-analysis` on PNG/JPEG/WebP/PDF;
+  proposal conflicts surfaced for ISSO confirm (not full boundary workflow).
 - Draft OSCAL JSON export from approved snapshots; agency DOCX render pipeline
   (HS-002 still open for customer parity).
 - Offline profile compile, validate, import (inactive), activate, deterministic
   diff, and migrate-profile API scaffolding.
-- Screenshot vision fact extraction with image-region locators (not authorization
-  boundary or diagram graph analysis).
+- Screenshot vision fact extraction with image-region locators.
 
 **Still open (needs code unless noted):**
 
-- SP 800-60 information-type mapping, categorization staleness, full categorization
-  export, and profile/runtime alignment for per-axis rationale fields.
-- Authorization boundary diagram analysis, structured interconnection register,
-  semantic diagram pipeline, profile admin UI, bundle signing, full migration
-  semantics, FedRAMP SSP profiles, and profile-driven export mappings.
+- Authorization boundary narrative requirements, interconnection register,
+  diagram workflow polish (status UI, manual correction, evaluation fixtures),
+  profile admin UI, bundle signing, full migration semantics, FedRAMP SSP profiles,
+  and profile-driven export mappings.
 - Hard stops **HS-001** through **HS-009** (mostly customer/review gates, not
   greenfield product features).
 

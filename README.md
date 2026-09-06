@@ -11,7 +11,7 @@ an editable SSP, control implementation statements, and tracked questions.
 | --- | --- |
 | [`docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md`](docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md) | Current product scope, workflow, architecture, and implementation record |
 | [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md) | **Normative** product, security, and implementation contract |
-| [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md) | Non-normative product vision and delivery summary |
+| [`ATO_AI_ACCELERATOR_PLAN.md`](ATO_AI_ACCELERATOR_PLAN.md) | Non-normative vision; current SSP scope is in NEW_INTERNAL |
 | [`ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md`](ATO_PRODUCT_FUNCTIONALITY_AND_EPICS.md) | User workflow and epic acceptance map |
 | [`ATO_PORTAL_DEMO_TALKING_TRACK.md`](ATO_PORTAL_DEMO_TALKING_TRACK.md) | Approved demo language and glossary |
 | [`docs/PORTAL_WORKFLOW_GUIDE.md`](docs/PORTAL_WORKFLOW_GUIDE.md) | Portal UI walkthrough, LLM usage, checks, and ATO artifacts by stage |
@@ -26,22 +26,22 @@ an editable SSP, control implementation statements, and tracked questions.
 | [`docs/requirements/hard-stops.yaml`](docs/requirements/hard-stops.yaml) | Customer and authority inputs that implementation must not infer |
 | [`docs/P6_GATE_RECORD.md`](docs/P6_GATE_RECORD.md) | Phase 6 documentation and contract reconciliation gate |
 
-### Plans, operator, and evidence
+### Backlog and evidence
 
 | File | Purpose |
 | --- | --- |
-| **Plans** | |
-| [`docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md`](docs/FINAL_PRODUCT_IMPLEMENTATION_PLAN.md) | Master plan — components, phases, delivered-status reconciliation |
-| [`docs/PACKAGE_EDITOR_PLAN.md`](docs/PACKAGE_EDITOR_PLAN.md) | Component A — intake, extraction, draft editor, sealed confirm |
-| [`docs/UPLOAD_FIRST_INTAKE_PLAN.md`](docs/UPLOAD_FIRST_INTAKE_PLAN.md) | Upload-first intake, MAP/REDUCE orchestration, single-user mode; metadata-first create reconciled 2026-07-21 |
-| [`docs/THIRD_PARTY_HARDENING_PLAN.md`](docs/THIRD_PARTY_HARDENING_PLAN.md) | OIDC and ClamAV production adapters; optional dependency hardening |
-| **Operator / release** | |
-| [`docs/CUSTOMER_ONBOARDING.md`](docs/CUSTOMER_ONBOARDING.md) | Customer operator onboarding checklist for on-prem installs |
-| [`docs/AIRGAP_PRESTAGE.md`](docs/AIRGAP_PRESTAGE.md) | Airgap dependency prestaging on a connected bastion |
-| [`docs/RELEASE_PACKAGING.md`](docs/RELEASE_PACKAGING.md) | Deterministic release archives and offline verification |
-| [`docs/WSL_LOCAL_DEPLOY.md`](docs/WSL_LOCAL_DEPLOY.md) | WSL local deploy with production-shaped paths and systemd |
-| **Gate records** | |
-| [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md) | P0–P7 gate records, [`P6 analysis gate`](docs/P6_ANALYSIS_GATE_RECORD.md), contract tests, and missing live evidence |
+| [`docs/PROFILE_DRIVEN_WORKFLOW_TODO.md`](docs/PROFILE_DRIVEN_WORKFLOW_TODO.md) | Open product backlog (profile registry, migration UI, export mappings) |
+| [`docs/THIRD_PARTY_HARDENING_PLAN.md`](docs/THIRD_PARTY_HARDENING_PLAN.md) | OIDC/ClamAV adapters; optional jsonpointer consolidation |
+| [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md) | Gate records, contract tests, and release verification index |
+
+### Operator
+
+| File | Purpose |
+| --- | --- |
+| [`docs/CUSTOMER_ONBOARDING.md`](docs/CUSTOMER_ONBOARDING.md) | On-prem install checklist |
+| [`docs/AIRGAP_PRESTAGE.md`](docs/AIRGAP_PRESTAGE.md) | Airgap dependency prestaging |
+| [`docs/RELEASE_PACKAGING.md`](docs/RELEASE_PACKAGING.md) | Release archives and offline verification |
+| [`docs/WSL_LOCAL_DEPLOY.md`](docs/WSL_LOCAL_DEPLOY.md) | WSL local deploy with systemd |
 
 ## Current state
 

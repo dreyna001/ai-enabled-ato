@@ -704,8 +704,7 @@ Defined in `docs/requirements/hard-stops.yaml`. Examples:
 | `docs/contracts/LIFECYCLE_AND_ERRORS.md` | State machine and error codes |
 | `docs/contracts/README.md` | JSON schemas and OpenAPI |
 | `docs/requirements/hard-stops.yaml` | Governance hard-stops |
-| `docs/PACKAGE_EDITOR_PLAN.md` | Package editor product intent |
-| `docs/UPLOAD_FIRST_INTAKE_PLAN.md` | Upload-first intake implementation plan and phase status |
+| `docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md` | Current SSP product scope and implementation record |
 | `docs/WSL_LOCAL_DEPLOY.md` | Local deployment and portal enable |
 | `docs/CONFIGURATION.md` | Runtime config including text model settings |
 | `docs/AI_EVALUATION_GUIDE.md` | AI qualification harness (non-production) |

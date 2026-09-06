@@ -1,6 +1,13 @@
 # ATO Evidence Analysis Portal Product Plan
 
-**Status:** Product vision and delivery summary
+**Status:** Non-normative product vision and historical delivery summary.
+
+**Current product:** Internal agency ISSO SSP drafting workflow — scope, architecture,
+and delivery record are in
+[`docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md`](docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md).
+FedRAMP/package-analysis paths below are deferred or historical unless the spec
+says otherwise.
+
 **Normative implementation contract:** [`ATO_TECHNICAL_SPEC.md`](ATO_TECHNICAL_SPEC.md)
 
 This document explains why the product exists and how it is delivered. It does not define schemas, APIs, security policy, or acceptance thresholds. Where details differ, the technical specification wins.

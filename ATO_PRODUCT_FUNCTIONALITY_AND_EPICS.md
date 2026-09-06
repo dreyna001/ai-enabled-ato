@@ -417,7 +417,7 @@ Done when:
 - One FISMA synthetic package completes the full backend flow.
 - Worker units and worker credential/config projections are added only with the implemented worker runtime and its replay/readiness tests.
 
-**Delivered:** upload-first API and portal create, system soft-archive, context packer (`CONTEXT_UTILIZATION_TARGET`), intake MAP/REDUCE worker path, intake report and conflict UI, metadata deferral migration (`20260717_0013`), draft editor confirm/seal, intake workers, workflow integration tests (CI optional). **Residual:** production customer extraction (**HS-005**); upload-first **P7** integration gate pending (see [`docs/UPLOAD_FIRST_INTAKE_PLAN.md`](docs/UPLOAD_FIRST_INTAKE_PLAN.md)).
+**Delivered:** upload-first API and portal create, system soft-archive, context packer (`CONTEXT_UTILIZATION_TARGET`), intake MAP/REDUCE worker path, intake report and conflict UI, metadata deferral migration (`20260717_0013`), draft editor confirm/seal, intake workers, workflow integration tests (CI optional). **Residual:** production customer extraction (**HS-005**); upload-first **P7** integration gate pending (see [`docs/RELEASE_EVIDENCE_INDEX.md`](docs/RELEASE_EVIDENCE_INDEX.md)).
 
 ### EP-03 - FedRAMP 20x Program — 🟡 partial
 

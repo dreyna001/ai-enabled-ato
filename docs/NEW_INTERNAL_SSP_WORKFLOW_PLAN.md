@@ -1,17 +1,17 @@
 # New Internal SSP Drafting Workflow
 
-**Status:** Implemented, cut over, and locally validated. Destructive legacy
-cleanup remains deferred pending deployment-data confirmation.
+**Status:** Implemented, cut over, and locally validated. Active increments A–D
+below are **delivered**; no open “do now” increments. Destructive legacy cleanup
+remains deferred pending deployment-data confirmation.
 
-**Current work:** Promoted increments and narrow acceptance boundaries live in
-**Active increments (do now)** below. Later profile-registry, inheritance UI,
-qualified export mappings, and FedRAMP backlog remain in
+**Current work:** Later profile-registry, inheritance UI, qualified export
+mappings, and FedRAMP backlog live in
 [`docs/PROFILE_DRIVEN_WORKFLOW_TODO.md`](PROFILE_DRIVEN_WORKFLOW_TODO.md).
 
 ## Active increments (do now)
 
-Track shipped, narrowly scoped behavior here. Do not treat this section as
-closing the broader profile-driven backlog.
+All increments below are **delivered**. Acceptance boundaries list follow-on
+backlog only; see [`PROFILE_DRIVEN_WORKFLOW_TODO.md`](PROFILE_DRIVEN_WORKFLOW_TODO.md).
 
 ### Increment A — Minimal ODP detection and question prompting
 

@@ -228,7 +228,7 @@ def test_python_package_includes_ssp_profile_validator_schemas() -> None:
 
 
 def test_pyproject_declares_approved_extraction_dependencies() -> None:
-    """Approved extraction libraries are pinned per PACKAGE_EDITOR_PLAN Section 5."""
+    """Approved extraction libraries are pinned per ATO_TECHNICAL_SPEC intake contract."""
     text = _read(PYPROJECT)
     required_pins = (
         "pypdf==6.14.2",
