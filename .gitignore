@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .tmp-pycache/
+tmp/
 portal/node_modules/
 portal/dist/
 portal/test-results/

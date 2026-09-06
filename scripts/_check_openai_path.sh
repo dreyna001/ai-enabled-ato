@@ -41,8 +41,10 @@ fi
 
 echo ""
 echo "=== Text model smoke (no secret printed) ==="
-if [[ -x /home/dreyna/ai-coe-projects/ai-enabled-ato/scripts/_diagnose_text_model.sh ]]; then
-  sudo bash /home/dreyna/ai-coe-projects/ai-enabled-ato/scripts/_diagnose_text_model.sh 2>&1 | tail -6
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIAGNOSE="${REPO_ROOT}/scripts/_diagnose_text_model.sh"
+if [[ -x "$DIAGNOSE" ]]; then
+  sudo bash "$DIAGNOSE" 2>&1 | tail -6
 fi
 
 echo ""
