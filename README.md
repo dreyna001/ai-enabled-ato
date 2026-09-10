@@ -17,6 +17,7 @@ an editable SSP, control implementation statements, and tracked questions.
 | [`docs/PORTAL_WORKFLOW_GUIDE.md`](docs/PORTAL_WORKFLOW_GUIDE.md) | Portal UI walkthrough, LLM usage, checks, and ATO artifacts by stage |
 | [`docs/contracts/README.md`](docs/contracts/README.md) | P-1 machine-contract index and validation rules |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Threat model and required security controls |
+| [`docs/AI_ARCHITECTURE.md`](docs/AI_ARCHITECTURE.md) | One-page AI/LLM architecture: steps, flows, guardrails, capability flags |
 | [`docs/AI_EVALUATION_GUIDE.md`](docs/AI_EVALUATION_GUIDE.md) | AI labels, qualification data, metrics, and hard stops |
 | [`docs/OPERATIONS_AND_RECOVERY.md`](docs/OPERATIONS_AND_RECOVERY.md) | Operations, durability, backup, restore, and recovery contract |
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Runtime JSON config, precedence, capability flags, and local verification |
