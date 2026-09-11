@@ -45,6 +45,7 @@ function workspace(id: string, name: string): SspWorkspace {
       availabilityEvidence: [],
       status: "confirmed",
       confirmed: true,
+      agentSuggestion: null,
     },
     authorizationPath: "",
     profile: {

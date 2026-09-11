@@ -27,7 +27,10 @@ from ato_service.auth_context import (
 )
 from ato_service.blobs import BlobStore, BlobStoreError
 from ato_service.package_rbac import principal_has_role, require_any_package_role
+from ato_service.problems import FieldError, build_problem, get_request_id, problem_json_response
+from ato_service.ssp_workspace.categorization import CategorizationValidationError
 from ato_service.ssp_workspace.contracts import EvidenceLink
+from ato_service.ssp_workspace.editing import WorkspaceEditError
 from ato_service.ssp_workspace.evidence import (
     EvidenceRemovalError,
     EvidenceUploadError,
@@ -56,6 +59,7 @@ from ato_service.ssp_workspace.service import (
     apply_proposed_patch,
     approve_agency_docx_render,
     approve_workspace_revision,
+    analyze_workspace_categorization,
     analyze_workspace_diagram,
     create_agency_docx_render,
     create_initialized_workspace,
@@ -278,7 +282,39 @@ def _error_response(exc: Exception) -> JSONResponse:
         code = "model_generation_failed"
     else:
         status = 422
-    return JSONResponse(status_code=status, content={"error": code, "error_code": code})
+    content: dict[str, str] = {"error": code, "error_code": code}
+    if isinstance(exc, SspGenerationError) and exc.failure_kind == "source_binding":
+        message = (
+            "Document generation produced content that is not linked to uploaded "
+            "evidence. Upload and process intake artifacts, then try Generate again. "
+            f"({exc.detail})"
+        )
+    else:
+        message = str(exc).strip()
+    if message and message not in {code, "validation_failed"}:
+        content["detail"] = message
+    return JSONResponse(status_code=status, content=content)
+
+
+def _categorization_validation_response(
+    request: Request,
+    exc: CategorizationValidationError,
+) -> JSONResponse:
+    problem = build_problem(
+        error_code=exc.error_code,
+        status=422,
+        instance=request.url.path,
+        request_id=get_request_id(request),
+        detail=str(exc),
+        field_errors=[
+            FieldError(
+                path=exc.field,
+                code="invalid_value",
+                message=str(exc),
+            )
+        ],
+    )
+    return problem_json_response(problem)
 
 
 async def _authorize_workspace(
@@ -445,10 +481,24 @@ def build_ssp_workspace_router() -> APIRouter:
     async def get_sp800_60_catalog(
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
     ) -> Response:
-        from ato_service.ssp_workspace.sp800_60_catalog import catalog_document_for_api
+        from ato_service.ssp_workspace.sp800_60_catalog import (
+            Sp80060CatalogError,
+            catalog_document_for_api,
+        )
 
         _ = principal
-        return JSONResponse(status_code=200, content=catalog_document_for_api())
+        try:
+            content = catalog_document_for_api()
+        except Sp80060CatalogError as exc:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "catalog_unavailable",
+                    "error_code": "catalog_unavailable",
+                    "detail": str(exc),
+                },
+            )
+        return JSONResponse(status_code=200, content=content)
 
     @router.get("/ssp-workspaces")
     async def get_workspaces(
@@ -648,8 +698,50 @@ def build_ssp_workspace_router() -> APIRouter:
         ) as exc:
             return _error_response(exc)
 
+    @router.post("/ssp-workspaces/{workspace_id}/categorization/analyze")
+    async def post_categorization_analyze(
+        workspace_id: uuid.UUID,
+        payload: ExpectedRevisionRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+        audit_hmac_key: Annotated[bytes, Depends(get_audit_hmac_key)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session,
+                principal=principal,
+                workspace_id=workspace_id,
+                roles=("isso",),
+            )
+            await analyze_workspace_categorization(
+                session,
+                workspace_id=workspace_id,
+                expected_revision_id=payload.expected_revision_id,
+                model=_model_adapter(runtime_state),
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                audit_hmac_key=audit_hmac_key,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=await load_workspace_envelope(
+                    session, workspace_id=workspace_id
+                ),
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            WorkspaceEditError,
+            TextModelConfigurationError,
+            TextModelCallError,
+            SspGenerationError,
+        ) as exc:
+            return _error_response(exc)
+
     @router.post("/ssp-workspaces/{workspace_id}/categorization")
     async def post_categorization(
+        request: Request,
         workspace_id: uuid.UUID,
         payload: SaveCategorizationRequest,
         principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
@@ -704,6 +796,8 @@ def build_ssp_workspace_router() -> APIRouter:
                     session, workspace_id=workspace_id
                 ),
             )
+        except CategorizationValidationError as exc:
+            return _categorization_validation_response(request, exc)
         except (
             AuthorizationDeniedError,
             WorkspacePersistenceError,

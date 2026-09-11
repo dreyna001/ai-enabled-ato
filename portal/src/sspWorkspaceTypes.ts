@@ -146,6 +146,12 @@ export const DEFAULT_CONTROL_RESPONSE_OPTIONS: ControlResponseOptions = {
   evidenceRequiredForAgentStatement: true,
 };
 
+export type CategorizationAgentSuggestion = {
+  confidentiality: boolean;
+  integrity: boolean;
+  availability: boolean;
+};
+
 export type SystemCategorization = {
   confidentiality: ImpactLevel | "";
   integrity: ImpactLevel | "";
@@ -158,6 +164,7 @@ export type SystemCategorization = {
   availabilityEvidence: EvidenceLink[];
   status: "unconfirmed" | "confirmed" | "stale";
   confirmed: boolean;
+  agentSuggestion: CategorizationAgentSuggestion | null;
 };
 
 export type SystemDefinitionStatus = "unconfirmed" | "confirmed" | "stale";
@@ -336,7 +343,7 @@ export type QuestionAnswer = {
 
 export type CategorizationChange = Omit<
   SystemCategorization,
-  "confirmed" | "status"
+  "confirmed" | "status" | "agentSuggestion"
 >;
 
 export type SspWorkspaceActions = {
@@ -351,6 +358,7 @@ export type SspWorkspaceActions = {
   onSaveControl?: (change: ControlStatementChange) => void;
   onAnswerQuestion?: (change: QuestionAnswer) => void;
   onSaveCategorization?: (change: CategorizationChange) => void;
+  onAnalyzeCategorization?: () => void;
   onSaveInformationTypes?: (change: InformationTypesChange) => void;
   onSaveSystemDefinition?: (change: SystemDefinitionChange) => void;
   onAnalyzeDiagram?: (artifactId: string, pageNumber: number) => void;

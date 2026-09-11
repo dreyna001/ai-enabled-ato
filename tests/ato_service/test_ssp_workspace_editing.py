@@ -20,6 +20,7 @@ from ato_service.ssp_workspace.editing import (
     answer_question,
     edit_control,
     edit_section,
+    merge_categorization_proposal,
     merge_generation,
 )
 from ato_service.ssp_workspace.generation_contracts import (
@@ -158,6 +159,24 @@ def test_generation_stores_grounded_categorization_as_unconfirmed_proposal() -> 
         is Provenance.AGENT_GENERATED
     )
     assert facts["system.confidentiality_impact"].evidence
+
+
+def test_merge_categorization_proposal_updates_only_facts() -> None:
+    proposal = GeneratedCategorization(
+        confidentiality="high",
+        integrity="moderate",
+        availability="low",
+        confidentiality_rationale="High disclosure harm.",
+        integrity_rationale="Integrity harm.",
+        availability_rationale="Availability harm.",
+        supporting_fact_ids=("system.purpose",),
+    )
+
+    updated = merge_categorization_proposal(_content(), proposal)
+    facts = {fact.key: fact for fact in updated.facts}
+
+    assert facts["system.confidentiality_impact"].value == "high"
+    assert updated.sections == _content().sections
 
 
 def test_edit_section_marks_confirmed_categorization_stale() -> None:

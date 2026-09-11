@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerSspQuestion,
+  analyzeSspCategorization,
   analyzeSspDiagram,
   applySspPatch,
   approveSspWorkspace,
@@ -41,6 +42,8 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [generationPending, setGenerationPending] = useState(false);
+  const [categorizationAnalyzePending, setCategorizationAnalyzePending] =
+    useState(false);
   const [newSystemName, setNewSystemName] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
 
@@ -191,6 +194,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
           name: item.name,
         }))}
         generationPending={generationPending}
+        categorizationAnalyzePending={categorizationAnalyzePending}
         actionsBusy={busy}
         actions={{
           onRetry: () => void load(),
@@ -242,6 +246,13 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
             void run((current) =>
               saveSspCategorization(session, current, change),
             ),
+          onAnalyzeCategorization: () => {
+            if (busy) return;
+            setCategorizationAnalyzePending(true);
+            void run((current) =>
+              analyzeSspCategorization(session, current),
+            ).finally(() => setCategorizationAnalyzePending(false));
+          },
           onSaveSystemDefinition: (change) =>
             void run((current) =>
               saveSspSystemDefinition(session, current, change),

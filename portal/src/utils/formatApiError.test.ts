@@ -29,4 +29,24 @@ describe("formatApiError", () => {
       ),
     ).toContain("not ready to approve");
   });
+
+  it("prefers field errors over generic validation detail", () => {
+    expect(
+      formatApiError(
+        new ApiError(
+          422,
+          "One or more request fields failed validation.",
+          "http",
+          "request_schema_invalid",
+          [
+            {
+              path: "confidentiality_evidence.0.artifact_id",
+              code: "uuid_parsing",
+              message: "Input should be a valid UUID",
+            },
+          ],
+        ),
+      ),
+    ).toBe("Confidentiality evidence: Input should be a valid UUID");
+  });
 });

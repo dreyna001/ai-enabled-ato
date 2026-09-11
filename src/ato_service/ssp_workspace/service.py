@@ -40,10 +40,12 @@ from ato_service.ssp_workspace.contracts import (
     SectionState,
 )
 from ato_service.ssp_workspace.editing import (
+    WorkspaceEditError,
     answer_question,
     apply_agent_patch,
     edit_control,
     edit_section,
+    merge_categorization_proposal,
     merge_generation,
 )
 from ato_service.ssp_workspace.export import (
@@ -51,14 +53,17 @@ from ato_service.ssp_workspace.export import (
     build_workspace_json_export,
 )
 from ato_service.ssp_workspace.generation import (
+    CategorizationProposalRequest,
     ContextualEditRequest,
     EvidenceFact,
     InitialGenerationRequest,
     ModelCallable,
     OpenQuestionState,
     SspSectionState,
+    generate_categorization_proposal,
     generate_contextual_patch,
     generate_initial_ssp,
+    SspGenerationError,
 )
 from ato_service.ssp_workspace.generation import (
     ControlState as GenerationControlState,
@@ -631,6 +636,67 @@ async def generate_workspace_draft(
         now=now,
         audit_hmac_key=audit_hmac_key,
         action="ssp_draft_generated",
+        metadata={"model_attempts": execution.attempts},
+    )
+
+
+async def analyze_workspace_categorization(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+    model: ModelCallable,
+    actor_id: str,
+    now: datetime,
+    audit_hmac_key: bytes,
+) -> Any:
+    """Propose FIPS 199 categorization from evidence without full SSP generation."""
+
+    from ato_service.ssp_workspace.categorization import active_categorization_status
+    from ato_service.ssp_workspace.contracts import FactState
+
+    workspace, revision, system, profile = await _generation_context(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=expected_revision_id,
+    )
+    content = RevisionContent.model_validate(revision.content)
+    facts_by_key = {
+        item.key: item for item in content.facts if item.state is FactState.ACTIVE
+    }
+    if active_categorization_status(facts_by_key) == "confirmed":
+        raise WorkspaceEditError("categorization is already confirmed")
+    execution = await generate_categorization_proposal(
+        CategorizationProposalRequest(
+            system_name=system.display_name,
+            profile=profile,
+            source_ids=tuple(
+                sorted(
+                    {
+                        str(link.artifact_id)
+                        for fact in content.facts
+                        for link in fact.evidence
+                    }
+                )
+            ),
+            facts=_generation_facts(content),
+        ),
+        model,
+    )
+    if execution.value is None:
+        raise SspGenerationError(
+            "insufficient evidence to propose FIPS 199 categorization"
+        )
+    updated = merge_categorization_proposal(content, execution.value)
+    return await _save_edited_revision(
+        session,
+        workspace_id=workspace.workspace_id,
+        expected_revision_id=expected_revision_id,
+        content=updated,
+        actor_id=actor_id,
+        now=now,
+        audit_hmac_key=audit_hmac_key,
+        action="ssp_categorization_proposed",
         metadata={"model_attempts": execution.attempts},
     )
 
@@ -1730,13 +1796,21 @@ def _impact_level(content: RevisionContent) -> str:
     if confirmed is not None:
         return confirmed
     for fact in content.facts:
+        if fact.state is not FactState.ACTIVE:
+            continue
         if fact.key == "system.provisional_impact_level" and fact.value in {
             "low",
             "moderate",
             "high",
         }:
             return str(fact.value)
-    raise ValueError("workspace is missing a valid impact_level fact")
+        if fact.key in {"system.impact_level", "impact_level"} and fact.value in {
+            "low",
+            "moderate",
+            "high",
+        }:
+            return str(fact.value)
+    return "moderate"
 
 
 def _confirmed_impact_level(content: RevisionContent) -> str | None:

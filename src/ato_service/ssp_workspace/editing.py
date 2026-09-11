@@ -20,6 +20,7 @@ from ato_service.ssp_workspace.contracts import (
     SectionState,
 )
 from ato_service.ssp_workspace.generation_contracts import (
+    GeneratedCategorization,
     GenerationResult,
     PatchResult,
 )
@@ -50,6 +51,58 @@ class WorkspaceQuestionStateError(WorkspaceEditError):
     """Raised when an answer targets a question that is no longer open."""
 
     error_code = "illegal_state_transition"
+
+
+def _categorization_is_confirmed(facts: Mapping[str, FactContent]) -> bool:
+    return any(
+        (
+            fact.key == "system.categorization_status"
+            and fact.value == "confirmed"
+        )
+        or fact.key in {"system.impact_level", "impact_level"}
+        for fact in facts.values()
+    )
+
+
+def _apply_categorization_proposal_to_facts(
+    facts: dict[str, FactContent],
+    categorization: GeneratedCategorization,
+) -> None:
+    if _categorization_is_confirmed(facts):
+        raise WorkspaceEditError("categorization is already confirmed")
+    evidence = _evidence_for_facts(categorization.supporting_fact_ids, facts)
+    proposed_values = {
+        "system.confidentiality_impact": categorization.confidentiality,
+        "system.integrity_impact": categorization.integrity,
+        "system.availability_impact": categorization.availability,
+        "system.confidentiality_impact_rationale": (
+            categorization.confidentiality_rationale
+        ),
+        "system.integrity_impact_rationale": categorization.integrity_rationale,
+        "system.availability_impact_rationale": (
+            categorization.availability_rationale
+        ),
+    }
+    for key, value in proposed_values.items():
+        facts[key] = FactContent(
+            key=key,
+            value=value,
+            provenance=Provenance.AGENT_GENERATED,
+            evidence=evidence,
+        )
+
+
+def merge_categorization_proposal(
+    content: RevisionContent,
+    categorization: GeneratedCategorization,
+) -> RevisionContent:
+    """Store one grounded categorization proposal until ISSO confirmation."""
+
+    facts = {fact.key: fact for fact in content.facts}
+    _apply_categorization_proposal_to_facts(facts, categorization)
+    return content.model_copy(
+        update={"facts": tuple(facts[key] for key in sorted(facts))},
+    )
 
 
 def merge_generation(
@@ -97,36 +150,9 @@ def merge_generation(
             unresolved_reason=None if has_statement else "Information is not available.",
         )
 
-    categorization_confirmed = any(
-        (
-            fact.key == "system.categorization_status"
-            and fact.value == "confirmed"
-        )
-        or fact.key in {"system.impact_level", "impact_level"}
-        for fact in facts.values()
-    )
+    categorization_confirmed = _categorization_is_confirmed(facts)
     if result.categorization is not None and not categorization_confirmed:
-        proposal = result.categorization
-        evidence = _evidence_for_facts(proposal.supporting_fact_ids, facts)
-        proposed_values = {
-            "system.confidentiality_impact": proposal.confidentiality,
-            "system.integrity_impact": proposal.integrity,
-            "system.availability_impact": proposal.availability,
-            "system.confidentiality_impact_rationale": (
-                proposal.confidentiality_rationale
-            ),
-            "system.integrity_impact_rationale": proposal.integrity_rationale,
-            "system.availability_impact_rationale": (
-                proposal.availability_rationale
-            ),
-        }
-        for key, value in proposed_values.items():
-            facts[key] = FactContent(
-                key=key,
-                value=value,
-                provenance=Provenance.AGENT_GENERATED,
-                evidence=evidence,
-            )
+        _apply_categorization_proposal_to_facts(facts, result.categorization)
 
     questions = _resolve_direct_section_questions(
         questions,

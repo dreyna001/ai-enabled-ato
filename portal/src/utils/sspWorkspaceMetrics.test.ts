@@ -84,6 +84,7 @@ function workspaceFixture(): SspWorkspace {
       ],
       status: "confirmed",
       confirmed: true,
+      agentSuggestion: null,
     },
     authorizationPath: "Agency ATO",
     profile: {

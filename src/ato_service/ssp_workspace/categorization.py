@@ -40,6 +40,16 @@ CATEGORIZATION_STATUS_KEY = "system.categorization_status"
 FIPS_IMPACT_LEVELS = frozenset({"low", "moderate", "high"})
 
 
+class CategorizationValidationError(ValueError):
+    """Bounded categorization validation failure with a client field path."""
+
+    error_code = "request_schema_invalid"
+
+    def __init__(self, message: str, *, field: str) -> None:
+        super().__init__(message)
+        self.field = field
+
+
 @dataclass(frozen=True)
 class CategorizationEvidenceInput:
     confidentiality: tuple[EvidenceLink, ...]
@@ -93,8 +103,13 @@ def validate_categorization_impacts(
     availability: str,
 ) -> tuple[str, str, str]:
     impacts = (confidentiality, integrity, availability)
-    if any(value not in FIPS_IMPACT_LEVELS for value in impacts):
-        raise ValueError("categorization impacts must be low, moderate, or high")
+    labels = ("confidentiality", "integrity", "availability")
+    for label, value in zip(labels, impacts, strict=True):
+        if value not in FIPS_IMPACT_LEVELS:
+            raise CategorizationValidationError(
+                "Select low, moderate, or high for each security objective.",
+                field=label,
+            )
     return impacts
 
 
@@ -108,8 +123,17 @@ def validate_categorization_rationales(
         integrity_rationale.strip(),
         availability_rationale.strip(),
     )
-    if any(not value for value in rationales):
-        raise ValueError("categorization rationale is required for each impact")
+    rationale_fields = (
+        "confidentiality_rationale",
+        "integrity_rationale",
+        "availability_rationale",
+    )
+    for field, value in zip(rationale_fields, rationales, strict=True):
+        if not value:
+            raise CategorizationValidationError(
+                "Enter a rationale for each security objective.",
+                field=field,
+            )
     return rationales
 
 
@@ -117,14 +141,19 @@ def validate_categorization_evidence(
     evidence: CategorizationEvidenceInput,
 ) -> None:
     if not evidence.confidentiality:
-        raise ValueError(
-            "confidentiality categorization requires at least one evidence link"
+        raise CategorizationValidationError(
+            "Select at least one processed artifact for confidentiality evidence.",
+            field="confidentiality_evidence",
         )
     if not evidence.integrity:
-        raise ValueError("integrity categorization requires at least one evidence link")
+        raise CategorizationValidationError(
+            "Select at least one processed artifact for integrity evidence.",
+            field="integrity_evidence",
+        )
     if not evidence.availability:
-        raise ValueError(
-            "availability categorization requires at least one evidence link"
+        raise CategorizationValidationError(
+            "Select at least one processed artifact for availability evidence.",
+            field="availability_evidence",
         )
 
 
@@ -262,5 +291,8 @@ async def resolve_workspace_evidence_links(
         )
     ).scalars()
     if set(rows) != artifact_ids:
-        raise ValueError("categorization evidence must reference workspace artifacts")
+        raise CategorizationValidationError(
+            "Selected evidence is no longer in this workspace. Reload and re-select processed artifacts.",
+            field="confidentiality_evidence",
+        )
     return links

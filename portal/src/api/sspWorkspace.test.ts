@@ -730,6 +730,7 @@ const workspace: SspWorkspace = {
     availabilityEvidence: [],
     status: "unconfirmed",
     confirmed: false,
+    agentSuggestion: null,
   },
   authorizationPath: "",
   profile: {

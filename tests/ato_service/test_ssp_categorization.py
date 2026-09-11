@@ -6,6 +6,7 @@ import pytest
 
 from ato_service.ssp_workspace.categorization import (
     CategorizationEvidenceInput,
+    CategorizationValidationError,
     build_confirmed_categorization_facts,
     mark_categorization_stale_if_needed,
     validate_categorization_evidence,
@@ -28,7 +29,7 @@ def _link() -> EvidenceLink:
 
 
 def test_validate_categorization_evidence_requires_each_dimension() -> None:
-    with pytest.raises(ValueError, match="confidentiality"):
+    with pytest.raises(CategorizationValidationError, match="confidentiality"):
         validate_categorization_evidence(
             CategorizationEvidenceInput(
                 confidentiality=(),

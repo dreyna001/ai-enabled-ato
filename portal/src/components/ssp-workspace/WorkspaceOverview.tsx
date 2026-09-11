@@ -54,6 +54,8 @@ export function WorkspaceOverview({
   onNavigate,
   onOpenAgent,
   onSaveCategorization,
+  onAnalyzeCategorization,
+  categorizationAnalyzePending = false,
 }: {
   workspace: SspWorkspace;
   metrics: SspWorkspaceMetrics;
@@ -62,6 +64,8 @@ export function WorkspaceOverview({
   onNavigate: (view: "evidence" | "ssp" | "controls" | "questions" | "review") => void;
   onOpenAgent: (context: AgentContext) => void;
   onSaveCategorization?: (change: CategorizationChange) => void;
+  onAnalyzeCategorization?: () => void;
+  categorizationAnalyzePending?: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -235,6 +239,9 @@ export function WorkspaceOverview({
         categorization={workspace.categorization}
         provisionalImpactLevel={workspace.provisionalImpactLevel}
         evidence={workspace.evidence}
+        revisionId={workspace.revisionId}
+        analyzePending={categorizationAnalyzePending}
+        onAnalyze={onAnalyzeCategorization}
         onSave={onSaveCategorization}
       />
     </div>

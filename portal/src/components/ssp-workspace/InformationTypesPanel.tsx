@@ -1,6 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchSp80060Catalog } from "@/api/sspWorkspace";
+import { formatApiError } from "@/utils/formatApiError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,9 +117,12 @@ export function InformationTypesPanel({
           setCatalogError("");
         }
       })
-      .catch(() => {
+      .catch((caught) => {
         if (!cancelled) {
-          setCatalogError("Unable to load the SP 800-60 catalog.");
+          setCatalogError(
+            formatApiError(caught) ||
+              "Unable to load the SP 800-60 catalog.",
+          );
         }
       });
     return () => {

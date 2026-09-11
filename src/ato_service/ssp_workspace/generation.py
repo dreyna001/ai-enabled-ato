@@ -9,12 +9,15 @@ import json
 from typing import Literal, Protocol, TypeVar
 
 from ato_service.ssp_workspace.generation_contracts import (
+    CATEGORIZATION_PROPOSAL_SCHEMA_VERSION,
     GENERATION_SCHEMA_VERSION,
     PATCH_SCHEMA_VERSION,
     GenerationContractError,
     GenerationResult,
+    GeneratedCategorization,
     PatchResult,
     SelectedProfilePolicy,
+    parse_categorization_proposal_response,
     parse_generation_response,
     parse_patch_response,
     requirement_text_has_unresolved_organization_parameters,
@@ -77,6 +80,16 @@ class InitialGenerationRequest:
     source_ids: tuple[str, ...]
     facts: tuple[EvidenceFact, ...]
     categorization_confirmed: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class CategorizationProposalRequest:
+    """Inputs for proposing FIPS 199 impacts from workspace evidence."""
+
+    system_name: str
+    profile: ResolvedProfile
+    source_ids: tuple[str, ...]
+    facts: tuple[EvidenceFact, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +184,33 @@ async def generate_initial_ssp(
     prompt = ModelPrompt(
         system=_SYSTEM_PROMPT,
         user=_initial_user_prompt(request),
+    )
+    return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
+
+
+async def generate_categorization_proposal(
+    request: CategorizationProposalRequest,
+    model: ModelCallable,
+) -> GenerationExecution[GeneratedCategorization | None]:
+    """Propose grounded FIPS 199 impacts without regenerating SSP content."""
+
+    _validate_common_inputs(
+        system_name=request.system_name,
+        profile=request.profile,
+        source_ids=request.source_ids,
+        facts=request.facts,
+    )
+    allowed_fact_ids = frozenset(fact.fact_id for fact in request.facts)
+
+    def parse(raw_text: str) -> GeneratedCategorization | None:
+        return parse_categorization_proposal_response(
+            raw_text,
+            allowed_fact_ids=allowed_fact_ids,
+        )
+
+    prompt = ModelPrompt(
+        system=_SYSTEM_PROMPT,
+        user=_categorization_proposal_user_prompt(request),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
 
@@ -371,9 +411,13 @@ def _initial_user_prompt(request: InitialGenerationRequest) -> str:
     payload["task"] = (
         "Return only SSP sections and control implementation statements that "
         "the supplied evidence supports. Omit unsupported sections and controls. "
-        "Keep supported narratives concise and implementation-specific. Add a "
-        "small deduplicated set of targeted questions for material information "
-        "gaps; do not create one question per control. Apply "
+        "Keep supported narratives concise and implementation-specific. Omit "
+        "sections whose structured_kind is set (authorization_boundary, "
+        "component_inventory, interconnection_register, "
+        "information_type_register) unless content is valid JSON for that "
+        "register; ISSO completes those separately. Add a small deduplicated "
+        "set of targeted questions for material information gaps; do not "
+        "create one question per control. Apply "
         "control_implementation_rules for statement_content, "
         "organization_defined_parameters, inherited_and_hybrid_responsibility, "
         "and semantic_review; for controls with "
@@ -422,6 +466,51 @@ def _initial_user_prompt(request: InitialGenerationRequest) -> str:
                 "owner_type": owner_options,
             }
         ],
+    }
+    return _canonical_json(payload)
+
+
+def _categorization_proposal_user_prompt(
+    request: CategorizationProposalRequest,
+) -> str:
+    payload = {
+        "system_name": request.system_name,
+        "profile": {
+            "profile_id": request.profile.profile_id,
+            "profile_version": request.profile.profile_version,
+            "system_categorization_status": "unconfirmed",
+            "baseline_note": (
+                "Propose FIPS 199 impacts only. The ISSO must confirm before the "
+                "control baseline changes."
+            ),
+        },
+        "sources": sorted(request.source_ids),
+        "evidence_facts": [
+            {
+                "fact_id": fact.fact_id,
+                "source_id": fact.source_id,
+                "text": fact.text,
+            }
+            for fact in sorted(request.facts, key=lambda item: item.fact_id)
+        ],
+        "task": (
+            "Return only a grounded FIPS 199 categorization proposal for this "
+            "system. Use supporting_fact_ids from evidence_facts only. Return "
+            "null categorization when the evidence does not support all three "
+            "impacts and rationales."
+        ),
+        "output_contract": {
+            "schema_version": CATEGORIZATION_PROPOSAL_SCHEMA_VERSION,
+            "categorization": {
+                "confidentiality": "low|moderate|high",
+                "integrity": "low|moderate|high",
+                "availability": "low|moderate|high",
+                "confidentiality_rationale": "evidence-grounded rationale",
+                "integrity_rationale": "evidence-grounded rationale",
+                "availability_rationale": "evidence-grounded rationale",
+                "supporting_fact_ids": ["allowed fact_id"],
+            },
+        },
     }
     return _canonical_json(payload)
 
@@ -574,6 +663,7 @@ def _common_prompt_payload(
                 "allowed_values": sorted(section_policies[item.item_id].allowed_values),
                 "standard_refs": list(section_policies[item.item_id].standard_refs),
                 "evidence_required_for_agent": item.evidence_required_for_agent,
+                "structured_kind": section_policies[item.item_id].structured_kind,
             }
             for item in sorted(
                 profile.ssp_required_items, key=lambda item: item.item_id

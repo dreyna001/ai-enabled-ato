@@ -7,6 +7,7 @@ import type {
   AgencyDocxRenderStatus,
   AgentContext,
   CategorizationChange,
+  CategorizationAgentSuggestion,
   ControlResponseOptions,
   ControlStatementChange,
   ImpactLevel,
@@ -30,6 +31,7 @@ import type {
 } from "@/sspWorkspaceTypes";
 import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
 import { ApiError } from "@/api/client";
+import { normalizeCategorizationEvidenceLinks } from "@/utils/sspFieldErrors";
 
 const API_BASE = "/api/v1";
 
@@ -183,6 +185,39 @@ function factEvidenceLinks(
 ) {
   const fact = facts.find((item) => text(item.key) === key);
   return evidenceLinks(fact?.evidence);
+}
+
+function factProvenance(
+  facts: Array<Record<string, unknown>>,
+  key: string,
+): string {
+  const fact = facts.find((item) => text(item.key) === key);
+  return text(fact?.provenance);
+}
+
+function mapCategorizationAgentSuggestion(
+  facts: Array<Record<string, unknown>>,
+  confirmed: boolean,
+): CategorizationAgentSuggestion | null {
+  if (confirmed) {
+    return null;
+  }
+  const suggestion = {
+    confidentiality:
+      factProvenance(facts, "system.confidentiality_impact") === "agent_generated",
+    integrity:
+      factProvenance(facts, "system.integrity_impact") === "agent_generated",
+    availability:
+      factProvenance(facts, "system.availability_impact") === "agent_generated",
+  };
+  if (
+    !suggestion.confidentiality &&
+    !suggestion.integrity &&
+    !suggestion.availability
+  ) {
+    return null;
+  }
+  return suggestion;
 }
 
 function factValue(
@@ -740,6 +775,10 @@ export function mapWorkspaceEnvelope(raw: unknown): SspWorkspace {
           ? "confirmed"
           : "unconfirmed",
       confirmed: categorizationConfirmed,
+      agentSuggestion: mapCategorizationAgentSuggestion(
+        facts,
+        categorizationConfirmed,
+      ),
     },
     systemDefinition: mapSystemDefinition(facts, content.sections),
     informationTypes: mapInformationTypes(facts, content.sections),
@@ -900,16 +939,26 @@ export async function createSspWorkspace(
   return mapWorkspaceEnvelope(result);
 }
 
+export function analyzeSspCategorization(session: SessionInfo, workspace: SspWorkspace) {
+  return workspaceMutation(
+    session,
+    workspace.id,
+    "/categorization/analyze",
+    "POST",
+    {
+      expected_revision_id: workspace.revisionId,
+    },
+  );
+}
+
 export function saveSspCategorization(
   session: SessionInfo,
   workspace: SspWorkspace,
   change: CategorizationChange,
 ) {
-  const toEvidencePayload = (links: CategorizationChange["confidentialityEvidence"]) =>
-    links.map((link) => ({
-      artifact_id: link.artifactId,
-      locator: JSON.parse(link.locator) as Record<string, unknown>,
-    }));
+  const processedEvidence = workspace.evidence.filter(
+    (artifact) => artifact.state === "processed",
+  );
 
   return workspaceMutation(
     session,
@@ -921,12 +970,21 @@ export function saveSspCategorization(
       confidentiality: change.confidentiality,
       integrity: change.integrity,
       availability: change.availability,
-      confidentiality_rationale: change.confidentialityRationale,
-      integrity_rationale: change.integrityRationale,
-      availability_rationale: change.availabilityRationale,
-      confidentiality_evidence: toEvidencePayload(change.confidentialityEvidence),
-      integrity_evidence: toEvidencePayload(change.integrityEvidence),
-      availability_evidence: toEvidencePayload(change.availabilityEvidence),
+      confidentiality_rationale: change.confidentialityRationale.trim(),
+      integrity_rationale: change.integrityRationale.trim(),
+      availability_rationale: change.availabilityRationale.trim(),
+      confidentiality_evidence: normalizeCategorizationEvidenceLinks(
+        change.confidentialityEvidence,
+        processedEvidence,
+      ),
+      integrity_evidence: normalizeCategorizationEvidenceLinks(
+        change.integrityEvidence,
+        processedEvidence,
+      ),
+      availability_evidence: normalizeCategorizationEvidenceLinks(
+        change.availabilityEvidence,
+        processedEvidence,
+      ),
     },
   );
 }

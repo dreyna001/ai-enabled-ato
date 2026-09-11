@@ -57,6 +57,7 @@ export type SspWorkspacePageProps =
       actions?: SspWorkspaceActions;
       availableWorkspaces?: Array<{ id: string; name: string }>;
       generationPending?: boolean;
+      categorizationAnalyzePending?: boolean;
       initialView?: WorkspaceView;
       actionsBusy?: boolean;
     };
@@ -97,6 +98,7 @@ function SspWorkspaceSuccess({
   actions = {},
   availableWorkspaces = [],
   generationPending = false,
+  categorizationAnalyzePending = false,
   initialView = "overview",
   actionsBusy = false,
 }: {
@@ -104,6 +106,7 @@ function SspWorkspaceSuccess({
   actions?: SspWorkspaceActions;
   availableWorkspaces?: Array<{ id: string; name: string }>;
   generationPending?: boolean;
+  categorizationAnalyzePending?: boolean;
   initialView?: WorkspaceView;
   actionsBusy?: boolean;
 }) {
@@ -246,6 +249,8 @@ function SspWorkspaceSuccess({
               onNavigate={setView}
               onOpenAgent={setAgentContext}
               onSaveCategorization={actions.onSaveCategorization}
+              onAnalyzeCategorization={actions.onAnalyzeCategorization}
+              categorizationAnalyzePending={categorizationAnalyzePending}
             />
           ) : null}
           {view === "evidence" ? (
@@ -358,6 +363,7 @@ export function SspWorkspacePage(props: SspWorkspacePageProps) {
       actions={props.actions}
       availableWorkspaces={props.availableWorkspaces}
       generationPending={props.generationPending}
+      categorizationAnalyzePending={props.categorizationAnalyzePending}
       initialView={props.initialView}
       actionsBusy={props.actionsBusy}
     />

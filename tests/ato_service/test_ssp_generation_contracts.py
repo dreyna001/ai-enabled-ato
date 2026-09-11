@@ -80,6 +80,78 @@ def test_generation_parses_allowlisted_grounded_content() -> None:
     )
 
 
+def test_generation_omits_ungrounded_section_content() -> None:
+    raw = json.dumps(
+        {
+            "schema_version": "1.0.0",
+            "sections": [
+                {
+                    "section_id": "purpose",
+                    "content": "Invented ISSO narrative.",
+                    "supporting_fact_ids": [],
+                }
+            ],
+            "controls": [],
+            "questions": [],
+        }
+    )
+
+    result = parse_generation_response(
+        raw,
+        allowed_section_ids=SECTIONS,
+        allowed_control_ids=CONTROLS,
+        allowed_fact_ids=FACTS,
+    )
+
+    assert result.sections[0].content == ""
+    assert result.sections[0].supporting_fact_ids == ()
+
+
+def test_generation_omits_invalid_structured_section_content() -> None:
+    from ato_service.ssp_workspace.generation_contracts import SspItemPolicy
+
+    raw = json.dumps(
+        {
+            "schema_version": "1.0.0",
+            "sections": [
+                {
+                    "section_id": "system.components",
+                    "content": "Web tier, API tier, database",
+                    "supporting_fact_ids": ["fact-purpose"],
+                }
+            ],
+            "controls": [],
+            "questions": [],
+        }
+    )
+    policy = _minimal_profile_policy()
+    policy = replace(
+        policy,
+        sections={
+            "system.components": SspItemPolicy(
+                item_id="system.components",
+                required=True,
+                value_type="string_list",
+                min_length=1,
+                allowed_values=frozenset(),
+                standard_refs=("table1.system-component-inventory",),
+                structured_kind="component_inventory",
+            )
+        },
+    )
+
+    result = parse_generation_response(
+        raw,
+        allowed_section_ids={"system.components"},
+        allowed_control_ids=CONTROLS,
+        allowed_fact_ids=FACTS,
+        profile_policy=policy,
+    )
+
+    assert result.sections[0].content == ""
+    assert result.sections[0].supporting_fact_ids == ()
+
+
 def test_generation_rejects_statement_without_supporting_fact() -> None:
     raw = json.dumps(
         {

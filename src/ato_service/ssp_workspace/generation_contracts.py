@@ -16,6 +16,7 @@ from ato_service.ssp_workspace.profile_bundles import (
 
 GENERATION_SCHEMA_VERSION = "1.0.0"
 PATCH_SCHEMA_VERSION = "1.0.0"
+CATEGORIZATION_PROPOSAL_SCHEMA_VERSION = "1.0.0"
 MAX_SECTIONS_PER_RESPONSE = 100
 MAX_CONTROLS_PER_RESPONSE = 2_000
 MAX_QUESTIONS_PER_RESPONSE = 2_000
@@ -415,6 +416,25 @@ def _parse_categorization(
     )
 
 
+def parse_categorization_proposal_response(
+    raw_text: str,
+    *,
+    allowed_fact_ids: set[str] | frozenset[str],
+) -> GeneratedCategorization | None:
+    """Parse a categorization-only model response."""
+
+    payload = _parse_json_object(raw_text)
+    schema_version = payload.get("schema_version")
+    if schema_version != CATEGORIZATION_PROPOSAL_SCHEMA_VERSION:
+        raise GenerationContractError(
+            "schema_version must match the categorization proposal contract"
+        )
+    return _parse_categorization(
+        payload.get("categorization"),
+        allowed_fact_ids=allowed_fact_ids,
+    )
+
+
 def parse_patch_response(
     raw_text: str,
     *,
@@ -696,11 +716,8 @@ def _parse_section(
         allowed_fact_ids=allowed_fact_ids,
     )
     if content and not fact_ids:
-        raise GenerationContractError(
-            f"section {section_id} has content without supporting facts",
-            failure_kind="source_binding",
-            repairable=False,
-        )
+        # Model drafts must not block generation; ungrounded section text is omitted.
+        content = ""
     if content.strip() and section_requirements is not None:
         requirement = section_requirements.get(section_id)
         if requirement is None:
@@ -709,11 +726,21 @@ def _parse_section(
                 failure_kind="allowlist",
                 repairable=False,
             )
-        _validate_section_content_against_policy(
-            section_id,
-            content,
-            requirement,
-        )
+        try:
+            _validate_section_content_against_policy(
+                section_id,
+                content,
+                requirement,
+            )
+        except GenerationContractError:
+            # Bulk generation must not fail when the model drafts prose for
+            # structured registers (boundary, components, interconnections,
+            # information types). ISSO completes those in dedicated panels.
+            if requirement.structured_kind:
+                content = ""
+                fact_ids = ()
+            else:
+                raise
     return GeneratedSection(
         section_id=section_id,
         content=content,
@@ -967,11 +994,8 @@ def _parse_patch(
                 requirement,
             )
         if content.strip() and not fact_ids:
-            raise GenerationContractError(
-                f"patch {target_type}:{target_id} has content without supporting facts",
-                failure_kind="source_binding",
-                repairable=False,
-            )
+            changes["content"] = ""
+            fact_ids = ()
     else:
         statement = changes.get("implementation_statement", "")
         if (

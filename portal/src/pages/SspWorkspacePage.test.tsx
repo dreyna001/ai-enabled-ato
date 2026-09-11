@@ -36,6 +36,7 @@ function workspaceFixture(): SspWorkspace {
       ],
       status: "confirmed",
       confirmed: true,
+      agentSuggestion: null,
     },
     authorizationPath: "Agency ATO",
     profile: {
@@ -164,6 +165,7 @@ function workspaceFixture(): SspWorkspace {
         },
       ],
       confirmed: true,
+      agentSuggestion: null,
     },
   };
 }
@@ -249,6 +251,7 @@ describe("SspWorkspacePage", () => {
 
   it("calculates and confirms categorization after intake", () => {
     const onSaveCategorization = vi.fn();
+    const artifactId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const workspace = workspaceFixture();
     workspace.impactLevel = "";
     workspace.profile.baseline = "Unconfirmed";
@@ -264,10 +267,11 @@ describe("SspWorkspacePage", () => {
       availabilityEvidence: [],
       status: "unconfirmed",
       confirmed: false,
+      agentSuggestion: null,
     };
     workspace.evidence = [
       {
-        id: "artifact-1",
+        id: artifactId,
         name: "system-overview.txt",
         mediaType: "text/plain",
         state: "processed",
@@ -317,22 +321,22 @@ describe("SspWorkspacePage", () => {
         "An outage could stop time-critical grant payments.",
       confidentialityEvidence: [
         {
-          id: "artifact-1:categorization",
-          artifactId: "artifact-1",
+          id: `${artifactId}:categorization`,
+          artifactId,
           locator: JSON.stringify({ kind: "categorization_attestation" }),
         },
       ],
       integrityEvidence: [
         {
-          id: "artifact-1:categorization",
-          artifactId: "artifact-1",
+          id: `${artifactId}:categorization`,
+          artifactId,
           locator: JSON.stringify({ kind: "categorization_attestation" }),
         },
       ],
       availabilityEvidence: [
         {
-          id: "artifact-1:categorization",
-          artifactId: "artifact-1",
+          id: `${artifactId}:categorization`,
+          artifactId,
           locator: JSON.stringify({ kind: "categorization_attestation" }),
         },
       ],

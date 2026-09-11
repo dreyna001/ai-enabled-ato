@@ -24,6 +24,7 @@ const workspace: SspWorkspace = {
     availabilityEvidence: [],
     status: "confirmed",
     confirmed: true,
+    agentSuggestion: null,
   },
   authorizationPath: "Agency ATO",
   profile: {

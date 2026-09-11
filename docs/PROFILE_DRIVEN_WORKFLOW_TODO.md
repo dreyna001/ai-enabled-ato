@@ -29,6 +29,8 @@
 
 **Still open (needs code unless noted):**
 
+- **Agent split:** separate SSP narrative vs control statement model passes (see
+  **Agent Grounding** and [`SSP_WORKSPACE_GENERATION_BOUNDARIES.md`](SSP_WORKSPACE_GENERATION_BOUNDARIES.md)).
 - Authorization boundary narrative requirements, interconnection register,
   diagram workflow polish (status UI, manual correction, evaluation fixtures),
   profile admin UI, bundle signing, full migration semantics, FedRAMP SSP profiles,
@@ -54,14 +56,16 @@ findings advisory only. **Delivered in 1.1.0 (agency only):** manifest records f
 
 **Delivered in workflow (not bundle-version specific):** FIPS 199 categorization
 UI and API (`SystemCategorizationPanel`, `POST .../categorization`,
-`save_system_categorization`), agent categorization proposals until ISSO confirm,
-and approval blocked until `system.categorization_status` is `confirmed`.
+`POST .../categorization/analyze`, `save_system_categorization`), agent
+categorization proposals until ISSO confirm (per-axis **Agent suggested** badges,
+evidence pre-selection from agent links), and approval blocked until
+`system.categorization_status` is `confirmed`.
 
 ## Concrete code scope for the streamlined operator workflow
 
 1. Surface the existing information-types field in the categorization panel.
 2. Let the agent populate it from documents.
-3. Clearly label agent suggestions.
+3. [x] Clearly label agent suggestions.
 4. Add `confirmed_system_context` to generation and editing requests.
 5. Generate one full categorization narrative from the confirmed values.
 6. Ensure every export includes it.
@@ -347,6 +351,17 @@ signature: detached-signature-reference
 ## Agent Grounding
 
 - [x] Load the exact pinned profile version for every generation or agent call.
+- [ ] **Split SSP narrative and control statement generation into separate model passes.**
+  - **Today:** one `generate_initial_ssp` call returns SSP sections, controls,
+    questions, and optional categorization in one JSON response.
+  - **Target:** sequential passes — SSP Table 1 sections first, controls second
+    with confirmed categorization, system definition, information types, and
+    drafted SSP context injected; optional single **Generate** button with two
+    server-side calls merged into one revision save.
+  - **Rationale:** [`SSP_WORKSPACE_GENERATION_BOUNDARIES.md`](SSP_WORKSPACE_GENERATION_BOUNDARIES.md)
+    (quality: smaller schemas, focused policy, independent retry).
+  - **Do not replace:** categorization analyze, diagram analyze, or Ask agent
+    patches — those are already bounded propose flows with ISSO confirm gates.
 - [ ] Send only relevant profile requirements for the current section or control.
   - **Today:** every generation/patch prompt includes all SSP sections and all controls.
 - [ ] Include profile ID, version, and bundle hash in model-call metadata.

@@ -23,6 +23,7 @@ from ato_service.ssp_workspace.editing import (
 )
 from ato_service.ssp_workspace.service import (
     WorkspaceNotReviewableError,
+    _impact_level,
     approve_workspace_revision,
     save_question_answer,
 )
@@ -273,3 +274,9 @@ def test_approval_accepts_explicitly_confirmed_categorization() -> None:
 
     assert result is approval
     approve_revision.assert_awaited_once()
+
+
+def test_impact_level_defaults_to_moderate_without_facts() -> None:
+    content = RevisionContent(facts=())
+
+    assert _impact_level(content) == "moderate"

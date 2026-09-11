@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from ato_service.ssp_workspace.generation import (
+    CategorizationProposalRequest,
     ContextualEditRequest,
     ControlState,
     EvidenceFact,
@@ -16,6 +17,7 @@ from ato_service.ssp_workspace.generation import (
     OpenQuestionState,
     SspGenerationError,
     SspSectionState,
+    generate_categorization_proposal,
     generate_contextual_patch,
     generate_initial_ssp,
 )
@@ -183,6 +185,44 @@ def test_unconfirmed_generation_returns_grounded_categorization_proposal() -> No
         }
     ]
     assert "Never invent" in prompts[0].system
+
+
+def test_categorization_proposal_uses_bounded_contract() -> None:
+    prompts: list[ModelPrompt] = []
+    payload = {
+        "schema_version": "1.0.0",
+        "categorization": {
+            "confidentiality": "moderate",
+            "integrity": "moderate",
+            "availability": "low",
+            "confidentiality_rationale": "Disclosure could cause serious harm.",
+            "integrity_rationale": "Incorrect records could cause serious harm.",
+            "availability_rationale": "Short outages can be handled manually.",
+            "supporting_fact_ids": ["fact-1"],
+        },
+    }
+
+    def model(prompt: ModelPrompt) -> str:
+        prompts.append(prompt)
+        return json.dumps(payload)
+
+    request = _initial_request()
+    result = _run(
+        generate_categorization_proposal(
+            CategorizationProposalRequest(
+                system_name=request.system_name,
+                profile=request.profile,
+                source_ids=request.source_ids,
+                facts=request.facts,
+            ),
+            model,
+        )
+    )
+
+    prompt = json.loads(prompts[0].user)
+    assert prompt["output_contract"]["schema_version"] == "1.0.0"
+    assert result.value is not None
+    assert result.value.confidentiality == "moderate"
 
 
 def test_initial_generation_repairs_one_schema_failure() -> None:

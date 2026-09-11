@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,12 +9,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type {
+  CategorizationAgentSuggestion,
   CategorizationChange,
   EvidenceArtifact,
   EvidenceLink,
   ImpactLevel,
   SystemCategorization,
 } from "@/sspWorkspaceTypes";
+import {
+  hydrateCategorizationValues,
+  validateCategorizationChange,
+  type CategorizationValidationIssue,
+} from "@/utils/sspFieldErrors";
 
 const IMPACTS: Array<{
   key: "confidentiality" | "integrity" | "availability";
@@ -101,36 +107,69 @@ function toggleEvidenceLink(
   ];
 }
 
+function agentSuggestedForAxis(
+  agentSuggestion: CategorizationAgentSuggestion | null,
+  key: "confidentiality" | "integrity" | "availability",
+) {
+  return Boolean(agentSuggestion?.[key]);
+}
+
 export function SystemCategorizationPanel({
   categorization,
   provisionalImpactLevel,
   evidence,
+  revisionId,
+  analyzePending = false,
+  onAnalyze,
   onSave,
 }: {
   categorization: SystemCategorization;
   provisionalImpactLevel: ImpactLevel;
   evidence: EvidenceArtifact[];
+  revisionId: string;
+  analyzePending?: boolean;
+  onAnalyze?: () => void;
   onSave?: (change: CategorizationChange) => void;
 }) {
-  const [values, setValues] = useState<CategorizationChange>({
-    confidentiality: categorization.confidentiality,
-    integrity: categorization.integrity,
-    availability: categorization.availability,
-    confidentialityRationale: categorization.confidentialityRationale,
-    integrityRationale: categorization.integrityRationale,
-    availabilityRationale: categorization.availabilityRationale,
-    confidentialityEvidence: categorization.confidentialityEvidence,
-    integrityEvidence: categorization.integrityEvidence,
-    availabilityEvidence: categorization.availabilityEvidence,
-  });
-  const overall = overallImpact(values);
   const processedEvidence = evidenceArtifactOptions(evidence);
+  const [values, setValues] = useState<CategorizationChange>(() =>
+    hydrateCategorizationValues(categorization, processedEvidence),
+  );
+  const [validationIssues, setValidationIssues] = useState<
+    CategorizationValidationIssue[]
+  >([]);
+
+  useEffect(() => {
+    const processed = evidenceArtifactOptions(evidence);
+    setValues(hydrateCategorizationValues(categorization, processed));
+    setValidationIssues([]);
+  }, [revisionId]);
+
+  const overall = overallImpact(values);
   const complete =
     Boolean(overall) &&
     IMPACTS.every(
       ({ rationaleKey, evidenceKey }) =>
         values[rationaleKey].trim() && values[evidenceKey].length > 0,
     );
+  const showAnalyze =
+    categorization.status !== "confirmed" &&
+    Boolean(onAnalyze) &&
+    processedEvidence.length > 0;
+
+  function issueForField(field: string) {
+    return validationIssues.find((issue) => issue.field === field)?.message;
+  }
+
+  function handleConfirm() {
+    const issues = validateCategorizationChange(values, processedEvidence);
+    if (issues.length > 0) {
+      setValidationIssues(issues);
+      return;
+    }
+    setValidationIssues([]);
+    onSave?.(values);
+  }
 
   return (
     <Card>
@@ -140,7 +179,8 @@ export function SystemCategorizationPanel({
             <CardTitle className="text-base">System categorization</CardTitle>
             <CardDescription>
               FIPS 199 impacts require rationale and at least one supporting
-              evidence artifact per security objective.
+              evidence artifact per security objective. Agent suggestions stay
+              editable until you confirm.
             </CardDescription>
           </div>
           <Badge variant={statusBadgeVariant(categorization.status)}>
@@ -156,19 +196,45 @@ export function SystemCategorizationPanel({
                 Mission, boundary, or information types changed after the last
                 confirmation. Re-confirm categorization before ISSO approval.
               </>
+            ) : categorization.agentSuggestion ? (
+              <>
+                Agent suggested values are shown below. Review and edit each
+                impact, rationale, and evidence link, then confirm to lock the
+                baseline.
+              </>
             ) : (
               <>
                 A provisional {provisionalImpactLevel} baseline keeps the
-                workspace usable. It is replaced when this categorization is
-                confirmed with evidence.
+                workspace usable. Analyze from evidence or run full document
+                generation, then confirm with supporting artifacts.
               </>
             )}
           </p>
         ) : null}
+        {validationIssues.length > 0 ? (
+          <div
+            className="rounded-sm border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+            role="alert"
+          >
+            <p className="font-medium">Fix these items before confirming:</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {validationIssues.map((issue) => (
+                <li key={`${issue.field}:${issue.message}`}>{issue.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="grid gap-4 xl:grid-cols-3">
           {IMPACTS.map(({ key, rationaleKey, evidenceKey, label, question }) => (
             <fieldset key={key} className="space-y-2 rounded-sm border p-3">
-              <legend className="px-1 text-sm font-medium">{label}</legend>
+              <legend className="flex flex-wrap items-center gap-2 px-1 text-sm font-medium">
+                <span>{label}</span>
+                {agentSuggestedForAxis(categorization.agentSuggestion, key) ? (
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Agent suggested
+                  </Badge>
+                ) : null}
+              </legend>
               <label className="block text-xs">
                 <span className="mb-1 block text-muted-foreground">Impact</span>
                 <select
@@ -187,6 +253,9 @@ export function SystemCategorizationPanel({
                   <option value="moderate">Moderate</option>
                   <option value="high">High</option>
                 </select>
+                {issueForField(key) ? (
+                  <p className="mt-1 text-destructive">{issueForField(key)}</p>
+                ) : null}
               </label>
               <label className="block text-xs">
                 <span className="mb-1 block text-muted-foreground">
@@ -203,11 +272,19 @@ export function SystemCategorizationPanel({
                     }))
                   }
                 />
+                {issueForField(rationaleKey) ? (
+                  <p className="mt-1 text-destructive">
+                    {issueForField(rationaleKey)}
+                  </p>
+                ) : null}
               </label>
               <div className="space-y-2 text-xs">
                 <p className="text-muted-foreground">
                   Supporting evidence (select at least one processed artifact)
                 </p>
+                {issueForField(evidenceKey) ? (
+                  <p className="text-destructive">{issueForField(evidenceKey)}</p>
+                ) : null}
                 {processedEvidence.length === 0 ? (
                   <p className="rounded-sm border border-dashed p-2 text-muted-foreground">
                     Upload and process evidence in Intake before confirming
@@ -251,12 +328,20 @@ export function SystemCategorizationPanel({
             Overall impact:{" "}
             <strong className="capitalize">{overall || "Not calculated"}</strong>
           </p>
-          <Button
-            disabled={!onSave || !complete}
-            onClick={() => onSave?.(values)}
-          >
-            Confirm categorization
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {showAnalyze ? (
+              <Button
+                variant="outline"
+                disabled={analyzePending}
+                onClick={() => onAnalyze?.()}
+              >
+                {analyzePending ? "Analyzing…" : "Analyze from evidence"}
+              </Button>
+            ) : null}
+            <Button disabled={!onSave || !complete} onClick={handleConfirm}>
+              Confirm categorization
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
