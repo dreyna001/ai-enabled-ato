@@ -10,6 +10,7 @@ readonly STAGE_ROOT="${STAGE_ROOT:-$REPO_DIR/dist/airgap}"
 readonly PYTHON_BIN="${PYTHON_BIN:-python3.12}"
 readonly WHEEL_DIR="$STAGE_ROOT/wheels"
 readonly MANIFEST_PATH="$STAGE_ROOT/manifest.json"
+readonly REQUIREMENTS_LOCK_PATH="$REPO_DIR/requirements.lock"
 readonly PORTAL_LOCK_PATH="$REPO_DIR/portal/package-lock.json"
 readonly PORTAL_DIST_INDEX="$REPO_DIR/portal/dist/index.html"
 
@@ -32,7 +33,9 @@ Airgap target (verify only, no network):
 
 On the airgap host, copy the release archive or tree, then install wheels with:
   python3.12 -m venv /opt/ato-analyzer/venv
-  /opt/ato-analyzer/venv/bin/pip install --no-index --find-links dist/airgap/wheels /opt/ato-analyzer
+  /opt/ato-analyzer/venv/bin/pip install --no-index \
+    --find-links dist/airgap/wheels -c /opt/ato-analyzer/requirements.lock \
+    /opt/ato-analyzer
 
 Provision runtime JSON and credential files separately; never embed secrets in the bundle.
 EOF
@@ -92,6 +95,36 @@ print(json.dumps(entries, separators=(",", ":")))
 PY
 }
 
+write_build_system_requirements() {
+    local output_path="$1"
+    "$PYTHON_BIN" - "$REPO_DIR/pyproject.toml" > "$output_path" <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+pyproject_path = Path(sys.argv[1])
+try:
+    document = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+except (OSError, tomllib.TOMLDecodeError) as exc:
+    raise SystemExit(f"failed to read build-system requirements: {exc}") from exc
+
+build_system = document.get("build-system")
+requirements = build_system.get("requires") if isinstance(build_system, dict) else None
+if (
+    not isinstance(requirements, list)
+    or not requirements
+    or any(
+        not isinstance(requirement, str) or not requirement.strip()
+        for requirement in requirements
+    )
+):
+    raise SystemExit("pyproject.toml build-system.requires must be a non-empty string list")
+
+for requirement in requirements:
+    print(requirement)
+PY
+}
+
 write_manifest() {
     local verify_only="$1"
     local portal_built=false
@@ -100,6 +133,7 @@ write_manifest() {
     local portal_dist_json="[]"
 
     [[ -f "$PORTAL_LOCK_PATH" ]] || err "Missing portal lockfile: $PORTAL_LOCK_PATH"
+    [[ -f "$REQUIREMENTS_LOCK_PATH" ]] || err "Missing requirements lockfile: $REQUIREMENTS_LOCK_PATH"
     portal_lock_sha="$(sha256_file "$PORTAL_LOCK_PATH")"
 
     if [[ -f "$PORTAL_DIST_INDEX" ]]; then
@@ -268,12 +302,20 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
     exit 0
 fi
 
+[[ -f "$REQUIREMENTS_LOCK_PATH" ]] || err "Missing requirements lockfile: $REQUIREMENTS_LOCK_PATH"
 command -v pip >/dev/null 2>&1 || err "Missing pip"
 mkdir -p "$WHEEL_DIR" || err "Failed to create wheel directory"
 
 info "Downloading Python wheels to $WHEEL_DIR"
-"$PYTHON_BIN" -m pip download -d "$WHEEL_DIR" "$REPO_DIR" \
+build_system_requirements_path="$(mktemp)"
+trap 'rm -f "$build_system_requirements_path"' EXIT
+write_build_system_requirements "$build_system_requirements_path" \
+    || err "Failed to parse pyproject.toml build-system requirements"
+"$PYTHON_BIN" -m pip download -d "$WHEEL_DIR" \
+    -r "$REQUIREMENTS_LOCK_PATH" -r "$build_system_requirements_path" \
     || err "pip download failed"
+rm -f "$build_system_requirements_path"
+trap - EXIT
 
 write_manifest false
 

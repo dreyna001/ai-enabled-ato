@@ -13,7 +13,13 @@ from tests.integration_support.postgres import CUSTOMER_ENTERPRISE_ID, ORIGIN
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = ROOT / "tests" / "fixtures" / "profile_artifacts"
-DRAFT_FIXTURE = ROOT / "docs" / "contracts" / "fixtures" / "package-draft-document.valid.fisma-minimal.json"
+DRAFT_FIXTURE = (
+    ROOT
+    / "data"
+    / "synthetic-packages"
+    / "fisma-demo-portal"
+    / "agency-security-plan-excerpt.json"
+)
 
 PROFILE_FIXTURE_FILES: dict[str, Path] = {
     "fisma_agency_security": DRAFT_FIXTURE,
@@ -43,7 +49,10 @@ def make_principal(
 
 
 OWNER = make_principal(actor_id="owner@example.test", groups=("owners",))
-REVIEWER = make_principal(actor_id="reviewer@example.test", groups=("owners", "reviewers"))
+REVIEWER = make_principal(
+    actor_id="reviewer@example.test",
+    groups=("owners", "reviewers", "approvers"),
+)
 ASSESSOR = make_principal(actor_id="assessor@example.test", groups=("assessors",))
 APPROVER = make_principal(actor_id="approver@example.test", groups=("approvers",))
 OUTSIDER = make_principal(actor_id="outsider@example.test", groups=("public",))

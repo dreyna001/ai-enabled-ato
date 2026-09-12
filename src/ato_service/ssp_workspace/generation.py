@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import inspect
@@ -21,6 +22,12 @@ from ato_service.ssp_workspace.generation_contracts import (
     parse_generation_response,
     parse_patch_response,
     requirement_text_has_unresolved_organization_parameters,
+)
+from ato_service.ssp_workspace.model_schemas import (
+    CATEGORIZATION_SCHEMA_NAME,
+    INITIAL_GENERATION_SCHEMA_NAME,
+    PATCH_SCHEMA_NAME,
+    output_schema_for,
 )
 from ato_service.ssp_workspace.profile_bundles import (
     ImplementationStatementAgentInstructions,
@@ -113,6 +120,7 @@ class ModelPrompt:
 
     system: str
     user: str
+    output_schema: dict[str, object] | None = None
 
 
 class ModelCallable(Protocol):
@@ -184,6 +192,7 @@ async def generate_initial_ssp(
     prompt = ModelPrompt(
         system=_SYSTEM_PROMPT,
         user=_initial_user_prompt(request),
+        output_schema=output_schema_for(INITIAL_GENERATION_SCHEMA_NAME),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
 
@@ -211,6 +220,7 @@ async def generate_categorization_proposal(
     prompt = ModelPrompt(
         system=_SYSTEM_PROMPT,
         user=_categorization_proposal_user_prompt(request),
+        output_schema=output_schema_for(CATEGORIZATION_SCHEMA_NAME),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
 
@@ -296,6 +306,7 @@ async def generate_contextual_patch(
     prompt = ModelPrompt(
         system=_SYSTEM_PROMPT,
         user=_patch_user_prompt(request, instruction=instruction),
+        output_schema=output_schema_for(PATCH_SCHEMA_NAME),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
 
@@ -340,6 +351,7 @@ async def _invoke_with_one_repair(
             invalid_response=raw_text or "",
             validation_error=first_error.detail,
         ),
+        output_schema=prompt.output_schema,
     )
     try:
         raw_text = await _invoke_model(model, repair_prompt)
@@ -353,13 +365,28 @@ async def _invoke_with_one_repair(
 
 
 async def _invoke_model(model: ModelCallable, prompt: ModelPrompt) -> str:
+    from ato_service.ssp_workspace.model_runtime import SspContextBudgetError
+
     try:
-        raw_or_awaitable = model(prompt)
+        is_async_callable = inspect.iscoroutinefunction(model) or inspect.iscoroutinefunction(
+            getattr(model, "__call__", None)
+        )
+        raw_or_awaitable = (
+            model(prompt)
+            if is_async_callable
+            else await asyncio.to_thread(model, prompt)
+        )
         raw = (
             await raw_or_awaitable
             if inspect.isawaitable(raw_or_awaitable)
             else raw_or_awaitable
         )
+    except SspContextBudgetError as exc:
+        raise GenerationContractError(
+            str(exc),
+            failure_kind="context_budget",
+            repairable=False,
+        ) from exc
     except Exception as exc:
         raise GenerationContractError(
             "SSP model invocation failed",

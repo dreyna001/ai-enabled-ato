@@ -220,6 +220,7 @@ def build_app_from_config(
         runtime.engine = create_async_engine_from_url(resolved_dsn)
         runtime.session_factory = create_session_factory(runtime.engine)
         from ato_service.ssp_workspace.profiles import ensure_builtin_profile
+        from ato_service.ssp_workspace.model_runtime import SspVisionAdapter, build_ssp_model_adapter
 
         async with session_scope(runtime.session_factory) as bootstrap_session:
             await ensure_builtin_profile(
@@ -239,6 +240,8 @@ def build_app_from_config(
                 ),
                 session_factory=runtime.session_factory,
                 audit_hmac_key=resolved_audit_hmac_key,
+                ssp_model_adapter=build_ssp_model_adapter(config),
+                ssp_vision_adapter=SspVisionAdapter(config),
             ),
         )
         try:
@@ -246,6 +249,12 @@ def build_app_from_config(
         finally:
             runtime_state = getattr(_app.state, RUNTIME_STATE_ATTR, None)
             if isinstance(runtime_state, AppRuntimeState):
+                if runtime_state.ssp_vision_adapter is not None:
+                    await runtime_state.ssp_vision_adapter.aclose()
+                    runtime_state.ssp_vision_adapter = None
+                if runtime_state.ssp_model_adapter is not None:
+                    await runtime_state.ssp_model_adapter.aclose()
+                    runtime_state.ssp_model_adapter = None
                 runtime_state.session_factory = None
                 runtime_state.audit_hmac_key = None
             runtime.session_factory = None

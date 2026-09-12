@@ -93,7 +93,7 @@ def test_worker_resolves_dependencies_and_disposes_engine(
         ):
             return await run_deterministic_analyzer_worker(
                 _config(tmp_path),
-                dsn="postgresql+asyncpg://ato:secret@localhost/ato",
+                dsn="postgresql+psycopg://ato:secret@localhost/ato",
                 audit_hmac_key=b"audit-test-key",
                 project_root=tmp_path,
             )
@@ -128,7 +128,7 @@ def test_worker_discovers_installed_project_root(
         ):
             await run_deterministic_analyzer_worker(
                 _config(tmp_path),
-                dsn="postgresql+asyncpg://ato:secret@localhost/ato",
+                dsn="postgresql+psycopg://ato:secret@localhost/ato",
                 audit_hmac_key=b"audit-test-key",
             )
         find_root.assert_called_once_with()
@@ -176,7 +176,7 @@ def test_worker_loop_recovers_and_processes_until_shutdown(tmp_path: Path) -> No
         ):
             await run_deterministic_analyzer_worker_loop(
                 _config(tmp_path),
-                dsn="postgresql+asyncpg://ato:secret@localhost/ato",
+                dsn="postgresql+psycopg://ato:secret@localhost/ato",
                 audit_hmac_key=b"audit-test-key",
                 project_root=tmp_path,
                 poll_interval_seconds=0.01,

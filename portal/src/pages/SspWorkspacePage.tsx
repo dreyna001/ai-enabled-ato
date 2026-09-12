@@ -11,8 +11,9 @@ import {
   Plus,
   ShieldCheck,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ContextualAgentDrawer } from "@/components/ssp-workspace/ContextualAgentDrawer";
+import { useGlobalChatbot } from "@/components/ssp-workspace/GlobalChatbotProvider";
 import { ControlWorkbench } from "@/components/ssp-workspace/ControlWorkbench";
 import { EvidencePanel } from "@/components/ssp-workspace/EvidencePanel";
 import { InformationTypesPanel } from "@/components/ssp-workspace/InformationTypesPanel";
@@ -37,7 +38,7 @@ import type {
 import { STRUCTURED_INFORMATION_TYPES_SECTION_IDS, STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS } from "@/sspWorkspaceTypes";
 import { calculateSspWorkspaceMetrics } from "@/utils/sspWorkspaceMetrics";
 
-type WorkspaceView =
+export type WorkspaceView =
   | "overview"
   | "evidence"
   | "system-definition"
@@ -59,6 +60,7 @@ export type SspWorkspacePageProps =
       generationPending?: boolean;
       categorizationAnalyzePending?: boolean;
       initialView?: WorkspaceView;
+      initialTargetId?: string;
       actionsBusy?: boolean;
     };
 
@@ -100,6 +102,7 @@ function SspWorkspaceSuccess({
   generationPending = false,
   categorizationAnalyzePending = false,
   initialView = "overview",
+  initialTargetId,
   actionsBusy = false,
 }: {
   workspace: SspWorkspace;
@@ -108,6 +111,7 @@ function SspWorkspaceSuccess({
   generationPending?: boolean;
   categorizationAnalyzePending?: boolean;
   initialView?: WorkspaceView;
+  initialTargetId?: string;
   actionsBusy?: boolean;
 }) {
   const [view, setView] = useState<WorkspaceView>(initialView);
@@ -116,17 +120,50 @@ function SspWorkspaceSuccess({
       !STRUCTURED_SYSTEM_DEFINITION_SECTION_IDS.has(section.id) &&
       !STRUCTURED_INFORMATION_TYPES_SECTION_IDS.has(section.id),
   );
+  const initialSection = documentSections.find(
+    (section) => section.id === initialTargetId,
+  );
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
-    documentSections[0]?.id ?? null,
+    initialSection?.id ?? documentSections[0]?.id ?? null,
+  );
+  const initialControl = workspace.controls.find(
+    (control) => control.id === initialTargetId,
   );
   const [selectedControlId, setSelectedControlId] = useState<string | null>(
-    workspace.controls.find(
-      (control) => control.state === "partial" || control.state === "empty",
-    )?.id ??
+    initialControl?.id ??
+      workspace.controls.find(
+        (control) => control.state === "partial" || control.state === "empty",
+      )?.id ??
       workspace.controls[0]?.id ??
       null,
   );
   const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
+  const agentTriggerRef = useRef<HTMLButtonElement>(null);
+  const chatbot = useGlobalChatbot();
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+  const patchStateSignature = workspace.patches
+    .map((patch) => `${patch.id}:${patch.state}:${patch.summary}:${patch.targetLabels.join(",")}`)
+    .join("|");
+  useEffect(() => {
+    if (!chatbot) return;
+    chatbot.registerWorkspace(workspace, actionsRef.current);
+  }, [
+    actions,
+    chatbot,
+    chatbot?.identityKey,
+    patchStateSignature,
+    workspace.id,
+    workspace.name,
+    workspace.revisionId,
+  ]);
+  const openAgent = (context: AgentContext) => {
+    if (chatbot) {
+      chatbot.openChat({ context, focus: context.label });
+      return;
+    }
+    setAgentContext(context);
+  };
   const metrics = calculateSspWorkspaceMetrics(workspace);
   const currentViewLabel =
     NAV_ITEMS.find((item) => item.id === view)?.label ?? "Workspace";
@@ -184,10 +221,11 @@ function SspWorkspaceSuccess({
               </Button>
             ) : null}
             <Button
+              ref={agentTriggerRef}
               type="button"
               variant="outline"
               onClick={() =>
-                setAgentContext({
+                openAgent({
                   targetType: "workspace",
                   targetId: workspace.id,
                   label: workspace.name,
@@ -247,7 +285,7 @@ function SspWorkspaceSuccess({
               onGenerate={actions.onGenerate}
               generationPending={generationPending}
               onNavigate={setView}
-              onOpenAgent={setAgentContext}
+              onOpenAgent={openAgent}
               onSaveCategorization={actions.onSaveCategorization}
               onAnalyzeCategorization={actions.onAnalyzeCategorization}
               categorizationAnalyzePending={categorizationAnalyzePending}
@@ -283,7 +321,7 @@ function SspWorkspaceSuccess({
               selectedSectionId={selectedSectionId}
               onSelectSection={setSelectedSectionId}
               onSave={actions.onSaveSection}
-              onOpenAgent={setAgentContext}
+              onOpenAgent={openAgent}
             />
           ) : null}
           {view === "controls" ? (
@@ -293,7 +331,7 @@ function SspWorkspaceSuccess({
               selectedControlId={selectedControlId}
               onSelectControl={setSelectedControlId}
               onSave={actions.onSaveControl}
-              onOpenAgent={setAgentContext}
+              onOpenAgent={openAgent}
             />
           ) : null}
           {view === "questions" ? (
@@ -320,10 +358,11 @@ function SspWorkspaceSuccess({
         </main>
       </div>
 
-      {agentContext ? (
+      {!chatbot && agentContext ? (
         <ContextualAgentDrawer
           context={agentContext}
           patches={workspace.patches}
+          restoreFocusRef={agentTriggerRef}
           onClose={() => setAgentContext(null)}
           onAskAgent={actions.onAskAgent}
           onApplyPatch={actions.onApplyPatch}
@@ -358,13 +397,14 @@ export function SspWorkspacePage(props: SspWorkspacePageProps) {
   }
   return (
     <SspWorkspaceSuccess
-      key={props.workspace.id}
+      key={`${props.workspace.id}:${props.initialView ?? "overview"}`}
       workspace={props.workspace}
       actions={props.actions}
       availableWorkspaces={props.availableWorkspaces}
       generationPending={props.generationPending}
       categorizationAnalyzePending={props.categorizationAnalyzePending}
       initialView={props.initialView}
+      initialTargetId={props.initialTargetId}
       actionsBusy={props.actionsBusy}
     />
   );

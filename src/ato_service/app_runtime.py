@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ato_service.runtime_config import RuntimeConfig
+
+if TYPE_CHECKING:
+    from ato_service.ssp_workspace.model_runtime import SspModelAdapter, SspVisionAdapter
 
 RUNTIME_STATE_ATTR = "runtime"
 
@@ -29,6 +33,8 @@ class AppRuntimeState:
     snapshot: AppRuntimeSnapshot
     session_factory: async_sessionmaker[AsyncSession] | None = None
     audit_hmac_key: bytes | None = field(default=None, repr=False)
+    ssp_model_adapter: SspModelAdapter | None = field(default=None, repr=False)
+    ssp_vision_adapter: SspVisionAdapter | None = field(default=None, repr=False)
 
     @property
     def config(self) -> RuntimeConfig:

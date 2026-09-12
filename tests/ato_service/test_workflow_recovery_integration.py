@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from ato_service.analysis_runs import StartRunInput, start_run
 from ato_service.auth_context import AuthorizationDeniedError
 from ato_service.concurrency import EtagMismatchError, IfMatchRequiredError
-from ato_service.db.models import AnalysisRun, Job, MatrixRow, PackageRevision
+from ato_service.db.models import AnalysisRun, MatrixRow, PackageRevision
 from ato_service.deterministic_analyzer_worker import process_next_deterministic_analysis_job
 from ato_service.export_service import (
     ExportValidationError,
@@ -22,7 +22,7 @@ from ato_service.export_service import (
     submit_export_draft,
 )
 from ato_service.idempotency import IdempotencyConflictError
-from ato_service.jobs import recover_expired_leases
+from ato_service.jobs import claim_next_eligible_job, recover_expired_leases
 from ato_service.object_authorization import authorize_package_revision_read
 from ato_service.package_revisions import (
     EmptyPackageRevisionError,
@@ -34,7 +34,6 @@ from ato_service.package_revisions import (
 from ato_service.review_revisions import (
     create_review_revision,
     submit_review_revision,
-    update_disposition,
 )
 from ato_service.systems import create_system
 from tests.integration_support.factories import (
@@ -47,11 +46,12 @@ from tests.integration_support.factories import (
     system_create_kwargs,
 )
 from tests.integration_support.postgres import (
-    AUTHORITY_MANIFEST_ID,
     postgres_integration_harness,
     run_async,
 )
 from tests.integration_support.workflow import (
+    actual_authority_manifest_id,
+    resolve_review_dispositions,
     run_profile_workflow,
     seed_pre_confirm,
     seed_ready_revision,
@@ -67,7 +67,7 @@ def test_create_system_idempotency_replay_is_identical(tmp_path) -> None:
                 harness.session,
                 principal=OWNER,
                 audit_hmac_key=harness.hmac_key,
-                idempotency_key="same-system-key",
+                idempotency_key="same-system-key-1",
                 now=harness.now,
                 **kwargs,
             )
@@ -75,7 +75,7 @@ def test_create_system_idempotency_replay_is_identical(tmp_path) -> None:
                 harness.session,
                 principal=OWNER,
                 audit_hmac_key=harness.hmac_key,
-                idempotency_key="same-system-key",
+                idempotency_key="same-system-key-1",
                 now=harness.now,
                 **kwargs,
             )
@@ -93,7 +93,7 @@ def test_create_system_idempotency_conflict_raises(tmp_path) -> None:
                 harness.session,
                 principal=OWNER,
                 audit_hmac_key=harness.hmac_key,
-                idempotency_key="conflict-key",
+                idempotency_key="conflict-system-key",
                 now=harness.now,
                 **system_create_kwargs(display_name="First"),
             )
@@ -102,7 +102,7 @@ def test_create_system_idempotency_conflict_raises(tmp_path) -> None:
                     harness.session,
                     principal=OWNER,
                     audit_hmac_key=harness.hmac_key,
-                    idempotency_key="conflict-key",
+                    idempotency_key="conflict-system-key",
                     now=harness.now,
                     **system_create_kwargs(display_name="Second"),
                 )
@@ -127,7 +127,7 @@ def test_confirm_rejects_stale_etag(tmp_path) -> None:
                     principal=OWNER,
                     package_revision_id=package_revision_id,
                     if_match='"v1"',
-                    idempotency_key="confirm-stale",
+                    idempotency_key="confirm-stale-key",
                     hmac_key=harness.hmac_key,
                     now=harness.now,
                     config=harness.config,
@@ -141,11 +141,12 @@ def test_confirm_rejects_stale_etag(tmp_path) -> None:
 def test_confirm_requires_if_match_header(tmp_path) -> None:
     async def exercise() -> None:
         async with postgres_integration_harness(tmp_path) as harness:
+            authority_manifest_id = actual_authority_manifest_id(harness.project_root)
             system_result = await create_system(
                 harness.session,
                 principal=OWNER,
                 audit_hmac_key=harness.hmac_key,
-                idempotency_key="if-match-system",
+                idempotency_key="if-match-system-key",
                 now=harness.now,
                 **system_create_kwargs(display_name="If-Match"),
             )
@@ -158,7 +159,7 @@ def test_confirm_requires_if_match_header(tmp_path) -> None:
                     certification_class=None,
                     impact_level="moderate",
                 ),
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 idempotency_key="if-match-revision",
                 hmac_key=harness.hmac_key,
                 now=harness.now,
@@ -171,7 +172,7 @@ def test_confirm_requires_if_match_header(tmp_path) -> None:
                         revision_result.payload["package_revision_id"]
                     ),
                     if_match=None,
-                    idempotency_key="confirm-no-etag",
+                    idempotency_key="confirm-no-etag-key",
                     hmac_key=harness.hmac_key,
                     now=harness.now,
                 )
@@ -183,6 +184,7 @@ def test_confirm_requires_if_match_header(tmp_path) -> None:
 def test_expired_job_lease_recovery_completes_without_duplicate_rows(tmp_path) -> None:
     async def exercise() -> None:
         async with postgres_integration_harness(tmp_path) as harness:
+            authority_manifest_id = actual_authority_manifest_id(harness.project_root)
             _, package_revision_id = await seed_ready_revision(
                 harness,
                 profile_id="fisma_agency_security",
@@ -200,21 +202,26 @@ def test_expired_job_lease_recovery_completes_without_duplicate_rows(tmp_path) -
                     assessment_item_ids=(),
                 ),
                 config=harness.config,
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 project_root=harness.project_root,
-                idempotency_key="lease-run",
+                idempotency_key="lease-analysis-run",
                 hmac_key=harness.hmac_key,
                 now=harness.now,
             )
             run_id = uuid.UUID(started.payload["run_id"])
 
-            job = await harness.session.scalar(
-                select(Job).where(Job.run_id == run_id)
+            claimed = await claim_next_eligible_job(
+                harness.session,
+                lease_owner="crashed-worker",
+                now=harness.now,
+                max_attempts=3,
+                lease_seconds=300,
             )
-            assert job is not None
-            job.lease_owner = "crashed-worker"
+            assert claimed is not None
+            job = claimed.job
+            assert job.run_id == run_id
             job.lease_expires_at = harness.now - timedelta(minutes=5)
-            job.status = "leased"
+            job.heartbeat_at = harness.now - timedelta(minutes=5)
             await harness.session.flush()
 
             recovered = await recover_expired_leases(
@@ -222,7 +229,7 @@ def test_expired_job_lease_recovery_completes_without_duplicate_rows(tmp_path) -
                 now=harness.now,
                 max_attempts=3,
             )
-            assert recovered >= 1
+            assert len(recovered) >= 1
 
             first = await process_next_deterministic_analysis_job(
                 harness.session,
@@ -298,6 +305,7 @@ def test_authorization_denied_without_leaking_groups(tmp_path) -> None:
 def test_approval_expiry_blocks_late_approve(tmp_path) -> None:
     async def exercise() -> None:
         async with postgres_integration_harness(tmp_path) as harness:
+            authority_manifest_id = actual_authority_manifest_id(harness.project_root)
             _, package_revision_id = await seed_ready_revision(
                 harness,
                 profile_id="fedramp_20x_program",
@@ -315,7 +323,7 @@ def test_approval_expiry_blocks_late_approve(tmp_path) -> None:
                     assessment_item_ids=(),
                 ),
                 config=harness.config,
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 project_root=harness.project_root,
                 idempotency_key="approval-expiry-run",
                 hmac_key=harness.hmac_key,
@@ -340,24 +348,23 @@ def test_approval_expiry_blocks_late_approve(tmp_path) -> None:
                 now=harness.now,
             )
             review_revision_id = uuid.UUID(review.payload["review_revision_id"])
-            matrix_row = await harness.session.scalar(
-                select(MatrixRow).where(MatrixRow.run_id == run_id)
+            matrix_rows = list(
+                (
+                    await harness.session.execute(
+                        select(MatrixRow).where(MatrixRow.run_id == run_id)
+                    )
+                ).scalars()
             )
-            assert matrix_row is not None
+            assert matrix_rows
+            matrix_row = matrix_rows[0]
             matrix_row.system_status = "partial"
             matrix_row.model_proposed_status = "partial"
             await harness.session.flush()
-            _, review_etag = await update_disposition(
-                harness.session,
-                principal=REVIEWER,
+            review_etag = await resolve_review_dispositions(
+                harness,
                 review_revision_id=review_revision_id,
-                matrix_row_id=matrix_row.matrix_row_id,
-                decision="weakness_confirmed",
-                edited_summary=None,
-                notes="confirmed",
-                if_match=review.etag,
-                hmac_key=harness.hmac_key,
-                now=harness.now,
+                matrix_rows=matrix_rows,
+                review_etag=review.etag,
             )
             await submit_review_revision(
                 harness.session,
@@ -373,7 +380,7 @@ def test_approval_expiry_blocks_late_approve(tmp_path) -> None:
                 principal=REVIEWER,
                 review_revision_id=review_revision_id,
                 project_root=harness.project_root,
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 idempotency_key="approval-expiry-export",
                 hmac_key=harness.hmac_key,
                 now=harness.now,
@@ -402,11 +409,11 @@ def test_approval_expiry_blocks_late_approve(tmp_path) -> None:
                     harness.session,
                     principal=APPROVER,
                     approval_id=approval_id,
-                    idempotency_key="late-approve",
+                    idempotency_key="late-approval-key",
                     hmac_key=harness.hmac_key,
                     now=expired_now,
                     project_root=harness.project_root,
-                    authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                    authority_manifest_id=authority_manifest_id,
                 )
             assert exc_info.value.error_code in {
                 "approval_expired",
@@ -420,6 +427,7 @@ def test_approval_expiry_blocks_late_approve(tmp_path) -> None:
 def test_self_approval_denied_on_submit_and_approve(tmp_path) -> None:
     async def exercise() -> None:
         async with postgres_integration_harness(tmp_path) as harness:
+            authority_manifest_id = actual_authority_manifest_id(harness.project_root)
             _, package_revision_id = await seed_ready_revision(
                 harness,
                 profile_id="fedramp_rev5_transition",
@@ -437,7 +445,7 @@ def test_self_approval_denied_on_submit_and_approve(tmp_path) -> None:
                     assessment_item_ids=(),
                 ),
                 config=harness.config,
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 project_root=harness.project_root,
                 idempotency_key="self-approval-run",
                 hmac_key=harness.hmac_key,
@@ -463,24 +471,23 @@ def test_self_approval_denied_on_submit_and_approve(tmp_path) -> None:
                 now=harness.now,
             )
             review_revision_id = uuid.UUID(review.payload["review_revision_id"])
-            matrix_row = await harness.session.scalar(
-                select(MatrixRow).where(MatrixRow.run_id == run_id)
+            matrix_rows = list(
+                (
+                    await harness.session.execute(
+                        select(MatrixRow).where(MatrixRow.run_id == run_id)
+                    )
+                ).scalars()
             )
-            assert matrix_row is not None
+            assert matrix_rows
+            matrix_row = matrix_rows[0]
             matrix_row.system_status = "partial"
             matrix_row.model_proposed_status = "partial"
             await harness.session.flush()
-            _, review_etag = await update_disposition(
-                harness.session,
-                principal=REVIEWER,
+            review_etag = await resolve_review_dispositions(
+                harness,
                 review_revision_id=review_revision_id,
-                matrix_row_id=matrix_row.matrix_row_id,
-                decision="weakness_confirmed",
-                edited_summary=None,
-                notes="confirmed",
-                if_match=review.etag,
-                hmac_key=harness.hmac_key,
-                now=harness.now,
+                matrix_rows=matrix_rows,
+                review_etag=review.etag,
             )
             await submit_review_revision(
                 harness.session,
@@ -496,7 +503,7 @@ def test_self_approval_denied_on_submit_and_approve(tmp_path) -> None:
                 principal=REVIEWER,
                 review_revision_id=review_revision_id,
                 project_root=harness.project_root,
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 idempotency_key="self-approval-export",
                 hmac_key=harness.hmac_key,
                 now=harness.now,
@@ -519,7 +526,7 @@ def test_self_approval_denied_on_submit_and_approve(tmp_path) -> None:
                     hmac_key=harness.hmac_key,
                     now=harness.now,
                     project_root=harness.project_root,
-                    authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                    authority_manifest_id=authority_manifest_id,
                 )
 
     run_async(exercise())
@@ -529,11 +536,12 @@ def test_self_approval_denied_on_submit_and_approve(tmp_path) -> None:
 def test_finalize_without_artifacts_preserves_uploading_state(tmp_path) -> None:
     async def exercise() -> None:
         async with postgres_integration_harness(tmp_path) as harness:
+            authority_manifest_id = actual_authority_manifest_id(harness.project_root)
             system_result = await create_system(
                 harness.session,
                 principal=OWNER,
                 audit_hmac_key=harness.hmac_key,
-                idempotency_key="partial-system",
+                idempotency_key="partial-system-key",
                 now=harness.now,
                 **system_create_kwargs(display_name="Partial failure"),
             )
@@ -546,7 +554,7 @@ def test_finalize_without_artifacts_preserves_uploading_state(tmp_path) -> None:
                     certification_class=None,
                     impact_level="moderate",
                 ),
-                authority_manifest_id=AUTHORITY_MANIFEST_ID,
+                authority_manifest_id=authority_manifest_id,
                 idempotency_key="partial-revision",
                 hmac_key=harness.hmac_key,
                 now=harness.now,

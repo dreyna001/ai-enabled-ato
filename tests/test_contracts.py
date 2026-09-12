@@ -31,8 +31,11 @@ P1_GATE_PATH = ROOT / "docs" / "P1_GATE_RECORD.md"
 P0_GATE_PATH = ROOT / "docs" / "P0_GATE_RECORD.md"
 RELEASE_EVIDENCE_INDEX_PATH = ROOT / "docs" / "RELEASE_EVIDENCE_INDEX.md"
 P6_GATE_PATH = ROOT / "docs" / "P6_GATE_RECORD.md"
-MIGRATION_HEAD_REVISION = "20260728_0016"
+MIGRATION_HEAD_REVISION = "20260911_0017"
 MIGRATION_HEAD_PATH = (
+    ROOT / "migrations" / "versions" / "20260911_0017_unified_ssp_chat.py"
+)
+HISTORICAL_SSP_WORKSPACE_MIGRATION_PATH = (
     ROOT / "migrations" / "versions" / "20260728_0016_ssp_agency_docx_renders.py"
 )
 RUNTIME_DEPLOYMENT_RULE_PATH = (
@@ -1499,7 +1502,10 @@ def test_phase6_documentation_reconciliation_contract() -> None:
         "missing docs/RELEASE_EVIDENCE_INDEX.md"
     )
     assert P6_GATE_PATH.is_file(), "missing docs/P6_GATE_RECORD.md"
-    assert MIGRATION_HEAD_PATH.is_file(), "missing SSP workspace foundation migration"
+    assert MIGRATION_HEAD_PATH.is_file(), "missing current migration head"
+    assert HISTORICAL_SSP_WORKSPACE_MIGRATION_PATH.is_file(), (
+        "missing SSP workspace foundation migration"
+    )
 
     release_index = RELEASE_EVIDENCE_INDEX_PATH.read_text(encoding="utf-8")
     readme = README_PATH.read_text(encoding="utf-8")

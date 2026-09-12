@@ -209,7 +209,7 @@ def test_pyproject_declares_service_and_worker_entrypoints() -> None:
 
 def test_pyproject_declares_ruff_dev_dependency() -> None:
     text = _read(PYPROJECT)
-    assert '"ruff"' in text
+    assert '"ruff==0.15.21"' in text
 
 
 def test_python_package_includes_ssp_profile_validator_schemas() -> None:
@@ -583,7 +583,8 @@ def test_install_script_keeps_application_code_root_owned(install_text: str) -> 
 def test_install_script_uses_normal_pip_install_without_upgrade(
     install_text: str,
 ) -> None:
-    assert 'pip" install "$INSTALL_DIR"' in install_text
+    assert 'copy_repo_payload "$requirements_lock" "$INSTALL_DIR/requirements.lock"' in install_text
+    assert 'pip" install -c "$INSTALL_DIR/requirements.lock" "$INSTALL_DIR"' in install_text
     assert 'pip" install --force-reinstall --no-deps "$INSTALL_DIR"' in install_text
     assert "pip install -e" not in install_text
     assert "upgrade pip" not in install_text
@@ -858,7 +859,7 @@ def test_install_script_supports_dry_run_contract_validation(install_text: str) 
     assert "--dry-run" in install_text
     assert "run_install_dry_run" in install_text
     assert "validate_migration_head_contract" in install_text
-    assert 'EXPECTED_MIGRATION_HEAD="20260728_0016"' in install_text
+    assert 'EXPECTED_MIGRATION_HEAD="20260911_0017"' in install_text
     assert "--dry-run cannot be combined with --migrate" in install_text
 
 
@@ -888,7 +889,44 @@ def test_install_script_dry_run_succeeds_without_root() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "Install dry-run complete" in result.stdout
-    assert "20260728_0016" in result.stdout
+    assert "20260911_0017" in result.stdout
+
+
+def test_wsl_upgrade_preserves_existing_runtime_config_safely() -> None:
+    text = _read(UPGRADE_SCRIPT)
+    install_text = _read(INSTALL_SCRIPT)
+
+    assert "validate_wsl_runtime_config_path" in text
+    assert "restore_wsl_runtime_config" in text
+    assert 'if [[ -L "$runtime_config_dest" ]]; then' in text
+    assert "must be a regular file, not a symlink" in text
+    assert 'Preserved existing WSL runtime config contents' in text
+    assert 'chown root:ato "$runtime_config_dest"' in text
+    assert 'chmod 640 "$runtime_config_dest"' in text
+    install_call = text.index('bash "$SCRIPT_DIR/install.sh" "${install_args[@]}"')
+    wsl_branch = text.index('    install_args+=(--skip-nginx --skip-systemd)')
+    preflight_call = text.index(
+        "    validate_wsl_runtime_config_path\n",
+        wsl_branch,
+    )
+    restore_call = text.index("    restore_wsl_runtime_config\n", install_call)
+    assert wsl_branch < preflight_call < install_call < restore_call
+
+    permissions_start = install_text.index("set_install_tree_permissions()")
+    config_guard = install_text.index(
+        'reject_non_regular_existing_file "$runtime_config_path"',
+        permissions_start,
+    )
+    install_tree_owner = install_text.index(
+        'chown root:root "$INSTALL_DIR"',
+        permissions_start,
+    )
+    assert config_guard < install_tree_owner
+    assert '-path "$runtime_config_path" -prune -o' in install_text
+    assert (
+        'enforce_existing_regular_file "$runtime_config_path" "root:$SVC_USER" 640'
+        in install_text
+    )
 
 
 @requires_bash
@@ -959,6 +997,14 @@ def test_airgap_and_onboarding_docs_retain_json_credential_contract() -> None:
     assert "prestage_airgap_deps.sh" in airgap
     assert "build_release.sh" in airgap or "verify_release.sh" in onboarding
     assert "RELEASE_PACKAGING.md" in airgap or "RELEASE_PACKAGING.md" in onboarding
+
+
+def test_airgap_prestage_includes_pep517_build_requirements() -> None:
+    prestage = _read(PRESTAGE_SCRIPT)
+    assert "tomllib" in prestage
+    assert 'document.get("build-system")' in prestage
+    assert "build_system_requirements_path" in prestage
+    assert '-r "$REQUIREMENTS_LOCK_PATH" -r "$build_system_requirements_path"' in prestage
 
 
 def test_deployment_readme_matches_current_installer_contract(

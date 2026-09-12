@@ -28,8 +28,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ato_service.db.session import create_async_engine_from_url
 from ato_service.db.models import SspWorkspaceRevision
 from ato_service.runtime_config import load_runtime_config
 from ato_service.ssp_workspace.generation import ModelPrompt, SspGenerationError
@@ -41,9 +42,7 @@ instruction = sys.argv[2]
 install_dir = Path("/opt/ato-analyzer")
 config = load_runtime_config(install_dir / "runtime-config.json", base_dir=install_dir)
 dsn = os.environ["ATO_DEBUG_DATABASE_DSN"].strip()
-if dsn.startswith("postgresql://"):
-    dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]
-engine = create_async_engine(dsn)
+engine = create_async_engine_from_url(dsn)
 session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 client = build_text_model_client(config)
 

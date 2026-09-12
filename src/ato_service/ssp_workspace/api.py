@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -24,11 +24,21 @@ from ato_service.auth_context import (
     AuthorizationDeniedError,
     require_authenticated_principal,
     require_mutation_context,
+    require_system_read_access,
 )
 from ato_service.blobs import BlobStore, BlobStoreError
+from ato_service.malware_scan import MalwareScannerUnavailableError
 from ato_service.package_rbac import principal_has_role, require_any_package_role
-from ato_service.problems import FieldError, build_problem, get_request_id, problem_json_response
+from ato_service.problems import (
+    FieldError,
+    build_problem,
+    get_request_id,
+    problem_json_response,
+    sanitize_detail,
+)
 from ato_service.ssp_workspace.categorization import CategorizationValidationError
+from ato_service.ssp_workspace.chat import load_chat_history, send_chat_message
+from ato_service.ssp_workspace.chat_contracts import ChatHistory, ChatMessageRequest
 from ato_service.ssp_workspace.contracts import EvidenceLink
 from ato_service.ssp_workspace.editing import WorkspaceEditError
 from ato_service.ssp_workspace.evidence import (
@@ -37,7 +47,12 @@ from ato_service.ssp_workspace.evidence import (
     ingest_workspace_evidence,
     remove_workspace_evidence,
 )
-from ato_service.ssp_workspace.generation import ModelPrompt, SspGenerationError
+from ato_service.ssp_workspace.generation import SspGenerationError
+from ato_service.ssp_workspace.model_policy import (
+    SspModelPolicyError,
+    require_ssp_model_allowed,
+)
+from ato_service.ssp_workspace.model_runtime import SspContextBudgetError
 from ato_service.ssp_workspace.persistence import WorkspacePersistenceError
 from ato_service.ssp_workspace.profile_bundles import ProfileBundleError
 from ato_service.ssp_workspace.profiles import (
@@ -82,11 +97,12 @@ from ato_service.ssp_workspace.service import (
     save_system_definition,
 )
 from ato_service.systems import create_system, list_systems
-from ato_service.text_llm import (
-    ChatMessage,
-    TextModelCallError,
-    TextModelConfigurationError,
-    build_text_model_client,
+from ato_service.text_llm import TextModelCallError, TextModelConfigurationError
+
+
+_SAFE_CONTEXT_BUDGET_DETAIL = (
+    "SSP request exceeds the configured aggregate context budget; reduce the "
+    "selected evidence or use an approved larger-context profile"
 )
 
 
@@ -264,14 +280,34 @@ def _error_response(exc: Exception) -> JSONResponse:
             status_code=403,
             content={"error": "authorization_denied", "error_code": "authorization_denied"},
         )
-    if code in {"resource_not_found", "approval_not_found"}:
+    if isinstance(exc, SspContextBudgetError) or getattr(exc, "failure_kind", None) == "context_budget":
+        status = 422
+        code = "model_context_budget_exceeded"
+    elif code in {"resource_not_found", "approval_not_found"}:
         status = 404
     elif code in {
         "revision_stale",
+        "chat_sequence_conflict",
+        "chat_request_conflict",
+        "chat_context_stale",
         "illegal_state_transition",
         "profile_already_imported",
     }:
         status = 409
+    elif code in {
+        "model_policy_not_approved",
+        "model_routing_denied",
+        "prohibited_model_action",
+    }:
+        status = 403
+    elif code in {"malware_scan_unavailable", "storage_unavailable"}:
+        status = 503
+    elif code in {"chat_rate_limit_exceeded", "chat_limit_exceeded"}:
+        status = 429
+    elif code in {"chat_model_failed", "chat_model_output_invalid"}:
+        status = 502
+    elif code == "chat_retention_unsupported":
+        status = 503
     elif code in {"agency_docx_upload_failed", "malware_scan_required"}:
         status = 422
     elif isinstance(exc, (TextModelConfigurationError,)):
@@ -287,10 +323,36 @@ def _error_response(exc: Exception) -> JSONResponse:
         message = (
             "Document generation produced content that is not linked to uploaded "
             "evidence. Upload and process intake artifacts, then try Generate again. "
-            f"({exc.detail})"
+            f"({sanitize_detail(exc.detail)})"
         )
+    elif isinstance(exc, SspContextBudgetError) or getattr(exc, "failure_kind", None) == "context_budget":
+        message = _SAFE_CONTEXT_BUDGET_DETAIL
+    elif isinstance(exc, SspModelPolicyError):
+        message = str(exc)
+    elif isinstance(exc, (WorkspaceEditError, CategorizationValidationError)):
+        message = sanitize_detail(str(exc))
+    elif code.startswith("chat_"):
+        message = {
+            "chat_sequence_conflict": "The conversation changed or another message is in progress. Refresh history before retrying.",
+            "chat_request_conflict": "This request identifier was already used. Refresh history before sending a new message.",
+            "chat_context_stale": "System evidence changed while the answer was being prepared. Refresh and ask again.",
+            "chat_input_limit": "The message exceeds the configured chat input limit. Shorten the message and try again.",
+            "chat_rate_limit_exceeded": "The chat request limit was reached. Wait before trying again.",
+            "chat_limit_exceeded": "The daily chat budget was reached.",
+            "chat_model_failed": "The assistant could not complete this request. Saved history is unchanged.",
+            "chat_model_output_invalid": "The assistant response failed source or output validation and was not saved.",
+            "chat_retention_unsupported": "The configured retention policy requires an approved chatbot policy update.",
+        }.get(code, "")
+    elif code in {
+        "agency_docx_upload_failed",
+        "malware_scan_required",
+        "malware_scan_unavailable",
+        "evidence_upload_failed",
+        "validation_failed",
+    }:
+        message = ""
     else:
-        message = str(exc).strip()
+        message = ""
     if message and message not in {code, "validation_failed"}:
         content["detail"] = message
     return JSONResponse(status_code=status, content=content)
@@ -338,8 +400,18 @@ async def _authorize_workspace(
 
         raise WorkspaceNotFoundError("workspace not found")
     _, system = row
+    # A platform role never grants access to another system's context or edits.
+    require_system_read_access(principal, system)
     require_any_package_role(principal, system=system, roles=roles)
     return system
+
+
+async def _finish_read_only_boundary(session: AsyncSession) -> None:
+    """End authorization's read transaction before a slow SSP workflow."""
+    if isinstance(session, AsyncSession) and session.in_transaction():
+        if session.new or session.dirty or session.deleted:
+            raise ValueError("authorization left pending database mutations")
+        await session.rollback()
 
 
 def _require_platform_admin(principal: AuthenticatedPrincipal) -> None:
@@ -348,22 +420,89 @@ def _require_platform_admin(principal: AuthenticatedPrincipal) -> None:
 
 
 def _model_adapter(runtime_state: Any) -> Any:
-    client = build_text_model_client(runtime_state.config)
-
-    async def invoke(prompt: ModelPrompt) -> str:
-        import asyncio
-
-        return await asyncio.to_thread(
-            client.complete,
-            [ChatMessage(role="user", content=prompt.user)],
-            system=prompt.system,
+    config = runtime_state.config
+    require_ssp_model_allowed(config)
+    adapter = getattr(runtime_state, "ssp_model_adapter", None)
+    if adapter is None:
+        raise TextModelConfigurationError(
+            "SSP model adapter is not available in application runtime"
         )
-
-    return invoke
+    return adapter
 
 
 def build_ssp_workspace_router() -> APIRouter:
     router = APIRouter(tags=["SSP Workspaces"])
+
+    @router.get("/ssp-workspaces/{workspace_id}/chat", response_model=ChatHistory)
+    async def get_chat(
+        workspace_id: uuid.UUID,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        before_sequence: Annotated[int | None, Query(ge=1)] = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 40,
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("viewer",)
+            )
+            history = await load_chat_history(
+                session,
+                workspace_id=workspace_id,
+                actor_id=principal.actor_id,
+                now=_utc_now(),
+                before_sequence=before_sequence,
+                limit=limit,
+            )
+            return JSONResponse(
+                content=history.model_dump(mode="json"),
+                headers={"Cache-Control": "no-store"},
+            )
+        except (AuthorizationDeniedError, WorkspacePersistenceError) as exc:
+            await session.rollback()
+            return _error_response(exc)
+
+    @router.post("/ssp-workspaces/{workspace_id}/chat", response_model=ChatHistory)
+    async def post_chat(
+        workspace_id: uuid.UUID,
+        payload: ChatMessageRequest,
+        principal: Annotated[AuthenticatedPrincipal, Depends(get_mutation_principal)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+        runtime_state: Annotated[Any, Depends(get_runtime_state)],
+    ) -> Response:
+        try:
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("viewer",)
+            )
+            await _finish_read_only_boundary(session)
+            history = await send_chat_message(
+                session,
+                workspace_id=workspace_id,
+                actor_id=principal.actor_id,
+                payload=payload,
+                model=_model_adapter(runtime_state),
+                config=runtime_state.config,
+                now=_utc_now(),
+            )
+            # Recheck current system access before committing or exposing the answer.
+            await _authorize_workspace(
+                session, principal=principal, workspace_id=workspace_id, roles=("viewer",)
+            )
+            await session.commit()
+            return JSONResponse(
+                content=history.model_dump(mode="json"),
+                headers={"Cache-Control": "no-store"},
+            )
+        except (
+            AuthorizationDeniedError,
+            WorkspacePersistenceError,
+            TextModelConfigurationError,
+            TextModelCallError,
+            SspGenerationError,
+            SspModelPolicyError,
+        ) as exc:
+            # Caught errors must not let the request dependency commit pending turns.
+            await session.rollback()
+            return _error_response(exc)
 
     @router.get("/ssp-systems")
     async def get_ssp_systems(
@@ -623,6 +762,7 @@ def build_ssp_workspace_router() -> APIRouter:
                 workspace_id=workspace_id,
                 roles=("isso",),
             )
+            await _finish_read_only_boundary(session)
             await analyze_workspace_diagram(
                 session,
                 workspace_id=workspace_id,
@@ -634,6 +774,7 @@ def build_ssp_workspace_router() -> APIRouter:
                 audit_hmac_key=audit_hmac_key,
                 blob_store=blob_store,
                 config=runtime_state.config,
+                vision_client=getattr(runtime_state, "ssp_vision_adapter", None),
             )
             return JSONResponse(
                 status_code=200,
@@ -645,6 +786,7 @@ def build_ssp_workspace_router() -> APIRouter:
             AuthorizationDeniedError,
             WorkspacePersistenceError,
             ProfileBundleError,
+            SspModelPolicyError,
             ValueError,
         ) as exc:
             message = str(exc)
@@ -714,11 +856,14 @@ def build_ssp_workspace_router() -> APIRouter:
                 workspace_id=workspace_id,
                 roles=("isso",),
             )
+            await _finish_read_only_boundary(session)
+            model = _model_adapter(runtime_state)
             await analyze_workspace_categorization(
                 session,
                 workspace_id=workspace_id,
                 expected_revision_id=payload.expected_revision_id,
-                model=_model_adapter(runtime_state),
+                model=model,
+                config=runtime_state.config,
                 actor_id=principal.actor_id,
                 now=_utc_now(),
                 audit_hmac_key=audit_hmac_key,
@@ -736,6 +881,7 @@ def build_ssp_workspace_router() -> APIRouter:
             TextModelConfigurationError,
             TextModelCallError,
             SspGenerationError,
+            SspModelPolicyError,
         ) as exc:
             return _error_response(exc)
 
@@ -844,6 +990,7 @@ def build_ssp_workspace_router() -> APIRouter:
                 workspace_id=workspace_id,
                 roles=("system_owner", "isso"),
             )
+            await _finish_read_only_boundary(session)
             content = await file.read(runtime_state.config.limits.max_single_file_bytes + 1)
             await ingest_workspace_evidence(
                 session,
@@ -856,6 +1003,7 @@ def build_ssp_workspace_router() -> APIRouter:
                 now=_utc_now(),
                 blob_store=blob_store,
                 config=runtime_state.config,
+                vision_client=getattr(runtime_state, "ssp_vision_adapter", None),
                 audit_hmac_key=audit_hmac_key,
             )
             return JSONResponse(
@@ -867,6 +1015,8 @@ def build_ssp_workspace_router() -> APIRouter:
             WorkspacePersistenceError,
             EvidenceUploadError,
             BlobStoreError,
+            SspModelPolicyError,
+            MalwareScannerUnavailableError,
         ) as exc:
             return _error_response(exc)
 
@@ -883,11 +1033,14 @@ def build_ssp_workspace_router() -> APIRouter:
             await _authorize_workspace(
                 session, principal=principal, workspace_id=workspace_id, roles=("isso",)
             )
+            await _finish_read_only_boundary(session)
+            model = _model_adapter(runtime_state)
             await generate_workspace_draft(
                 session,
                 workspace_id=workspace_id,
                 expected_revision_id=payload.expected_revision_id,
-                model=_model_adapter(runtime_state),
+                model=model,
+                config=runtime_state.config,
                 actor_id=principal.actor_id,
                 now=_utc_now(),
                 audit_hmac_key=audit_hmac_key,
@@ -902,6 +1055,7 @@ def build_ssp_workspace_router() -> APIRouter:
             TextModelConfigurationError,
             TextModelCallError,
             SspGenerationError,
+            SspModelPolicyError,
         ) as exc:
             return _error_response(exc)
 
@@ -1040,12 +1194,15 @@ def build_ssp_workspace_router() -> APIRouter:
             await _authorize_workspace(
                 session, principal=principal, workspace_id=workspace_id, roles=("isso",)
             )
+            await _finish_read_only_boundary(session)
+            model = _model_adapter(runtime_state)
             patch = await propose_agent_patch(
                 session,
                 workspace_id=workspace_id,
                 expected_revision_id=payload.expected_revision_id,
                 instruction=payload.instruction,
-                model=_model_adapter(runtime_state),
+                model=model,
+                config=runtime_state.config,
                 actor_id=principal.actor_id,
                 now=_utc_now(),
                 audit_hmac_key=audit_hmac_key,
@@ -1065,6 +1222,7 @@ def build_ssp_workspace_router() -> APIRouter:
             TextModelConfigurationError,
             TextModelCallError,
             SspGenerationError,
+            SspModelPolicyError,
         ) as exc:
             return _error_response(exc)
 
@@ -1282,7 +1440,9 @@ def build_ssp_workspace_router() -> APIRouter:
             await _authorize_workspace(
                 session, principal=principal, workspace_id=workspace_id, roles=("isso",)
             )
+            await _finish_read_only_boundary(session)
             payload = await file.read(runtime_state.config.limits.max_single_file_bytes + 1)
+            model = _model_adapter(runtime_state)
             await create_agency_docx_render(
                 session,
                 workspace_id=workspace_id,
@@ -1293,7 +1453,7 @@ def build_ssp_workspace_router() -> APIRouter:
                 now=_utc_now(),
                 blob_store=blob_store,
                 config=runtime_state.config,
-                model=_model_adapter(runtime_state),
+                model=model,
                 audit_hmac_key=audit_hmac_key,
             )
             return JSONResponse(
@@ -1305,6 +1465,11 @@ def build_ssp_workspace_router() -> APIRouter:
             AgencyDocxUploadError,
             ApprovalNotFoundError,
             BlobStoreError,
+            MalwareScannerUnavailableError,
+            TextModelConfigurationError,
+            TextModelCallError,
+            SspGenerationError,
+            SspModelPolicyError,
         ) as exc:
             return _error_response(exc)
 

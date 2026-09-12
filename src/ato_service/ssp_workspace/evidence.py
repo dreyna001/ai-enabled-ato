@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
+from dataclasses import dataclass
 from io import BytesIO
+import hashlib
+import inspect
 from typing import Any
 import uuid
+from contextlib import asynccontextmanager
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +20,14 @@ from ato_service.blobs import BlobStore
 from ato_service.extraction.errors import ExtractionError
 from ato_service.extraction.router import extract_content
 from ato_service.extraction.types import ExtractionContext, VisionPolicy
-from ato_service.runtime_config import RuntimeConfig
+from ato_service.malware_scan import (
+    MalwareScanOutcome,
+    MalwareScanner,
+    MalwareScannerUnavailableError,
+    resolve_malware_scanner,
+)
+from ato_service.runtime_config import RuntimeConfig, RuntimeConfigError
+from ato_service.process_capabilities import resolve_process_capabilities
 from ato_service.ssp_workspace.contracts import (
     ControlState,
     EvidenceLink,
@@ -35,6 +47,7 @@ from ato_service.ssp_workspace.vision import (
     VisionExtractionRequest,
     extract_screenshot_facts_with_config,
 )
+from ato_service.ssp_workspace.model_policy import require_ssp_model_allowed
 
 
 class EvidenceUploadError(ValueError):
@@ -43,6 +56,99 @@ class EvidenceUploadError(ValueError):
 
 class EvidenceRemovalError(ValueError):
     error_code = "illegal_state_transition"
+
+
+@dataclass(frozen=True, slots=True)
+class _EvidenceSnapshot:
+    workspace_id: uuid.UUID
+    revision_id: uuid.UUID
+    content: RevisionContent
+
+
+@asynccontextmanager
+async def _read_snapshot_transaction(session: AsyncSession):
+    """Run the read snapshot in a root transaction and end it before slow work."""
+    if not isinstance(session, AsyncSession):
+        yield
+        return
+
+    if session.in_nested_transaction():
+        raise ValueError("SSP workflow requires a root transaction boundary")
+    if session.in_transaction():
+        if session.new or session.dirty or session.deleted:
+            raise ValueError(
+                "SSP workflow cannot start with pending database mutations"
+            )
+        raise ValueError("SSP workflow requires a clean transaction boundary")
+    try:
+        yield
+    except BaseException:
+        await session.rollback()
+        raise
+    else:
+        await session.rollback()
+
+
+async def _scan_before_processing(
+    *,
+    config: RuntimeConfig,
+    content: bytes,
+    scanner: MalwareScanner | None = None,
+) -> None:
+    """Run the production scanner before any blob write or content parsing."""
+    if config.runtime_profile == "dev_local":
+        return
+    if config.runtime_profile != "onprem_production":
+        raise MalwareScannerUnavailableError(
+            "production evidence scanning requires a known runtime boundary (HS-005)"
+        )
+    try:
+        capabilities = resolve_process_capabilities(config.document)
+    except RuntimeConfigError as exc:
+        raise MalwareScannerUnavailableError(
+            "production evidence scanning capability is not valid (HS-005)"
+        ) from exc
+    if capabilities is None or capabilities.malware_scanning is not True:
+        raise MalwareScannerUnavailableError(
+            "production evidence scanning capability is disabled (HS-005)"
+        )
+    if scanner is not None:
+        raise MalwareScannerUnavailableError(
+            "production evidence scanning must use the configured scanner (HS-005)"
+        )
+    resolved_scanner = resolve_malware_scanner(config)
+    result = await asyncio.to_thread(
+        resolved_scanner.scan_verified_bytes,
+        content_bytes=content,
+        expected_sha256=hashlib.sha256(content).hexdigest(),
+        expected_size_bytes=len(content),
+    )
+    if inspect.isawaitable(result):
+        result = await result
+    if result.outcome is MalwareScanOutcome.INFECTED:
+        raise EvidenceUploadError("evidence rejected by malware scan")
+    if result.outcome is not MalwareScanOutcome.CLEAN:
+        raise MalwareScannerUnavailableError(
+            "evidence malware scan failed (HS-005)"
+        )
+
+
+async def _vision_extract(
+    request: VisionExtractionRequest,
+    *,
+    config: RuntimeConfig,
+    vision_client: Any | None,
+) -> Any:
+    """Run injected sync vision adapters away from the event loop."""
+    kwargs = {"request": request, "config": config, "model": vision_client}
+    if vision_client is None:
+        return await extract_screenshot_facts_with_config(**kwargs)
+    call = getattr(vision_client, "__call__", vision_client)
+    if inspect.iscoroutinefunction(call):
+        return await extract_screenshot_facts_with_config(**kwargs)
+    return await asyncio.to_thread(
+        lambda: asyncio.run(extract_screenshot_facts_with_config(**kwargs))
+    )
 
 
 async def ingest_workspace_evidence(
@@ -57,6 +163,7 @@ async def ingest_workspace_evidence(
     now: datetime,
     blob_store: BlobStore,
     config: RuntimeConfig,
+    vision_client: Any | None = None,
     audit_hmac_key: bytes,
 ) -> Any:
     """Store, extract, and revision-bind one file without legacy package objects."""
@@ -80,105 +187,40 @@ async def ingest_workspace_evidence(
     if len(content) > config.limits.max_single_file_bytes:
         raise EvidenceUploadError("evidence file exceeds configured limit")
 
-    workspace = (
-        await session.execute(
-            select(SspWorkspace)
-            .where(SspWorkspace.workspace_id == workspace_id)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
-    if workspace is None:
-        from ato_service.ssp_workspace.persistence import WorkspaceNotFoundError
-
-        raise WorkspaceNotFoundError("workspace not found")
-    if workspace.current_revision_id != expected_revision_id:
-        from ato_service.ssp_workspace.persistence import StaleWorkspaceRevisionError
-
-        raise StaleWorkspaceRevisionError("workspace revision changed")
-    revision = (
-        await session.execute(
-            select(SspWorkspaceRevision).where(
-                SspWorkspaceRevision.revision_id == expected_revision_id,
-                SspWorkspaceRevision.workspace_id == workspace_id,
+    async with _read_snapshot_transaction(session):
+        workspace = (
+            await session.execute(
+                select(SspWorkspace).where(
+                    SspWorkspace.workspace_id == workspace_id
+                )
             )
+        ).scalar_one_or_none()
+        if workspace is None:
+            raise WorkspaceNotFoundError("workspace not found")
+        if workspace.current_revision_id != expected_revision_id:
+            raise StaleWorkspaceRevisionError("workspace revision changed")
+        revision = (
+            await session.execute(
+                select(SspWorkspaceRevision).where(
+                    SspWorkspaceRevision.revision_id == expected_revision_id,
+                    SspWorkspaceRevision.workspace_id == workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if revision is None:
+            raise WorkspaceNotFoundError("workspace revision not found")
+        snapshot = _EvidenceSnapshot(
+            workspace_id=workspace.workspace_id,
+            revision_id=revision.revision_id,
+            content=RevisionContent.model_validate(revision.content),
         )
-    ).scalar_one()
-    stored = blob_store.store_stream(
+
+    await _scan_before_processing(config=config, content=content)
+    stored = await asyncio.to_thread(
+        blob_store.store_stream,
         BytesIO(content),
         max_bytes=config.limits.max_single_file_bytes,
     )
-    duplicate = (
-        await session.execute(
-            select(SspEvidenceArtifact).where(
-                SspEvidenceArtifact.workspace_id == workspace_id,
-                SspEvidenceArtifact.sha256 == stored.sha256,
-            )
-        )
-    ).scalar_one_or_none()
-    if duplicate is not None:
-        if duplicate.removed_at is not None:
-            duplicate.removed_at = None
-            duplicate.removed_by = None
-            restored_facts = tuple(
-                FactContent(
-                    key=str(segment["fact_key"]),
-                    value=segment["text"],
-                    provenance=Provenance.EXTRACTED,
-                    evidence=(
-                        EvidenceLink(
-                            artifact_id=duplicate.evidence_artifact_id,
-                            locator=dict(segment["locator"]),
-                        ),
-                    ),
-                )
-                for segment in duplicate.extracted_segments
-                if all(
-                    key in segment
-                    for key in ("fact_key", "text", "locator")
-                )
-                and isinstance(segment["locator"], dict)
-            )
-            if restored_facts:
-                current = RevisionContent.model_validate(revision.content)
-                fact_by_key = {item.key: item for item in current.facts}
-                for fact in restored_facts:
-                    fact_by_key[fact.key] = fact
-                await save_revision(
-                    session,
-                    workspace_id=workspace_id,
-                    content=current.model_copy(
-                        update={
-                            "facts": tuple(
-                                fact_by_key[key] for key in sorted(fact_by_key)
-                            )
-                        }
-                    ),
-                    created_by=actor_id,
-                    now=now,
-                    expected_revision_id=expected_revision_id,
-                )
-            await append_audit_event(
-                session,
-                hmac_key=audit_hmac_key,
-                actor_type="user",
-                actor_id=actor_id,
-                action="ssp_evidence_restored",
-                object_type="ssp_workspace",
-                object_id=str(workspace_id),
-                outcome="succeeded",
-                reason_code=None,
-                metadata={
-                    "evidence_artifact_id": str(
-                        duplicate.evidence_artifact_id
-                    ),
-                    "sha256": duplicate.sha256,
-                    "fact_count": len(restored_facts),
-                },
-                occurred_at=now,
-            )
-            await session.flush()
-        return duplicate
-
     artifact_id = uuid.uuid4()
     facts: list[FactContent] = []
     extracted_segments: list[dict[str, Any]] = []
@@ -186,7 +228,8 @@ async def ingest_workspace_evidence(
     status = "processed"
     failure_code: str | None = None
     try:
-        outcome = extract_content(
+        outcome = await asyncio.to_thread(
+            extract_content,
             content_bytes=content,
             sha256=stored.sha256,
             context=ExtractionContext(
@@ -197,9 +240,7 @@ async def ingest_workspace_evidence(
                 filename=normalized_filename,
             ),
             limits=config.extraction_limits,
-            vision_policy=VisionPolicy(
-                vision_allowed=config.vision_model_enabled
-            ),
+            vision_policy=VisionPolicy(vision_allowed=config.vision_model_enabled),
         )
         detected_format = outcome.detected_format
         for segment in outcome.segments:
@@ -233,7 +274,8 @@ async def ingest_workspace_evidence(
                     }
                 )
             elif outcome.detected_format in {"png", "jpeg", "webp"}:
-                vision_result = await extract_screenshot_facts_with_config(
+                require_ssp_model_allowed(config, vision=True)
+                vision_result = await _vision_extract(
                     VisionExtractionRequest(
                         source_id=str(artifact_id),
                         content=content,
@@ -241,6 +283,7 @@ async def ingest_workspace_evidence(
                         filename=normalized_filename,
                     ),
                     config=config,
+                    vision_client=vision_client,
                 )
                 for item in vision_result.facts:
                     locator = {
@@ -283,6 +326,96 @@ async def ingest_workspace_evidence(
         status = "failed"
         failure_code = "evidence_extraction_failed"
 
+    workspace = (
+        await session.execute(
+            select(SspWorkspace)
+            .where(SspWorkspace.workspace_id == workspace_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if workspace is None:
+        raise WorkspaceNotFoundError("workspace not found")
+    if workspace.current_revision_id != snapshot.revision_id:
+        raise StaleWorkspaceRevisionError("workspace revision changed")
+    revision = (
+        await session.execute(
+            select(SspWorkspaceRevision).where(
+                SspWorkspaceRevision.revision_id == snapshot.revision_id,
+                SspWorkspaceRevision.workspace_id == workspace_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if revision is None:
+        raise WorkspaceNotFoundError("workspace revision not found")
+    duplicate = (
+        await session.execute(
+            select(SspEvidenceArtifact).where(
+                SspEvidenceArtifact.workspace_id == workspace_id,
+                SspEvidenceArtifact.sha256 == stored.sha256,
+            )
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        if duplicate.removed_at is not None:
+            duplicate.removed_at = None
+            duplicate.removed_by = None
+            restored_facts = tuple(
+                FactContent(
+                    key=str(segment["fact_key"]),
+                    value=segment["text"],
+                    provenance=Provenance.EXTRACTED,
+                    evidence=(
+                        EvidenceLink(
+                            artifact_id=duplicate.evidence_artifact_id,
+                            locator=dict(segment["locator"]),
+                        ),
+                    ),
+                )
+                for segment in duplicate.extracted_segments
+                if all(
+                    key in segment for key in ("fact_key", "text", "locator")
+                )
+                and isinstance(segment["locator"], dict)
+            )
+            if restored_facts:
+                current = RevisionContent.model_validate(revision.content)
+                fact_by_key = {item.key: item for item in current.facts}
+                for fact in restored_facts:
+                    fact_by_key[fact.key] = fact
+                await save_revision(
+                    session,
+                    workspace_id=workspace_id,
+                    content=current.model_copy(
+                        update={
+                            "facts": tuple(
+                                fact_by_key[key] for key in sorted(fact_by_key)
+                            )
+                        }
+                    ),
+                    created_by=actor_id,
+                    now=now,
+                    expected_revision_id=snapshot.revision_id,
+                )
+            await append_audit_event(
+                session,
+                hmac_key=audit_hmac_key,
+                actor_type="user",
+                actor_id=actor_id,
+                action="ssp_evidence_restored",
+                object_type="ssp_workspace",
+                object_id=str(workspace_id),
+                outcome="succeeded",
+                reason_code=None,
+                metadata={
+                    "evidence_artifact_id": str(duplicate.evidence_artifact_id),
+                    "sha256": duplicate.sha256,
+                    "fact_count": len(restored_facts),
+                },
+                occurred_at=now,
+            )
+            await session.flush()
+        return duplicate
+
     artifact = SspEvidenceArtifact(
         evidence_artifact_id=artifact_id,
         workspace_id=workspace_id,
@@ -313,11 +446,13 @@ async def ingest_workspace_evidence(
             session,
             workspace_id=workspace_id,
             content=current.model_copy(
-                update={"facts": tuple(fact_by_key[key] for key in sorted(fact_by_key))}
+                update={
+                    "facts": tuple(fact_by_key[key] for key in sorted(fact_by_key))
+                }
             ),
             created_by=actor_id,
             now=now,
-            expected_revision_id=expected_revision_id,
+            expected_revision_id=snapshot.revision_id,
         )
     await append_audit_event(
         session,

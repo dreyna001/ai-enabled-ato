@@ -80,7 +80,7 @@ e2e_require_python_env() {
     export E2E_PYTHON="$(command -v python3)"
     return 0
   fi
-  e2e_err "Python 3.12+ is required. Create .venv with: python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'"
+  e2e_err "Python 3.12+ is required. Create .venv with: python3 -m venv .venv && .venv/bin/pip install -c requirements.lock -e '.[dev]'"
 }
 
 e2e_wait_for_url() {
@@ -111,14 +111,14 @@ e2e_resolve_database_url() {
     return 0
   fi
   local password="${ATO_E2E_DB_PASSWORD:-ato_e2e_dev}"
-  printf 'postgresql+asyncpg://%s:%s@%s:%s/%s' \
+  printf 'postgresql+psycopg://%s:%s@%s:%s/%s' \
     "$E2E_DB_USER" "$password" "$E2E_DB_HOST" "$E2E_DB_PORT" "$E2E_DB_NAME"
 }
 
 e2e_require_postgresql() {
   e2e_require_commands psql pg_isready curl
   if ! pg_isready -h "$E2E_DB_HOST" -p "$E2E_DB_PORT" >/dev/null 2>&1; then
-    e2e_err "PostgreSQL is not reachable at ${E2E_DB_HOST}:${E2E_DB_PORT}. Start PostgreSQL locally or set ATO_E2E_DATABASE_URL to a reachable asyncpg DSN."
+    e2e_err "PostgreSQL is not reachable at ${E2E_DB_HOST}:${E2E_DB_PORT}. Start PostgreSQL locally or set ATO_E2E_DATABASE_URL to a reachable PostgreSQL DSN."
   fi
 }
 
@@ -126,7 +126,7 @@ e2e_ensure_database() {
   local dsn
   dsn="$(e2e_resolve_database_url)"
   local password
-  password="$(printf '%s' "$dsn" | sed -n 's#^postgresql+asyncpg://[^:]*:\([^@]*\)@.*#\1#p')"
+  password="$(printf '%s' "$dsn" | sed -nE 's#^postgres(ql)?(\+(asyncpg|psycopg))?://[^:]*:([^@]*)@.*#\4#p')"
   if [[ -z "$password" ]]; then
     password="${ATO_E2E_DB_PASSWORD:-ato_e2e_dev}"
   fi

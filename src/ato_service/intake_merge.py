@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -35,7 +35,6 @@ from ato_service.normalize_proposal.target_catalog import (
 from ato_service.intake_map import (
     IntakeMapStepResult as MapOrchestrationStepResult,
     ParsedMapFact,
-    ParsedMapResponse,
 )
 from ato_service.normalize_proposal.value_validation import validate_proposed_value_for_target
 

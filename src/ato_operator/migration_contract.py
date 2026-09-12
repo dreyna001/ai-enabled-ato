@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-EXPECTED_ALEMBIC_HEAD = "20260728_0016"
+EXPECTED_ALEMBIC_HEAD = "20260911_0017"
 
 _REVISION_RE = re.compile(r'^revision\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 _DOWN_REVISION_RE = re.compile(r"^down_revision\s*=\s*(.+)$", re.MULTILINE)

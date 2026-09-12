@@ -1,7 +1,6 @@
 import type { ProblemFieldError } from "@/api/client";
 import type {
   CategorizationChange,
-  CategorizationAgentSuggestion,
   EvidenceArtifact,
   EvidenceLink,
   SystemCategorization,

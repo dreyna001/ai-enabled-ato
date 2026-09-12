@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 import inspect
@@ -26,6 +27,10 @@ from ato_service.ssp_workspace.system_definition import (
     apply_system_definition_sections,
 )
 from ato_service.ssp_workspace.vision import VisionPrompt
+from ato_service.ssp_workspace.model_schemas import (
+    DIAGRAM_PROPOSAL_SCHEMA_NAME,
+    output_schema_for,
+)
 
 DIAGRAM_ANALYSIS_SCHEMA_VERSION = "1.0.0"
 MAX_COMPONENTS = 100
@@ -85,6 +90,19 @@ class DiagramAnalysisResult:
 class DiagramAnalysisError(ValueError):
     """Raised when diagram analysis fails validation or model contract."""
 
+    def __init__(
+        self,
+        detail: str,
+        *,
+        failure_kind: str | None = None,
+        repairable: bool | None = None,
+    ) -> None:
+        super().__init__(detail)
+        if failure_kind is not None:
+            self.failure_kind = failure_kind
+        if repairable is not None:
+            self.repairable = repairable
+
 
 async def analyze_architecture_diagram(
     *,
@@ -105,6 +123,7 @@ async def analyze_architecture_diagram(
         ),
         image_bytes=image_bytes,
         media_type=media_type,
+        output_schema=output_schema_for(DIAGRAM_PROPOSAL_SCHEMA_NAME),
     )
     raw_text: str | None = None
     try:
@@ -120,7 +139,11 @@ async def analyze_architecture_diagram(
         )
     except _DiagramContractError as exc:
         if not exc.repairable:
-            raise DiagramAnalysisError(exc.detail) from exc
+            raise DiagramAnalysisError(
+                exc.detail,
+                failure_kind=exc.failure_kind,
+                repairable=exc.repairable,
+            ) from exc
         first_error = exc
 
     repair_prompt = VisionPrompt(
@@ -133,6 +156,7 @@ async def analyze_architecture_diagram(
         ),
         image_bytes=image_bytes,
         media_type=media_type,
+        output_schema=prompt.output_schema,
     )
     try:
         raw_text = await _invoke_model(model, repair_prompt)
@@ -146,7 +170,11 @@ async def analyze_architecture_diagram(
             repair_attempted=True,
         )
     except _DiagramContractError as exc:
-        raise DiagramAnalysisError(exc.detail) from exc
+        raise DiagramAnalysisError(
+            exc.detail,
+            failure_kind=exc.failure_kind,
+            repairable=exc.repairable,
+        ) from exc
 
 
 def collect_text_evidence_context(
@@ -376,23 +404,46 @@ class _ParsedAnalysis:
 
 
 class _DiagramContractError(ValueError):
-    def __init__(self, detail: str, *, repairable: bool = True) -> None:
+    def __init__(
+        self,
+        detail: str,
+        *,
+        failure_kind: str = "schema",
+        repairable: bool = True,
+    ) -> None:
         super().__init__(detail)
         self.detail = detail
+        self.failure_kind = failure_kind
         self.repairable = repairable
 
 
 async def _invoke_model(model: DiagramVisionCallable, prompt: VisionPrompt) -> str:
+    from ato_service.ssp_workspace.model_runtime import SspContextBudgetError
+
     try:
-        raw_or_awaitable = model(prompt)
+        is_async_callable = inspect.iscoroutinefunction(model) or inspect.iscoroutinefunction(
+            getattr(model, "__call__", None)
+        )
+        raw_or_awaitable = (
+            model(prompt)
+            if is_async_callable
+            else await asyncio.to_thread(model, prompt)
+        )
         raw = (
             await raw_or_awaitable
             if inspect.isawaitable(raw_or_awaitable)
             else raw_or_awaitable
         )
+    except SspContextBudgetError as exc:
+        raise _DiagramContractError(
+            str(exc),
+            failure_kind="context_budget",
+            repairable=False,
+        ) from exc
     except Exception as exc:
         raise _DiagramContractError(
             "diagram analysis model invocation failed",
+            failure_kind="model_call",
             repairable=False,
         ) from exc
     if not isinstance(raw, str) or not raw.strip():

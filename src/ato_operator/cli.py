@@ -20,6 +20,7 @@ from sqlalchemy import create_engine
 from ato_operator.approval_expiry import process_approval_expiry_sync
 from ato_operator.audit_verify import verify_audit_chain_sync
 from ato_operator.auth_purge import purge_expired_auth_artifacts_sync
+from ato_operator.chat_retention import purge_expired_chat_turns_sync
 from ato_operator.checklist import (
     build_capability_checklist_report,
     build_operator_checklist,
@@ -284,6 +285,24 @@ def _command_purge_auth(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_purge_chat(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    report = purge_expired_chat_turns_sync(config)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(
+            "purge-chat "
+            f"turns_purged={report.turns_purged} "
+            f"messages_purged={report.messages_purged} "
+            f"conversations_purged={report.conversations_purged} "
+            f"batches_processed={report.batches_processed} "
+            f"batch_limit_reached={report.batch_limit_reached} "
+            f"now={report.now}"
+        )
+    return 0
+
+
 def _command_qualification_check(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     report = run_qualification_check(project_root=project_root)
@@ -453,6 +472,7 @@ def _build_parser() -> argparse.ArgumentParser:
         ("verify-audit", "Verify audit hash chain integrity"),
         ("expire-approvals", "Expire pending and approved export drafts past configured deadlines"),
         ("purge-auth", "Delete expired OIDC login states and auth sessions"),
+        ("purge-chat", "Physically delete expired completed private chat turns"),
         (
             "qualification-check",
             "Validate qualification corpus manifest, digests, and coverage (does not close hard stops)",
@@ -664,6 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify-audit": _command_verify_audit,
         "expire-approvals": _command_expire_approvals,
         "purge-auth": _command_purge_auth,
+        "purge-chat": _command_purge_chat,
         "qualification-check": _command_qualification_check,
         "print-checklist": _command_print_checklist,
         "rebuild-search-index": _command_rebuild_search_index,

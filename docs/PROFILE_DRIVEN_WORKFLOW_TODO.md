@@ -29,7 +29,9 @@
 
 **Still open (needs code unless noted):**
 
-- **Agent split:** separate SSP narrative vs control statement model passes (see
+- **Unified chatbot qualification:** the bounded implementation is delivered;
+  approved-provider answer-quality evaluation remains open (see below).
+- **Internal generation passes:** separate SSP narrative vs control statement model passes (see
   **Agent Grounding** and [`SSP_WORKSPACE_GENERATION_BOUNDARIES.md`](SSP_WORKSPACE_GENERATION_BOUNDARIES.md)).
 - Authorization boundary narrative requirements, interconnection register,
   diagram workflow polish (status UI, manual correction, evaluation fixtures),
@@ -348,10 +350,52 @@ signature: detached-signature-reference
     if still imported; no dedicated profile rollback endpoint.
   - **Tests:** migrate API route exists; no behavioral migration/rollback tests yet.
 
+## Unified System Chatbot
+
+**Updated:** 2026-09-11. The bounded implementation is delivered in this checkout;
+deployment verification and approved-provider quality evaluation are separate.
+See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
+
+- [x] Provide one unified user-facing chatbot across the application. Moving
+  between SSP sections, controls, evidence, and review must not create separate
+  bots or lose the conversation's selected-system context.
+- [ ] Give that assistant access to the whole authorized system: current SSP,
+  pinned profile, categorization, boundary, diagrams, evidence, controls, open
+  questions, human decisions, and revision history. A focused editing target
+  narrows the task, not the assistant's awareness of related system information.
+- [x] Reuse PostgreSQL's structured, versioned records and source artifacts as
+  the source of truth. Store private conversation history separately, with
+  source IDs and revision/hash references. Model memory is advisory and never
+  becomes approved system facts automatically; no derived-summary store is added.
+- [x] Retrieve relevant authorized records for each turn within a measured
+  context budget. Start with existing relational/search capabilities; evaluate
+  semantic retrieval only when representative questions demonstrate a need.
+- [x] Refresh or invalidate derived context when evidence, profile, or system
+  revisions change. Cite supporting sources and surface missing, stale, or
+  conflicting information instead of inventing answers.
+- [x] Preserve model-disable controls, system/customer authorization boundaries,
+  and human approval of consequential changes. Focused internal model steps may
+  remain behind the single chatbot; they are not separate user-facing agents.
+- [x] Decide conversation ownership, shared versus private memory,
+  retention/deletion rules, and explicit system-switch behavior: private per
+  authenticated user and system, authorized canonical records shared, seven
+  calendar years from turn completion, bounded manual expiry cleanup. Switching
+  systems switches histories; user conversations are never shared automatically.
+- [x] Regression-test persistence, authorization, source-reference validation,
+  evidence freshness, bounded context, idempotency, and retention on PostgreSQL.
+  Retrieval covers current materialized facts, sections, controls, questions,
+  evidence excerpts, pinned requirements, and approval/revision metadata. Full
+  historical revision bodies and exhaustive diagram/categorization reasoning
+  are not claimed; the broader whole-system acceptance item remains open.
+- [ ] Prove cross-page continuity, permission isolation, context freshness,
+  source-grounded answers, and bounded long-conversation behavior with regression
+  tests and an approved quality-evaluation dataset.
+
 ## Agent Grounding
 
 - [x] Load the exact pinned profile version for every generation or agent call.
 - [ ] **Split SSP narrative and control statement generation into separate model passes.**
+  - Internal execution only; retain the single chatbot experience described above.
   - **Today:** one `generate_initial_ssp` call returns SSP sections, controls,
     questions, and optional categorization in one JSON response.
   - **Target:** sequential passes — SSP Table 1 sections first, controls second

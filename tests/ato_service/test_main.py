@@ -33,7 +33,7 @@ from ato_service.runtime_config import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-POSTGRES_URL = "postgresql+asyncpg://ato:secret@localhost:5432/ato_test"
+POSTGRES_URL = "postgresql+psycopg://ato:secret@localhost:5432/ato_test"
 
 
 def _dev_config(tmp_path: Path) -> RuntimeConfig:

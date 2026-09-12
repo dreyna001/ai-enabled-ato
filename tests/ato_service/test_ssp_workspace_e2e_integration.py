@@ -29,7 +29,9 @@ from ato_service.ssp_workspace.service import (
     propose_agent_patch,
     render_approved_export,
     save_system_categorization,
+    save_information_types,
     save_section_edit,
+    save_system_definition,
 )
 from ato_service.systems import create_system
 from tests.integration_support.postgres import (
@@ -69,7 +71,9 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
     """Exercise intake, generation, agent editing, approval, and export."""
 
     async def exercise() -> None:
-        async with postgres_integration_harness(tmp_path) as harness:
+        async with postgres_integration_harness(
+            tmp_path, ordinary_session=True
+        ) as harness:
             bundle = load_profile_bundle(PROFILE_PATH)
             profile_row = await import_profile(
                 harness.session,
@@ -116,6 +120,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 b"grant records. The authorization boundary includes the web "
                 b"application, application server, and PostgreSQL database."
             )
+            await harness.session.commit()
             overview_artifact = await ingest_workspace_evidence(
                 harness.session,
                 workspace_id=workspace.workspace_id,
@@ -129,13 +134,14 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 config=harness.config,
                 audit_hmac_key=harness.hmac_key,
             )
+            overview_artifact_id = overview_artifact.evidence_artifact_id
             envelope = await load_workspace_envelope(
                 harness.session,
                 workspace_id=workspace.workspace_id,
             )
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
             evidence_link = EvidenceLink(
-                artifact_id=overview_artifact.evidence_artifact_id,
+                artifact_id=overview_artifact_id,
                 locator={"kind": "categorization_attestation"},
             )
             categorized, _ = await save_system_categorization(
@@ -162,6 +168,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 workspace_id=workspace.workspace_id,
             )
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            await harness.session.commit()
             screenshot = await ingest_workspace_evidence(
                 harness.session,
                 workspace_id=workspace.workspace_id,
@@ -175,6 +182,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 config=harness.config,
                 audit_hmac_key=harness.hmac_key,
             )
+            screenshot_to_remove_id = screenshot.evidence_artifact_id
             envelope = await load_workspace_envelope(
                 harness.session,
                 workspace_id=workspace.workspace_id,
@@ -183,7 +191,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
             await remove_workspace_evidence(
                 harness.session,
                 workspace_id=workspace.workspace_id,
-                evidence_artifact_id=screenshot.evidence_artifact_id,
+                evidence_artifact_id=screenshot_to_remove_id,
                 expected_revision_id=revision_id,
                 actor_id=ACTOR_ID,
                 now=harness.now,
@@ -198,6 +206,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
             ]
 
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            await harness.session.commit()
             screenshot = await ingest_workspace_evidence(
                 harness.session,
                 workspace_id=workspace.workspace_id,
@@ -211,6 +220,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 config=harness.config,
                 audit_hmac_key=harness.hmac_key,
             )
+            screenshot_id = screenshot.evidence_artifact_id
 
             async def generation_model(prompt) -> str:
                 request = json.loads(prompt.user)
@@ -260,21 +270,24 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 workspace_id=workspace.workspace_id,
             )
             revision_id = uuid.UUID(envelope["current_revision"]["revision_id"])
+            await harness.session.commit()
             generated = await generate_workspace_draft(
                 harness.session,
                 workspace_id=workspace.workspace_id,
                 expected_revision_id=revision_id,
                 model=generation_model,
+                config=harness.config,
                 actor_id=ACTOR_ID,
                 now=harness.now,
                 audit_hmac_key=harness.hmac_key,
             )
+            generated_revision_id = generated.revision_id
             with pytest.raises(EvidenceRemovalError):
                 await remove_workspace_evidence(
                     harness.session,
                     workspace_id=workspace.workspace_id,
-                    evidence_artifact_id=screenshot.evidence_artifact_id,
-                    expected_revision_id=generated.revision_id,
+                    evidence_artifact_id=screenshot_id,
+                    expected_revision_id=generated_revision_id,
                     actor_id=ACTOR_ID,
                     now=harness.now,
                     audit_hmac_key=harness.hmac_key,
@@ -282,7 +295,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
             edited = await save_section_edit(
                 harness.session,
                 workspace_id=workspace.workspace_id,
-                expected_revision_id=generated.revision_id,
+                expected_revision_id=generated_revision_id,
                 section_key="system.purpose",
                 content=(
                     "The system supports agency staff who process and review "
@@ -292,18 +305,21 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                 now=harness.now,
                 audit_hmac_key=harness.hmac_key,
             )
+            edited_version = edited.version
+            edited_revision_id = edited.revision_id
+            await harness.session.commit()
 
             async def patch_model(prompt) -> str:
                 request = json.loads(prompt.user)
                 fact_id = request["evidence_facts"][0]["fact_id"]
                 return json.dumps(
                     {
-                        "schema_version": "1.0.0",
-                        "patches": [
-                            {
-                                "target_type": "ssp_section",
-                                "target_id": "system.authorization_boundary",
-                                "expected_revision": edited.version,
+                            "schema_version": "1.0.0",
+                            "patches": [
+                                {
+                                    "target_type": "ssp_section",
+                                    "target_id": "system.authorization_boundary",
+                                    "expected_revision": edited_version,
                                 "changes": {
                                     "content": (
                                         "The authorization boundary includes the "
@@ -323,18 +339,111 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
             proposed = await propose_agent_patch(
                 harness.session,
                 workspace_id=workspace.workspace_id,
-                expected_revision_id=edited.revision_id,
+                expected_revision_id=edited_revision_id,
                 instruction="Clarify the authorization boundary.",
                 model=patch_model,
+                config=harness.config,
                 actor_id=ACTOR_ID,
                 now=harness.now,
                 audit_hmac_key=harness.hmac_key,
             )
+            proposed_patch_id = proposed.patch_id
             applied = await apply_proposed_patch(
                 harness.session,
                 workspace_id=workspace.workspace_id,
-                patch_id=proposed.patch_id,
-                expected_revision_id=edited.revision_id,
+                patch_id=proposed_patch_id,
+                expected_revision_id=edited_revision_id,
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                audit_hmac_key=harness.hmac_key,
+            )
+            recategorized, _ = await save_system_categorization(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                expected_revision_id=applied.applied_revision_id,
+                confidentiality="low",
+                integrity="low",
+                availability="low",
+                confidentiality_rationale="The system processes low-impact records.",
+                integrity_rationale="Incorrect records have a limited adverse effect.",
+                availability_rationale="Short outages have a limited adverse effect.",
+                confidentiality_evidence=(evidence_link,),
+                integrity_evidence=(evidence_link,),
+                availability_evidence=(evidence_link,),
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                audit_hmac_key=harness.hmac_key,
+            )
+            system_defined = await save_system_definition(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                expected_revision_id=recategorized.revision_id,
+                boundary_narrative=(
+                    "The authorization boundary includes the web application, "
+                    "application server, and PostgreSQL database."
+                ),
+                diagram_links=(),
+                components=(
+                    {
+                        "component_id": "web-app",
+                        "name": "Web application",
+                        "purpose": "Processes federal grant records for agency staff.",
+                        "placement": "inside",
+                        "evidence": [
+                            {
+                                "artifact_id": str(overview_artifact_id),
+                                "locator": {"kind": "paragraph", "index": 1},
+                            }
+                        ],
+                    },
+                ),
+                interconnections=(
+                    {
+                        "interconnection_id": "agency-identity",
+                        "connected_organization": "Agency",
+                        "connected_system": "Agency identity service",
+                        "direction": "outbound",
+                        "data_types": ["Account data"],
+                        "interface_protocol": "HTTPS",
+                        "connection_owner": "Agency",
+                        "agreement_type": "internal service agreement",
+                        "agreement_id": "INT-001",
+                        "agreement_status": "active",
+                        "agreement_expiration": "",
+                        "boundary_protections": "Authenticated TLS connection.",
+                        "evidence": [
+                            {
+                                "artifact_id": str(overview_artifact_id),
+                                "locator": {"kind": "paragraph", "index": 1},
+                            }
+                        ],
+                    },
+                ),
+                actor_id=ACTOR_ID,
+                now=harness.now,
+                audit_hmac_key=harness.hmac_key,
+            )
+            information_types = await save_information_types(
+                harness.session,
+                workspace_id=workspace.workspace_id,
+                expected_revision_id=system_defined.revision_id,
+                mappings=(
+                    {
+                        "entry_id": "grant-records",
+                        "catalog_identifier": "C.3.5.1",
+                        "description": "Federal grant records processed by the system.",
+                        "adjusted_confidentiality": None,
+                        "adjusted_integrity": None,
+                        "adjusted_availability": None,
+                        "adjustment_rationale": "",
+                        "evidence": [
+                            {
+                                "artifact_id": str(overview_artifact_id),
+                                "locator": {"kind": "paragraph", "index": 1},
+                            }
+                        ],
+                    },
+                ),
                 actor_id=ACTOR_ID,
                 now=harness.now,
                 audit_hmac_key=harness.hmac_key,
@@ -342,7 +451,7 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
             approval = await approve_workspace_revision(
                 harness.session,
                 workspace_id=workspace.workspace_id,
-                revision_id=applied.applied_revision_id,
+                revision_id=information_types.revision_id,
                 actor_id=ACTOR_ID,
                 now=harness.now,
                 audit_hmac_key=harness.hmac_key,

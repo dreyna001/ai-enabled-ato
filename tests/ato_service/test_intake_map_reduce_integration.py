@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Sequence
-
-import pytest
+from typing import Any
 
 from ato_service.draft_builder import AggregatedIntakeDraft
 from ato_service.extraction.types import ExtractionOutcome, ExtractedSegment

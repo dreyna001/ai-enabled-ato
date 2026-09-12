@@ -1,7 +1,7 @@
 # Release Evidence Index
 
 **Status:** Release and gate evidence index (maintained on `main`)  
-**Alembic head:** `20260728_0016` — run `alembic heads` on your branch if this drifts
+**Alembic head:** `20260911_0017` — run `alembic heads` on your branch if this drifts
 
 This index links automated contract evidence, qualification assets, drill schemas, CI jobs, migration head, and release-package verification. It does **not** substitute for live PostgreSQL drills on customer hosts, Playwright runs against a managed stack, RHEL install/upgrade/rollback validation, or customer/authority evidence. Open hard stops remain in [`requirements/hard-stops.yaml`](requirements/hard-stops.yaml).
 
@@ -83,7 +83,7 @@ Re-run pytest at repository tip for current counts; this index does not record a
 | Playwright E2E asset contracts | [`tests/test_e2e_contract.py`](../tests/test_e2e_contract.py) | included in non-integration gate | PASS (code) |
 | Playwright mocked rendering/authz | [`portal/e2e/security/rendering-authz.spec.ts`](../portal/e2e/security/rendering-authz.spec.ts) | `portal-playwright-mocked` | PASS (code) |
 | Release packaging (focused) | [`tests/test_release_packaging.py`](../tests/test_release_packaging.py) | included in non-integration gate | PASS (code) |
-| Service unit/integration (optional) | [`tests/ato_service/test_workflow_e2e_integration.py`](../tests/ato_service/test_workflow_e2e_integration.py), [`test_workflow_recovery_integration.py`](../tests/ato_service/test_workflow_recovery_integration.py) | `integration-postgres` | PASS (CI) when `ATO_TEST_DATABASE_URL` set |
+| Service unit/integration (optional) | [`tests/ato_service/test_workflow_e2e_integration.py`](../tests/ato_service/test_workflow_e2e_integration.py), [`test_workflow_recovery_integration.py`](../tests/ato_service/test_workflow_recovery_integration.py), [`test_ssp_workspace_e2e_integration.py`](../tests/ato_service/test_ssp_workspace_e2e_integration.py) | `integration-postgres` | PASS (CI) when `ATO_TEST_DATABASE_URL` set |
 | PostgreSQL connectivity probe | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | optional local/CI | environment-not-run when URL absent |
 
 **Test snapshot (Phase 6 integration gate, 2026-07-14 — counts drift with new tests; re-run pytest for current numbers):**
@@ -119,7 +119,7 @@ Historical doc-reconciliation record (unchanged gate record [`P6_GATE_RECORD.md`
 | --- | --- | --- |
 | Drill catalog and dispatch | [`src/ato_operator/drill_catalog.py`](../src/ato_operator/drill_catalog.py), [`drill_handlers.py`](../src/ato_operator/drill_handlers.py) | Dry-run default; hard-stop claims never close from mocks |
 | Drill record persistence | [`src/ato_operator/drill_records.py`](../src/ato_operator/drill_records.py) | Append-only under operator-supplied root |
-| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260728_0016` |
+| Operator preflight/migrate | [`src/ato_operator/cli.py`](../src/ato_operator/cli.py), [`preflight.py`](../src/ato_operator/preflight.py) | `verify-migrations --dry-run` reports head `20260911_0017` |
 | Audit chain verify | [`src/ato_operator/audit_verify.py`](../src/ato_operator/audit_verify.py) | Requires live PostgreSQL for full chain walk |
 
 Live customer validation drills on RHEL hosts: **environment-not-run**.
@@ -134,9 +134,9 @@ Live customer validation drills on RHEL hosts: **environment-not-run**.
 
 | Check | Path | Expected head |
 | --- | --- | --- |
-| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260728_0016` |
-| Head assertion tests | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | `20260728_0016` |
-| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260728_0016` |
+| Alembic script head | [`alembic.ini`](../alembic.ini) + `migrations/versions/` | `20260911_0017` |
+| Head assertion tests | [`tests/ato_service/test_db.py`](../tests/ato_service/test_db.py) | `20260911_0017` |
+| Operator verify (dry-run) | `ato-operator verify-migrations --dry-run` | `20260911_0017` |
 
 ## Release package verification
 
@@ -187,14 +187,14 @@ Gate records distinguish **code-complete** automated evidence from **environment
 
 ```bash
 # Contract gate (network-free)
-python -m pip install -e ".[dev]"
+python -m pip install -c requirements.lock -e ".[dev]"
 python -m pytest tests/test_contracts.py -q
 python -m pytest -m "not integration" -q
 
 # Optional PostgreSQL workflow integration
-export ATO_TEST_DATABASE_URL='postgresql+asyncpg://ato:ato@localhost:5432/ato_test'
+export ATO_TEST_DATABASE_URL='postgresql+psycopg://ato:ato@localhost:5432/ato_test'
 python -m alembic upgrade head
-python -m pytest tests/ato_service/test_workflow_e2e_integration.py tests/ato_service/test_workflow_recovery_integration.py -m integration -q
+python -m pytest tests/ato_service/test_workflow_e2e_integration.py tests/ato_service/test_workflow_recovery_integration.py tests/ato_service/test_ssp_workspace_e2e_integration.py -m integration -q
 
 # Operator verification
 ato-operator verify-migrations --config deployment/config/runtime-config.dev_local.json --dry-run

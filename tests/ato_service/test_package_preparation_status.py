@@ -7,8 +7,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from ato_service.auth_context import AuthenticatedPrincipal
 from ato_service.authorization_decisions import (
     AttachAuthorizationDecisionInput,

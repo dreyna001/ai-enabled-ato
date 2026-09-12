@@ -139,11 +139,24 @@ Or rerun the full deploy script (idempotent for credentials unless regenerated).
 From the repository root inside WSL:
 
 ```bash
-sudo bash scripts/upgrade.sh
-sudo systemctl restart ato-api.service ato-analyzer-worker.service
+npm --prefix portal run build
+sudo bash scripts/upgrade.sh --smoke
 ```
 
 `upgrade.sh` detects WSL, skips nginx and production systemd units, restores WSL units (port **8001**, `/opt/ato-analyzer/runtime-config.json`), and runs migrations. There is no `--no-smoke` flag; smoke is opt-in with `--smoke`.
+
+The running API imports its separately installed package under
+`/opt/ato-analyzer/venv`, not the checkout. Editing or pulling the repository
+alone therefore does not update the API. Run the upgrade from the intended
+checkout after verification; it preserves existing runtime configuration and
+credential contents. The unified chatbot requires migration `20260911_0017`.
+Enter the sudo password only in the local terminal, never in chat.
+
+The development portal reads the checkout directly. If it is not running, start
+`bash scripts/start-portal.sh` in a separate terminal, then refresh
+`http://localhost:5174`. The packaged static portal is refreshed from the build
+above. Neither upgrade nor smoke checks qualify model-answer quality or clear
+production readiness gates.
 
 If portal auth and text-model settings were enabled, you can instead rerun `sudo bash scripts/wsl-portal-enable.sh` (or `--bedrock`) to refresh package bytes, migrations, WSL units, and storage bind in one step.
 

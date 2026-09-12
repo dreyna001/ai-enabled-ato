@@ -3,6 +3,7 @@ import {
   approveAgencyDocxRender,
   createAgencyDocxRender,
   downloadAgencyDocxRender,
+  getSspWorkspace,
   downloadSspExport,
   mapAgencyDocxRenders,
   mapControlResponse,
@@ -321,6 +322,63 @@ describe("mapWorkspaceEnvelope", () => {
     expect(
       workspace.systemDefinition.interconnections[0]?.connectedSystem,
     ).toBe("Identity broker");
+  });
+});
+
+describe("SSP response errors", () => {
+  it("preserves structured field errors from validation responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error_code: "request_schema_invalid",
+          detail: "One or more request fields failed validation.",
+          field_errors: [
+            {
+              path: "confidentiality_evidence.0.artifact_id",
+              code: "uuid_parsing",
+              message: "Input should be a valid UUID",
+            },
+          ],
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getSspWorkspace("10000000-0000-4000-8000-000000000001"),
+    ).rejects.toMatchObject({
+      status: 422,
+      errorCode: "request_schema_invalid",
+      fieldErrors: [
+        {
+          path: "confidentiality_evidence.0.artifact_id",
+          code: "uuid_parsing",
+          message: "Input should be a valid UUID",
+        },
+      ],
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("converts malformed successful responses into invalid response errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("not-json", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getSspWorkspace("10000000-0000-4000-8000-000000000001"),
+    ).rejects.toEqual(
+      new ApiError(
+        502,
+        "The SSP service returned an invalid response.",
+        "invalid_response",
+      ),
+    );
+
+    vi.unstubAllGlobals();
   });
 });
 

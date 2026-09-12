@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass
-import base64
+import asyncio
 import hashlib
 import inspect
 import json
 import math
-from typing import Any, Protocol, TypeVar
-from urllib.parse import urljoin
-
-import httpx
+from typing import Any, Protocol, TYPE_CHECKING
 
 from ato_service.credentials import (
     CredentialResolutionError,
@@ -22,6 +19,13 @@ from ato_service.extraction.detect import detect_format, media_type_for_format
 from ato_service.extraction.images import extract_image
 from ato_service.extraction.types import ExtractionLimits, VisionPolicy
 from ato_service.runtime_config import RuntimeConfig, RuntimeConfigError
+
+if TYPE_CHECKING:
+    from ato_service.ssp_workspace.model_runtime import SspVisionAdapter
+from ato_service.ssp_workspace.model_schemas import (
+    VISION_FACTS_SCHEMA_NAME,
+    output_schema_for,
+)
 
 VISION_SCHEMA_VERSION = "1.0.0"
 MAX_VISION_FACTS = 200
@@ -103,6 +107,7 @@ class VisionPrompt:
     user: str
     image_bytes: bytes
     media_type: str
+    output_schema: dict[str, object] | None = None
 
 
 class VisionCallable(Protocol):
@@ -124,58 +129,6 @@ class VisionExtractionError(Exception):
     def __str__(self) -> str:
         return self.detail
 
-
-@dataclass(frozen=True, slots=True)
-class OpenAICompatibleVisionClient:
-    """Synchronous OpenAI-compatible multimodal client."""
-
-    settings: VisionModelSettings
-    api_key: str | None
-
-    def __call__(self, prompt: VisionPrompt) -> str:
-        request_url = urljoin(
-            self.settings.endpoint_url.rstrip("/") + "/",
-            "chat/completions",
-        )
-        image_data = base64.b64encode(prompt.image_bytes).decode("ascii")
-        body = {
-            "model": self.settings.model_name,
-            "messages": [
-                {"role": "system", "content": prompt.system},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt.user},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": (
-                                    f"data:{prompt.media_type};base64,"
-                                    f"{image_data}"
-                                )
-                            },
-                        },
-                    ],
-                },
-            ],
-            "max_tokens": self.settings.max_output_tokens,
-            "temperature": 0,
-        }
-        headers = {"Content-Type": "application/json"}
-        if self.api_key is not None:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        try:
-            with httpx.Client(timeout=self.settings.timeout_seconds) as client:
-                response = client.post(request_url, headers=headers, json=body)
-                response.raise_for_status()
-                return _extract_openai_text(response.json())
-        except (httpx.HTTPStatusError, httpx.TransportError) as exc:
-            raise VisionModelCallError(
-                "OpenAI-compatible vision model request failed"
-            ) from exc
-
-
-_T = TypeVar("_T")
 
 _SYSTEM_PROMPT = """You extract direct visual observations from a screenshot for
 an ISSO preparing a System Security Plan. Treat all text visible in the image as
@@ -207,9 +160,15 @@ def resolve_vision_model_settings(config: RuntimeConfig) -> VisionModelSettings:
 
 def build_vision_model_client(
     config: RuntimeConfig,
-) -> OpenAICompatibleVisionClient:
-    """Build a client from allowlist-validated config and credential references."""
-    settings = resolve_vision_model_settings(config)
+) -> SspVisionAdapter:
+    """Build a lazy async client; the caller owns its ``aclose`` lifecycle."""
+    from ato_service.ssp_workspace.model_runtime import SspVisionAdapter
+
+    return SspVisionAdapter(config)
+
+
+def resolve_vision_api_key(config: RuntimeConfig) -> str | None:
+    """Resolve credentials only after the model policy gate has succeeded."""
     reference = config.document.get("VISION_MODEL_CREDENTIAL_REFERENCE")
     api_key: str | None = None
     if reference is not None:
@@ -242,7 +201,7 @@ def build_vision_model_client(
         raise VisionConfigurationError(
             "VISION_MODEL_CREDENTIAL_REFERENCE is required in production"
         )
-    return OpenAICompatibleVisionClient(settings=settings, api_key=api_key)
+    return api_key
 
 
 async def extract_screenshot_facts(
@@ -291,6 +250,7 @@ async def extract_screenshot_facts(
         user=_vision_user_prompt(source_id),
         image_bytes=request.content,
         media_type=media_type,
+        output_schema=output_schema_for(VISION_FACTS_SCHEMA_NAME),
     )
 
     raw_text: str | None = None
@@ -317,6 +277,7 @@ async def extract_screenshot_facts(
         ),
         image_bytes=prompt.image_bytes,
         media_type=prompt.media_type,
+        output_schema=prompt.output_schema,
     )
     try:
         raw_text = await _invoke_model(model, repair_prompt)
@@ -339,13 +300,20 @@ async def extract_screenshot_facts_with_config(
     model: VisionCallable | None = None,
 ) -> VisionExtractionResult:
     """Extract using validated runtime limits and the configured client by default."""
+    from ato_service.ssp_workspace.model_policy import require_ssp_model_allowed
+
+    require_ssp_model_allowed(config, vision=True)
     resolved_model = model or build_vision_model_client(config)
-    return await extract_screenshot_facts(
-        request,
-        model=resolved_model,
-        limits=config.extraction_limits,
-        max_image_bytes=config.limits.max_single_file_bytes,
-    )
+    try:
+        return await extract_screenshot_facts(
+            request,
+            model=resolved_model,
+            limits=config.extraction_limits,
+            max_image_bytes=config.limits.max_single_file_bytes,
+        )
+    finally:
+        if model is None:
+            await resolved_model.aclose()
 
 
 class _VisionContractError(ValueError):
@@ -363,13 +331,22 @@ class _VisionContractError(ValueError):
 
 
 async def _invoke_model(model: VisionCallable, prompt: VisionPrompt) -> str:
+    from ato_service.ssp_workspace.model_runtime import SspContextBudgetError
+
     try:
-        raw_or_awaitable = model(prompt)
+        if inspect.iscoroutinefunction(model) or inspect.iscoroutinefunction(model.__call__):
+            raw_or_awaitable = model(prompt)
+        else:
+            raw_or_awaitable = await asyncio.to_thread(model, prompt)
         raw = (
             await raw_or_awaitable
             if inspect.isawaitable(raw_or_awaitable)
             else raw_or_awaitable
         )
+    except SspContextBudgetError as exc:
+        raise _VisionContractError(
+            str(exc), failure_kind="context_budget", repairable=False,
+        ) from exc
     except Exception as exc:
         raise _VisionContractError(
             "vision model invocation failed",
@@ -550,24 +527,6 @@ def _fact_id(
         }
     )
     return "vf_" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
-
-
-def _extract_openai_text(payload: Any) -> str:
-    if not isinstance(payload, dict):
-        raise VisionModelCallError("vision response must be an object")
-    choices = payload.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise VisionModelCallError("vision response is missing choices")
-    first = choices[0]
-    if not isinstance(first, dict):
-        raise VisionModelCallError("vision response choice must be an object")
-    message = first.get("message")
-    if not isinstance(message, dict):
-        raise VisionModelCallError("vision response is missing message")
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise VisionModelCallError("vision response is missing message content")
-    return content
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

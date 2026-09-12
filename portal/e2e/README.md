@@ -27,7 +27,7 @@ Runtime contract: [`deployment/config/runtime-config.dev_local.e2e.json`](../../
    ```
 
 4. Optional overrides:
-   - `ATO_E2E_DATABASE_URL` — full `postgresql+asyncpg://…` DSN
+   - `ATO_E2E_DATABASE_URL` — full `postgresql+psycopg://…` DSN
    - `ATO_E2E_API_PORT` / `ATO_E2E_PORTAL_PORT` — loopback ports (defaults `8000` / `5173`)
 
 ## Commands

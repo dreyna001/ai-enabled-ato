@@ -27,7 +27,10 @@ import {
   uploadSspEvidence,
   type SspProfile,
 } from "@/api/sspWorkspace";
-import { SspWorkspacePage } from "@/pages/SspWorkspacePage";
+import {
+  SspWorkspacePage,
+  type WorkspaceView,
+} from "@/pages/SspWorkspacePage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SessionInfo } from "@/types";
@@ -35,6 +38,21 @@ import type { SspWorkspace } from "@/sspWorkspaceTypes";
 import { formatApiError } from "@/utils/formatApiError";
 
 export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
+  const searchParams = new URLSearchParams(window.location.search);
+  const requestedWorkspaceId = searchParams.get("workspace_id");
+  const requestedView = searchParams.get("view");
+  const requestedTargetId = searchParams.get("target_id") ?? undefined;
+  const initialView: WorkspaceView | undefined =
+    requestedView === "overview" ||
+    requestedView === "evidence" ||
+    requestedView === "system-definition" ||
+    requestedView === "information-types" ||
+    requestedView === "ssp" ||
+    requestedView === "controls" ||
+    requestedView === "questions" ||
+    requestedView === "review"
+      ? requestedView
+      : undefined;
   const [workspace, setWorkspace] = useState<SspWorkspace | null>(null);
   const [workspaces, setWorkspaces] = useState<SspWorkspace[]>([]);
   const [profiles, setProfiles] = useState<SspProfile[]>([]);
@@ -56,6 +74,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
       ]);
       setWorkspaces(workspaceRows);
       setWorkspace((current) =>
+        workspaceRows.find((item) => item.id === requestedWorkspaceId) ??
         workspaceRows.find((item) => item.id === current?.id) ??
         workspaceRows[0] ??
         null,
@@ -67,7 +86,7 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
       setError(formatApiError(caught));
       setState("error");
     }
-  }, []);
+  }, [requestedWorkspaceId]);
 
   useEffect(() => {
     void load();
@@ -195,6 +214,8 @@ export function SspWorkspaceRoute({ session }: { session: SessionInfo }) {
         }))}
         generationPending={generationPending}
         categorizationAnalyzePending={categorizationAnalyzePending}
+        initialView={initialView}
+        initialTargetId={requestedTargetId}
         actionsBusy={busy}
         actions={{
           onRetry: () => void load(),

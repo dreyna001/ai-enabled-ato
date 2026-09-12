@@ -368,7 +368,7 @@ From the repository root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -c requirements.lock -e ".[dev]"
 ```
 
 Have the approved secret-management process provision the database DSN out of

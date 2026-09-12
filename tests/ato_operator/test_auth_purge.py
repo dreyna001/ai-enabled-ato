@@ -17,7 +17,7 @@ def test_purge_expired_auth_artifacts_sync_returns_counts() -> None:
 
     with patch(
         "ato_operator.auth_purge.resolve_runtime_database_dsn",
-        return_value="postgresql+asyncpg://ato:secret@localhost/ato",
+        return_value="postgresql+psycopg://ato:secret@localhost/ato",
     ), patch(
         "ato_operator.auth_purge.resolve_runtime_audit_hmac_key",
         return_value=b"x" * 32,

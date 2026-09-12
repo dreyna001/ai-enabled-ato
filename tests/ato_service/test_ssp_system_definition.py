@@ -9,7 +9,6 @@ import pytest
 
 from ato_service.ssp_workspace.contracts import (
     FactContent,
-    FactState,
     Provenance,
     RevisionContent,
     SectionContent,
@@ -27,10 +26,8 @@ from ato_service.ssp_workspace.system_definition import (
     mark_system_definition_stale_if_needed,
     parse_authorization_boundary,
     parse_component_inventory,
-    parse_interconnection_register,
     validate_authorization_boundary,
     validate_component_inventory,
-    validate_interconnection_register,
 )
 
 

@@ -389,9 +389,13 @@ def _extract_openai_text(payload: Any) -> str:
     first = choices[0]
     if not isinstance(first, dict):
         raise TextModelCallError("OpenAI-compatible response choice must be an object")
+    if first.get("finish_reason") in {"length", "content_filter", "error"}:
+        raise TextModelCallError("OpenAI-compatible response was incomplete or refused")
     message = first.get("message")
     if not isinstance(message, dict):
         raise TextModelCallError("OpenAI-compatible response is missing message")
+    if message.get("refusal"):
+        raise TextModelCallError("OpenAI-compatible response was refused")
     content = message.get("content")
     if not isinstance(content, str) or not content.strip():
         raise TextModelCallError("OpenAI-compatible response is missing message content")
@@ -401,6 +405,8 @@ def _extract_openai_text(payload: Any) -> str:
 def _extract_bedrock_text(payload: Any) -> str:
     if not isinstance(payload, dict):
         raise TextModelCallError("Bedrock response must be an object")
+    if payload.get("stopReason") in {"max_tokens", "guardrail_intervened", "content_filtered"}:
+        raise TextModelCallError("Bedrock response was incomplete or refused")
     output = payload.get("output")
     if not isinstance(output, dict):
         raise TextModelCallError("Bedrock response is missing output")

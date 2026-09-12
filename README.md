@@ -18,6 +18,8 @@ an editable SSP, control implementation statements, and tracked questions.
 | [`docs/contracts/README.md`](docs/contracts/README.md) | P-1 machine-contract index and validation rules |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Threat model and required security controls |
 | [`docs/AI_ARCHITECTURE.md`](docs/AI_ARCHITECTURE.md) | One-page AI/LLM architecture: steps, flows, guardrails, capability flags |
+| [`docs/STACK_ALIGNMENT.md`](docs/STACK_ALIGNMENT.md) | Preferred-stack decisions, current SSP model boundary, verification and qualification limits |
+| [`docs/CHAT_MEMORY_POLICY.md`](docs/CHAT_MEMORY_POLICY.md) | Unified chatbot ownership, source-linked context, retention, and operator cleanup |
 | [`docs/AI_EVALUATION_GUIDE.md`](docs/AI_EVALUATION_GUIDE.md) | AI labels, qualification data, metrics, and hard stops |
 | [`docs/OPERATIONS_AND_RECOVERY.md`](docs/OPERATIONS_AND_RECOVERY.md) | Operations, durability, backup, restore, and recovery contract |
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Runtime JSON config, precedence, capability flags, and local verification |
@@ -50,7 +52,7 @@ an editable SSP, control implementation statements, and tracked questions.
 - **First profile:** Agency FISMA — NIST SP 800-53 Rev. 5, with Low, Moderate, and High baselines stored as an immutable local bundle
 - **Portal:** `/ssp` is the default and only product workflow
 - **API:** `/api/v1/ssp-*` plus health and OIDC session routes; legacy package and analysis routes are not mounted
-- **Alembic head:** `20260728_0016`
+- **Alembic head:** `20260911_0017`
 - **Portability:** identity, model, storage, database, scanner, and secrets remain deployment configuration; agency SSP profile content is supplied by versioned local bundles; agency DOCX templates are customer uploads at runtime
 - **Not claimed:** control assessment, SAP, SAR, POA&M management, authorization decision, continuous monitoring, FedRAMP profiles, agency template or field parity, qualified OSCAL SSP or OSCAL SSP conformance (draft OSCAL JSON is non-qualifying working material), privacy or C-SCRM plan completeness, or submission-ready agency-shaped DOCX
 - **Cutover safety:** legacy source and migrations remain retained but unreachable until an operator confirms that no live deployment depends on them
@@ -68,7 +70,7 @@ From the repository root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -c requirements.lock -e ".[dev]"
 ```
 
 Have the approved secret-management process provision `C:\secure\ato-dsn.txt`
@@ -162,7 +164,7 @@ Set `TEXT_MODEL_PROVIDER`, transport-specific model ID, and
 | Provider | Use when | Required JSON | Secrets |
 | --- | --- | --- | --- |
 | `openai_compatible` (default) | OpenAI or any local/on-prem OpenAI-compatible endpoint | `TEXT_MODEL_ENDPOINT_URL`, `TEXT_MODEL_NAME`, `TEXT_MODEL_PROFILE_ID` | API key, or `TEXT_MODEL_AUTH_MODE=none` for approved internal endpoints |
-| `aws_bedrock` | Enterprise AWS Bedrock | `AWS_REGION`, `TEXT_MODEL_NAME`, `TEXT_MODEL_PROFILE_ID` | Standard AWS credential chain. Install `pip install -e ".[bedrock]"` |
+| `aws_bedrock` | Enterprise AWS Bedrock | `AWS_REGION`, `TEXT_MODEL_NAME`, `TEXT_MODEL_PROFILE_ID` | Standard AWS credential chain. Install `pip install -c requirements.lock -e ".[bedrock]"` |
 
 Start from an example config:
 
@@ -172,7 +174,7 @@ Copy-Item deployment\config\runtime-config.dev_local.openai.example.json deploym
 $env:ATO_TEXT_MODEL_API_KEY_FILE = 'C:\secure\openai-api-key.txt'
 
 # Bedrock
-pip install -e ".[bedrock]"
+pip install -c requirements.lock -e ".[bedrock]"
 Copy-Item deployment\config\runtime-config.dev_local.bedrock.example.json deployment\config\runtime-config.dev_local.json
 $env:AWS_PROFILE = 'your-profile'
 
@@ -180,4 +182,15 @@ $env:AWS_PROFILE = 'your-profile'
 Copy-Item deployment\config\runtime-config.dev_local.local.example.json deployment\config\runtime-config.dev_local.json
 ```
 
-Point the service at the config, then call `ato_service.text_llm.build_text_model_client()`. Full steps and a Python example are in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#text-llm-openai-or-bedrock).
+Point the service at the config and use the `/ssp` workflow. Its model calls use
+the application-owned PydanticAI boundary, not the retained legacy text client.
+`PROCESS_CAPABILITIES.text_model_calls` and
+`TEXT_MODEL_ENDPOINT_POLICY_APPROVED` must both be explicitly true before text
+calls are allowed; vision also requires its own enabled capability. Example
+configs do not grant approval. Production SSP calls fail closed until an approved
+data-classification boundary exists. The selected model must support native
+structured output and fit the complete context budget; an OpenAI-compatible
+endpoint or a catalog entry alone is not qualification. See
+[`docs/STACK_ALIGNMENT.md`](docs/STACK_ALIGNMENT.md) for the current contract and
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#text-llm-openai-or-bedrock) for
+transport and credential configuration.

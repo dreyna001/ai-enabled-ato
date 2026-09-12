@@ -150,7 +150,7 @@ def test_worker_resolves_dependencies_and_disposes_engine(
     result = _run(
         run_synthetic_intake_worker(
             config,
-            dsn="postgresql+asyncpg://example.test/ato",
+            dsn="postgresql+psycopg://example.test/ato",
             audit_hmac_key=b"x" * 32,
             now_factory=lambda: NOW,
         )
@@ -158,7 +158,7 @@ def test_worker_resolves_dependencies_and_disposes_engine(
 
     assert result == expected
     mock_engine_factory.assert_called_once_with(
-        "postgresql+asyncpg://example.test/ato"
+        "postgresql+psycopg://example.test/ato"
     )
     mock_session_factory.assert_called_once_with(engine)
     mock_drain.assert_awaited_once()
@@ -178,7 +178,7 @@ def test_worker_rejects_production_before_creating_engine(
         _run(
             run_synthetic_intake_worker(
                 config,
-                dsn="postgresql+asyncpg://example.test/ato",
+                dsn="postgresql+psycopg://example.test/ato",
                 audit_hmac_key=b"x" * 32,
             )
         )
@@ -198,7 +198,7 @@ def test_worker_requires_audit_credential_before_creating_engine(
         _run(
             run_synthetic_intake_worker(
                 config,
-                dsn="postgresql+asyncpg://example.test/ato",
+                dsn="postgresql+psycopg://example.test/ato",
             )
         )
     mock_engine_factory.assert_not_called()

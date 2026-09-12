@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from ato_service.analysis_profile import expected_assessment_item_ids, load_runtime_profile
+from ato_service.authority_manifest import verify_authority_manifest
 from ato_service.fisma_control_inventory import load_fisma_control_inventory
 from ato_service.fisma_profile import compile_fisma_agency_security_profile
 from ato_service.analysis_runs import StartRunInput, start_run
@@ -25,6 +26,7 @@ from ato_service.db.models import (
     ExportRecord,
     MatrixRow,
     PackageRevision,
+    PackageRevisionDraft,
     PackageRevisionSearchIndex,
     PoamCandidate,
     SealedPackageContent,
@@ -45,6 +47,7 @@ from ato_service.package_revisions import (
     create_package_revision,
     finalize_package_revision,
 )
+from ato_service.package_revision_drafts import save_package_revision_draft
 from ato_service.package_search_index import search_revision_chunks
 from ato_service.review_revisions import (
     create_review_comment,
@@ -66,9 +69,10 @@ from tests.integration_support.factories import (
     REVIEWER,
     minimal_synthetic_manifest,
     profile_revision_input,
+    profile_fixture_bytes,
     system_create_kwargs,
 )
-from tests.integration_support.postgres import AUTHORITY_MANIFEST_ID, PostgresIntegrationHarness
+from tests.integration_support.postgres import PostgresIntegrationHarness
 
 FISMA_INVENTORY_PATH = (
     Path(__file__).resolve().parents[2]
@@ -81,6 +85,18 @@ FISMA_MANIFEST_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "contracts" / "authority-manifest.json"
 )
 FISMA_PROFILE_GENERATED_AT = datetime(2026, 7, 10, 22, 33, 12, tzinfo=timezone.utc)
+
+
+def actual_authority_manifest_id(project_root: Path) -> str:
+    """Return the identifier from the verified authority manifest used by runtime."""
+    manifest = verify_authority_manifest(
+        FISMA_MANIFEST_PATH,
+        project_root=project_root,
+    )
+    manifest_id = manifest.get("manifest_id")
+    if not isinstance(manifest_id, str) or not manifest_id:
+        raise AssertionError("verified authority manifest must declare manifest_id")
+    return manifest_id
 
 
 def ensure_fisma_runtime_profile(harness: PostgresIntegrationHarness) -> None:
@@ -136,6 +152,7 @@ async def run_profile_workflow(
 ) -> WorkflowArtifacts:
     """Execute the bounded synthetic workflow through exact ZIP/hash download."""
     _prepare_profile_runtime(harness, profile_id=profile_id)
+    authority_manifest_id = actual_authority_manifest_id(harness.project_root)
     session = harness.session
     revision_input = profile_revision_input(
         profile_id=profile_id,
@@ -158,7 +175,7 @@ async def run_profile_workflow(
         principal=OWNER,
         system_id=system_id,
         request=revision_input,
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         idempotency_key=f"revision-{profile_id}",
         hmac_key=harness.hmac_key,
         now=harness.now,
@@ -203,6 +220,11 @@ async def run_profile_workflow(
         hmac_key=harness.hmac_key,
         now=harness.now,
     ) is not None
+    await apply_profile_fixture_fields(
+        harness,
+        package_revision_id=package_revision_id,
+        profile_id=profile_id,
+    )
 
     revision = await session.get(PackageRevision, package_revision_id)
     assert revision is not None
@@ -240,7 +262,10 @@ async def run_profile_workflow(
         query="policy",
         limit=5,
     )
-    assert search_page.total_count >= 0
+    assert isinstance(search_page.items, tuple)
+    assert len(search_page.items) <= 5
+    assert search_page.next_cursor is None or isinstance(search_page.next_cursor, str)
+    assert all(hit.text.strip() for hit in search_page.items)
 
     started = await start_run(
         session,
@@ -252,7 +277,7 @@ async def run_profile_workflow(
             assessment_item_ids=(),
         ),
         config=harness.config,
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         project_root=harness.project_root,
         idempotency_key=f"run-{profile_id}",
         hmac_key=harness.hmac_key,
@@ -383,7 +408,7 @@ async def run_profile_workflow(
         principal=REVIEWER,
         review_revision_id=review_revision_id,
         project_root=harness.project_root,
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         idempotency_key=f"export-draft-{profile_id}",
         hmac_key=harness.hmac_key,
         now=harness.now,
@@ -410,7 +435,7 @@ async def run_profile_workflow(
             hmac_key=harness.hmac_key,
             now=harness.now,
             project_root=harness.project_root,
-            authority_manifest_id=AUTHORITY_MANIFEST_ID,
+            authority_manifest_id=authority_manifest_id,
         )
 
     await approve_export(
@@ -421,7 +446,7 @@ async def run_profile_workflow(
         hmac_key=harness.hmac_key,
         now=harness.now,
         project_root=harness.project_root,
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
     )
 
     download = await deliver_export_download(
@@ -430,7 +455,7 @@ async def run_profile_workflow(
         export_id=approval_id,
         storage_root=harness.storage_root,
         project_root=harness.project_root,
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         idempotency_key=f"download-{profile_id}",
         hmac_key=harness.hmac_key,
         now=harness.now,
@@ -444,7 +469,7 @@ async def run_profile_workflow(
         export_id=approval_id,
         storage_root=harness.storage_root,
         project_root=harness.project_root,
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         idempotency_key=f"download-{profile_id}",
         hmac_key=harness.hmac_key,
         now=harness.now,
@@ -468,6 +493,77 @@ async def run_profile_workflow(
         zip_sha256=zip_sha256,
         zip_bytes=download.zip_bytes,
     )
+
+
+async def apply_profile_fixture_fields(
+    harness: PostgresIntegrationHarness,
+    *,
+    package_revision_id: uuid.UUID,
+    profile_id: str,
+) -> None:
+    """Seed profile-specific editor fields through the current draft-save contract."""
+    if profile_id == "fisma_agency_security":
+        return
+
+    draft = await harness.session.scalar(
+        select(PackageRevisionDraft).where(
+            PackageRevisionDraft.package_revision_id == package_revision_id
+        )
+    )
+    revision = await harness.session.get(PackageRevision, package_revision_id)
+    if draft is None or revision is None:
+        raise AssertionError("profile workflow draft was not created")
+
+    fixture = json.loads(profile_fixture_bytes(profile_id).decode("utf-8"))
+    document = json.loads(json.dumps(draft.document))
+    document["assessor_inputs"] = fixture["assessor_inputs"]
+    document["privacy"] = fixture["privacy"]
+    section_name = {
+        "fedramp_20x_program": "fedramp_20x",
+        "fedramp_rev5_transition": "fedramp_rev5_transition",
+    }.get(profile_id)
+    if section_name is None:
+        raise AssertionError(f"unsupported profile fixture {profile_id!r}")
+    document[section_name] = fixture[section_name]
+
+    expected_revision_version = revision.revision_version + 1
+    saved = await save_package_revision_draft(
+        harness.session,
+        principal=OWNER,
+        package_revision_id=package_revision_id,
+        document=document,
+        if_match=format_package_revision_etag(revision.revision_version),
+        idempotency_key=f"prepare-profile-draft-{profile_id}",
+        hmac_key=harness.hmac_key,
+        now=harness.now,
+    )
+    assert saved.payload["revision_version"] == expected_revision_version
+
+
+async def resolve_review_dispositions(
+    harness: PostgresIntegrationHarness,
+    *,
+    review_revision_id: uuid.UUID,
+    matrix_rows: list[MatrixRow],
+    review_etag: str,
+) -> str:
+    """Resolve every current-profile matrix row before review submission."""
+    if not matrix_rows:
+        raise AssertionError("analysis run produced no matrix rows")
+    for index, matrix_row in enumerate(matrix_rows):
+        _, review_etag = await update_disposition(
+            harness.session,
+            principal=REVIEWER,
+            review_revision_id=review_revision_id,
+            matrix_row_id=matrix_row.matrix_row_id,
+            decision="weakness_confirmed" if index == 0 else "accepted",
+            edited_summary=None,
+            notes="weakness confirmed in integration test" if index == 0 else "accepted",
+            if_match=review_etag,
+            hmac_key=harness.hmac_key,
+            now=harness.now,
+        )
+    return review_etag
 
 
 async def assert_tenant_isolation(
@@ -498,6 +594,7 @@ async def seed_ready_revision(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Create a ready package revision for recovery-focused tests."""
     _prepare_profile_runtime(harness, profile_id=profile_id)
+    authority_manifest_id = actual_authority_manifest_id(harness.project_root)
     system_result = await create_system(
         harness.session,
         principal=OWNER,
@@ -516,7 +613,7 @@ async def seed_ready_revision(
             certification_class=certification_class,
             impact_level=impact_level,
         ),
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         idempotency_key=f"seed-revision-{id_suffix}",
         hmac_key=harness.hmac_key,
         now=harness.now,
@@ -559,6 +656,11 @@ async def seed_ready_revision(
         hmac_key=harness.hmac_key,
         now=harness.now,
     )
+    await apply_profile_fixture_fields(
+        harness,
+        package_revision_id=package_revision_id,
+        profile_id=profile_id,
+    )
     revision = await harness.session.get(PackageRevision, package_revision_id)
     assert revision is not None
     await confirm_package_revision(
@@ -585,6 +687,7 @@ async def seed_pre_confirm(
 ) -> uuid.UUID:
     """Create a synthetic revision stopped at awaiting_confirmation."""
     _prepare_profile_runtime(harness, profile_id=profile_id)
+    authority_manifest_id = actual_authority_manifest_id(harness.project_root)
     system_result = await create_system(
         harness.session,
         principal=OWNER,
@@ -603,7 +706,7 @@ async def seed_pre_confirm(
             certification_class=certification_class,
             impact_level=impact_level,
         ),
-        authority_manifest_id=AUTHORITY_MANIFEST_ID,
+        authority_manifest_id=authority_manifest_id,
         idempotency_key=f"pre-revision-{id_suffix}",
         hmac_key=harness.hmac_key,
         now=harness.now,

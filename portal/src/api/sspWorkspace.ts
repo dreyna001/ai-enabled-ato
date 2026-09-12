@@ -26,11 +26,12 @@ import type {
   SystemDefinitionDiagramLink,
   SystemDefinitionEvidenceRef,
   SystemDefinitionInterconnection,
+  SystemDefinitionProposal,
   SystemDefinitionStatus,
   SspWorkspace,
 } from "@/sspWorkspaceTypes";
 import { DEFAULT_CONTROL_RESPONSE_OPTIONS } from "@/sspWorkspaceTypes";
-import { ApiError } from "@/api/client";
+import { ApiError, type ProblemFieldError } from "@/api/client";
 import { normalizeCategorizationEvidenceLinks } from "@/utils/sspFieldErrors";
 
 const API_BASE = "/api/v1";
@@ -108,6 +109,28 @@ const AGENCY_DOCX_RENDER_STATUSES = new Set<AgencyDocxRenderStatus>([
 
 const AGENCY_DOCX_ISSUE_SEVERITIES = new Set(["blocker", "warning"] as const);
 
+function parseProblemFieldErrors(value: unknown): ProblemFieldError[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const fieldErrors = value.flatMap((item) => {
+    const candidate = record(item);
+    if (
+      typeof candidate.path !== "string" ||
+      typeof candidate.code !== "string" ||
+      typeof candidate.message !== "string"
+    ) {
+      return [];
+    }
+    return [
+      {
+        path: candidate.path,
+        code: candidate.code,
+        message: candidate.message,
+      },
+    ];
+  });
+  return fieldErrors.length > 0 ? fieldErrors : undefined;
+}
+
 function mutationHeaders(
   session: SessionInfo,
   contentType = true,
@@ -131,6 +154,7 @@ async function apiRequest<T>(
   if (!response.ok) {
     let detail = response.statusText || "Request failed";
     let errorCode: string | undefined;
+    let fieldErrors: ProblemFieldError[] | undefined;
     try {
       const body = (await response.json()) as Record<string, unknown>;
       errorCode =
@@ -141,12 +165,23 @@ async function apiRequest<T>(
         (typeof body.detail === "string" && body.detail) ||
         (typeof body.error === "string" && body.error) ||
         detail;
+      fieldErrors = parseProblemFieldErrors(body.field_errors);
     } catch {
       // Preserve the HTTP status text when the server did not return JSON.
     }
-    throw new ApiError(response.status, detail, "http", errorCode);
+    throw new ApiError(response.status, detail, "http", errorCode, fieldErrors);
   }
-  const parsed = schema.safeParse(await response.json());
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new ApiError(
+      502,
+      "The SSP service returned an invalid response.",
+      "invalid_response",
+    );
+  }
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
     throw new ApiError(502, "The SSP service returned an invalid response.", "invalid_response");
   }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping
@@ -44,6 +45,11 @@ from ato_service.ssp_workspace.export import (
     normalize_export_snapshot,
 )
 from ato_service.ssp_workspace.generation import ModelPrompt
+from ato_service.ssp_workspace.model_schemas import (
+    AGENCY_DOCX_MAPPING_SCHEMA_NAME,
+    AGENCY_DOCX_REVIEW_SCHEMA_NAME,
+    output_schema_for,
+)
 
 MAX_OUTLINE_TEXT_PER_ITEM = 8_000
 MAX_MODEL_RESPONSE_CHARACTERS = 2_000_000
@@ -62,6 +68,19 @@ __all__ = [
 
 class AgencyDocxError(ValueError):
     """Deterministic agency DOCX processing failure."""
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        failure_kind: str | None = None,
+        repairable: bool | None = None,
+    ) -> None:
+        super().__init__(detail)
+        if failure_kind is not None:
+            self.failure_kind = failure_kind
+        if repairable is not None:
+            self.repairable = repairable
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +173,7 @@ async def generate_mapping_plan(
     prompt = ModelPrompt(
         system=_MAPPING_SYSTEM_PROMPT,
         user=_mapping_user_prompt(outline=outline, snapshot=normalized),
+        output_schema=output_schema_for(AGENCY_DOCX_MAPPING_SCHEMA_NAME),
     )
     return await _invoke_with_one_repair(model=model, prompt=prompt, parser=parse)
 
@@ -227,6 +247,7 @@ async def review_render(
             rendered_outline=rendered_outline,
             facts=facts,
         ),
+        output_schema=output_schema_for(AGENCY_DOCX_REVIEW_SCHEMA_NAME),
     )
     try:
         raw_text = await _invoke_model_once(model, prompt)
@@ -323,6 +344,7 @@ async def _invoke_with_one_repair(
             invalid_response=raw_text or "",
             validation_error=first_error.detail,
         ),
+        output_schema=prompt.output_schema,
     )
     try:
         raw_text = await _invoke_model_once(model, repair_prompt)
@@ -341,13 +363,28 @@ async def _invoke_with_one_repair(
 
 
 async def _invoke_model_once(model: ModelCallable, prompt: ModelPrompt) -> str:
+    from ato_service.ssp_workspace.model_runtime import SspContextBudgetError
+
     try:
-        raw_or_awaitable = model(prompt)
+        is_async_callable = inspect.iscoroutinefunction(model) or inspect.iscoroutinefunction(
+            getattr(model, "__call__", None)
+        )
+        raw_or_awaitable = (
+            model(prompt)
+            if is_async_callable
+            else await asyncio.to_thread(model, prompt)
+        )
         raw = (
             await raw_or_awaitable
             if inspect.isawaitable(raw_or_awaitable)
             else raw_or_awaitable
         )
+    except SspContextBudgetError as exc:
+        raise AgencyDocxError(
+            str(exc),
+            failure_kind="context_budget",
+            repairable=False,
+        ) from exc
     except Exception as exc:
         raise AgencyDocxError("agency DOCX model invocation failed") from exc
     if not isinstance(raw, str):

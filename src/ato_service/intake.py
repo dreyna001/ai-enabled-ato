@@ -31,7 +31,6 @@ from ato_service.db.models import (
     System,
 )
 from ato_service.draft_builder import (
-    DOCUMENT_SCHEMA_VERSION,
     AggregatedIntakeDraft,
     DraftBuildError,
     build_initial_draft,

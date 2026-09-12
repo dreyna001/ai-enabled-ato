@@ -162,7 +162,7 @@ warn_bedrock_credentials_missing() {
 
 install_bedrock_dependencies() {
   info "Ensuring Bedrock dependencies are installed in service venv"
-  "$INSTALL_DIR/venv/bin/pip" install "$INSTALL_DIR[bedrock]" \
+  "$INSTALL_DIR/venv/bin/pip" install -c "$INSTALL_DIR/requirements.lock" "$INSTALL_DIR[bedrock]" \
     || err "Failed to install Bedrock dependencies in $INSTALL_DIR/venv"
 }
 

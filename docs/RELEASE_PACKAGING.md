@@ -7,7 +7,7 @@ Phase 6 adds reproducible customer release packaging and offline verification wi
 
 ## Principles
 
-1. **Explicit allowlist** — only approved source trees, deployment assets, operator scripts, contracts, authority bytes, bundled draft analysis profiles, qualification metadata, portal dist, and optional airgap wheels enter the archive.
+1. **Explicit allowlist** — only approved source trees, deployment assets, operator scripts, contracts, authority bytes, bundled draft analysis profiles, qualification metadata, the pinned `requirements.lock`, portal dist, and optional airgap wheels enter the archive.
 2. **Deterministic output** — sorted members, fixed `SOURCE_DATE_EPOCH`, and stable gzip metadata for repeatable builds.
 3. **Offline evidence** — `release/checksums.sha256`, `release/sbom.json`, and `release/package-manifest.json` ship inside every archive.
 4. **Fail closed** — missing portal dist, unpinned airgap wheels, missing or drifted bundled analysis profiles, checksum tampering, traversal/symlink members, symlinked source-tree paths during packaging, declared tar member size limits (256 MiB per member, 2 GiB aggregate uncompressed), and secret-like paths fail verification.
@@ -22,13 +22,16 @@ cd portal && npm ci && npm run build && cd ..
 # 2. Verify bundled draft analysis profiles match deterministic generation
 python scripts/compile_analysis_profiles.py --check
 
-# 3. Prestaged offline Python wheels with pinned digests (connected host only)
+# 3. Verify the checked-in Python dependency lock
+test -f requirements.lock
+
+# 4. Prestaged offline Python wheels with pinned digests (connected host only)
 bash scripts/prestage_airgap_deps.sh
 
-# 4. Build versioned release archive
+# 5. Build versioned release archive
 bash scripts/build_release.sh
 
-# 5. Verify before transfer
+# 6. Verify before transfer
 bash scripts/verify_release.sh dist/releases/ato-analyzer-*.tar.gz
 ```
 
@@ -67,6 +70,7 @@ bash scripts/verify_release.sh /media/ato-analyzer-0.1.0.tar.gz
 Install from extracted or copied release tree:
 
 ```bash
+# install.sh constrains package dependencies with the bundled requirements.lock
 sudo bash scripts/install.sh
 sudo install -o root -g ato -m 640 /path/to/runtime-config.json /etc/ato-analyzer/runtime-config.json
 sudo install -o root -g root -m 600 /path/to/dsn.txt /etc/ato-analyzer/credentials/database-dsn

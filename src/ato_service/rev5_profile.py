@@ -15,7 +15,6 @@ from ato_service.analysis_profile_compiler import (
 from ato_service.authority_catalog import (
     AuthorityCatalogError,
     load_json_authority_archive_member,
-    load_json_authority_source,
 )
 from ato_service.authority_manifest import (
     AuthorityManifestVerificationError,

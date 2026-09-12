@@ -148,7 +148,7 @@ def test_resolve_runtime_database_dsn_reads_root_owned_file_reference(
     tmp_path: Path,
 ) -> None:
     dsn_file = tmp_path / "ato.dsn"
-    postgres_url = "postgresql+asyncpg://ato:secret@localhost:5432/ato"
+    postgres_url = "postgresql+psycopg://ato:secret@localhost:5432/ato"
     dsn_file.write_text(postgres_url, encoding="utf-8")
     document = {
         "schema_version": "1.0.0",
@@ -188,7 +188,7 @@ def test_resolve_runtime_database_dsn_enables_metadata_enforcement_for_onprem(
     tmp_path: Path,
 ) -> None:
     dsn_file = tmp_path / "ato.dsn"
-    postgres_url = "postgresql+asyncpg://ato:supersecret@localhost:5432/ato"
+    postgres_url = "postgresql+psycopg://ato:supersecret@localhost:5432/ato"
     dsn_file.write_text(postgres_url, encoding="utf-8")
     document = _minimal_onprem_document()
     reference = {
@@ -217,7 +217,7 @@ def test_resolve_runtime_database_dsn_omits_metadata_enforcement_for_dev_local(
     tmp_path: Path,
 ) -> None:
     dsn_file = tmp_path / "ato.dsn"
-    postgres_url = "postgresql+asyncpg://ato:secret@localhost:5432/ato"
+    postgres_url = "postgresql+psycopg://ato:secret@localhost:5432/ato"
     dsn_file.write_text(postgres_url, encoding="utf-8")
     reference = {
         "source": "root_owned_file",
@@ -255,7 +255,7 @@ def test_resolve_runtime_database_dsn_skips_metadata_for_systemd_onprem(
     cred_dir.mkdir()
     credential_file = cred_dir / "database-dsn"
     credential_file.write_text(
-        "postgresql+asyncpg://ato:secret@localhost:5432/ato",
+        "postgresql+psycopg://ato:secret@localhost:5432/ato",
         encoding="utf-8",
     )
     monkeypatch.setenv(CREDENTIALS_DIRECTORY_ENV_VAR, str(cred_dir.resolve()))
@@ -273,7 +273,7 @@ def test_resolve_runtime_database_dsn_skips_metadata_for_systemd_onprem(
 
     assert (
         resolve_runtime_database_dsn(config)
-        == "postgresql+asyncpg://ato:secret@localhost:5432/ato"
+        == "postgresql+psycopg://ato:secret@localhost:5432/ato"
     )
 
 

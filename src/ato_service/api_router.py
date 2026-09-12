@@ -48,7 +48,6 @@ from ato_service.package_revision_drafts import (
 from ato_service.intake_readiness import get_intake_report
 from ato_service.package_revisions import (
     PackageRevisionMutationResult,
-    PatchPackageRevisionMetadataInput,
     confirm_package_revision,
     create_package_revision,
     finalize_package_revision,

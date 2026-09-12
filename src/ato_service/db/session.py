@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import (
 
 
 _POSTGRESQL_SCHEMES = frozenset({"postgresql", "postgres"})
+_POSTGRESQL_DRIVERS = frozenset({"", "asyncpg", "psycopg", "psycopg_async"})
+_CANONICAL_POSTGRESQL_SCHEME = "postgresql+psycopg"
 
 
 class DatabaseConfigurationError(ValueError):
@@ -24,22 +26,27 @@ class DatabaseConfigurationError(ValueError):
 
 
 def require_postgresql_url(url: str) -> str:
-    """Validate that ``url`` targets PostgreSQL and return it unchanged."""
+    """Validate and canonicalize a PostgreSQL URL for SQLAlchemy psycopg3 async."""
     if not url or not url.strip():
         raise DatabaseConfigurationError("database URL must be a non-empty string")
 
     parsed = urlsplit(url.strip())
-    driver = parsed.scheme.lower()
-    if "+" in driver:
-        base_scheme, _async_driver = driver.split("+", 1)
+    scheme = parsed.scheme.lower()
+    if "+" in scheme:
+        base_scheme, driver = scheme.split("+", 1)
     else:
-        base_scheme = driver
+        base_scheme, driver = scheme, ""
 
     if base_scheme not in _POSTGRESQL_SCHEMES:
         raise DatabaseConfigurationError(
             f"unsupported database scheme {parsed.scheme!r}; PostgreSQL is required"
         )
-    return url.strip()
+    if driver not in _POSTGRESQL_DRIVERS:
+        raise DatabaseConfigurationError(
+            f"unsupported PostgreSQL driver {driver!r}; psycopg is required"
+        )
+
+    return parsed._replace(scheme=_CANONICAL_POSTGRESQL_SCHEME).geturl()
 
 
 def create_async_engine_from_url(

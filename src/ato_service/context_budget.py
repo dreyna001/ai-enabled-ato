@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import floor
-from typing import Any
 
 CHARS_PER_TOKEN = 4
 DEFAULT_CONTEXT_UTILIZATION_TARGET = 0.70

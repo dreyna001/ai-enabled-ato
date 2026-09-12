@@ -9,10 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from docx import Document
-
-from ato_service.ssp_workspace.export import EXPORT_SCHEMA_VERSION, build_workspace_docx_export
-
 MARKER = "NIST SP 800-18 Revision 2 (Table 1)"
 
 
@@ -83,6 +79,13 @@ def _minimal_snapshot() -> dict[str, object]:
 
 
 def main() -> int:
+    from docx import Document
+
+    from ato_service.ssp_workspace.export import (
+        EXPORT_SCHEMA_VERSION,
+        build_workspace_docx_export,
+    )
+
     doc_bytes = build_workspace_docx_export(_minimal_snapshot(), include_open_questions=False)
     text = "\n".join(paragraph.text for paragraph in Document(BytesIO(doc_bytes)).paragraphs)
     has_marker = MARKER in text

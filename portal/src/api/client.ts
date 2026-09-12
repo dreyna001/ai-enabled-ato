@@ -95,7 +95,7 @@ export function isCancelledRequest(
   return error instanceof ApiError && error.kind === "cancelled";
 }
 
-type ResponseParser<T> = (value: unknown) => T | null;
+export type ResponseParser<T> = (value: unknown) => T | null;
 
 function parseProblemFieldErrors(value: unknown): ProblemFieldError[] | undefined {
   if (!Array.isArray(value)) {
@@ -157,7 +157,7 @@ async function readProblemBody(response: Response): Promise<{
   return { detail, errorCode, fieldErrors };
 }
 
-async function readValidatedJson<T>(
+export async function readValidatedJson<T>(
   response: Response,
   parse: ResponseParser<T>,
 ): Promise<T> {
@@ -199,7 +199,7 @@ async function readValidatedJsonWithEtag<T>(
   };
 }
 
-type ApiFetchOptions = RequestInit & {
+export type ApiFetchOptions = RequestInit & {
   timeoutMs?: number;
 };
 
@@ -242,7 +242,7 @@ function mergeAbortSignals(
   };
 }
 
-async function apiFetch(
+export async function apiFetch(
   input: RequestInfo | URL,
   { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init }: ApiFetchOptions = {},
 ): Promise<Response> {
@@ -268,7 +268,7 @@ async function apiFetch(
   }
 }
 
-function mutationHeaders(
+export function mutationHeaders(
   session: SessionInfo,
   extra: Record<string, string> = {},
 ): Record<string, string> {

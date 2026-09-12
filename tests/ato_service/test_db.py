@@ -117,6 +117,9 @@ EXPECTED_TABLES = INITIAL_MIGRATION_TABLES | frozenset(
         "ssp_agent_patches",
         "ssp_approval_snapshots",
         "ssp_agency_docx_renders",
+        "ssp_chat_conversations",
+        "ssp_chat_turns",
+        "ssp_chat_messages",
     }
 )
 NON_UUID_PRIMARY_KEY_TABLES = frozenset({"oidc_login_states", "package_revision_search_chunks"})
@@ -137,8 +140,9 @@ FK_SAFE_UPGRADE_TABLE_ORDER = (
     "audit_events",
 )
 
-POSTGRES_URL = "postgresql+asyncpg://ato:secret@localhost:5432/ato_test"
-SECRET_POSTGRES_URL = "postgresql+asyncpg://ato:supersecret@localhost:5432/ato"
+POSTGRES_URL = "postgresql+psycopg://ato:secret@localhost:5432/ato_test"
+SECRET_POSTGRES_URL = "postgresql+psycopg://ato:supersecret@localhost:5432/ato"
+LEGACY_POSTGRES_URL = "postgresql+asyncpg://ato:secret@localhost:5432/ato_test"
 
 
 def _posix_file_stat_result(
@@ -566,30 +570,42 @@ def test_require_postgresql_url_rejects_non_postgresql_schemes(url: str) -> None
         require_postgresql_url(url)
 
 
+def test_require_postgresql_url_rejects_non_psycopg_postgresql_driver() -> None:
+    with pytest.raises(DatabaseConfigurationError, match="psycopg is required"):
+        require_postgresql_url("postgresql+psycopg2://ato:secret@localhost/ato")
+
+
 @pytest.mark.parametrize(
-    "url",
+    ("url", "expected"),
     [
-        POSTGRES_URL,
-        "postgresql://ato:secret@localhost:5432/ato_test",
-        "postgres+asyncpg://ato:secret@localhost:5432/ato_test",
+        (POSTGRES_URL, POSTGRES_URL),
+        ("postgresql://ato:secret@localhost:5432/ato_test", POSTGRES_URL),
+        ("postgres+asyncpg://ato:secret@localhost:5432/ato_test", POSTGRES_URL),
+        (LEGACY_POSTGRES_URL, POSTGRES_URL),
     ],
 )
-def test_require_postgresql_url_accepts_postgresql_schemes(url: str) -> None:
-    assert require_postgresql_url(url) == url.strip()
+def test_require_postgresql_url_canonicalizes_postgresql_schemes(
+    url: str,
+    expected: str,
+) -> None:
+    assert require_postgresql_url(url) == expected
 
 
-def test_create_session_factory_does_not_connect() -> None:
-    engine = create_async_engine_from_url(POSTGRES_URL)
+@pytest.mark.parametrize("url", [POSTGRES_URL, LEGACY_POSTGRES_URL])
+def test_create_session_factory_does_not_connect(url: str) -> None:
+    engine = create_async_engine_from_url(url)
     session_factory = create_session_factory(engine)
     assert session_factory.kw.get("expire_on_commit") is False
     assert engine.pool._pre_ping is True
+    assert engine.dialect.driver == "psycopg"
+    assert engine.dialect.is_async is True
     assert engine.url.render_as_string(hide_password=False) == POSTGRES_URL
 
 
 def test_alembic_head_is_ssp_workspace_migration() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "20260728_0016"
+    assert script.get_current_head() == "20260911_0017"
 
 
 def test_initial_migration_references_only_original_domain_tables() -> None:
@@ -720,12 +736,15 @@ def test_require_database_dsn_reads_absolute_utf8_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dsn_file = tmp_path / "ato.dsn"
-    dsn_file.write_text("  postgresql+asyncpg://ato:secret@localhost:5432/ato\n", encoding="utf-8")
+    dsn_file.write_text(
+        "  postgresql+asyncpg://ato:secret@localhost:5432/ato\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv(DATABASE_DSN_FILE_ENV_VAR, str(dsn_file.resolve()))
 
     assert (
         _require_database_dsn(monkeypatch, str(dsn_file.resolve()))
-        == "postgresql+asyncpg://ato:secret@localhost:5432/ato"
+        == "postgresql+psycopg://ato:secret@localhost:5432/ato"
     )
 
 
@@ -998,7 +1017,7 @@ def test_database_dsn_errors_never_include_secret_contents(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    secret_dsn = "postgresql+asyncpg://ato:supersecret@localhost:5432/ato"
+    secret_dsn = "postgresql+psycopg://ato:supersecret@localhost:5432/ato"
     dsn_file = tmp_path / "ato.dsn"
     dsn_file.write_text(secret_dsn, encoding="utf-8")
     monkeypatch.setenv(DATABASE_DSN_FILE_ENV_VAR, str((tmp_path / "missing.dsn").resolve()))

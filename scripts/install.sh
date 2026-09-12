@@ -29,7 +29,7 @@ START_SERVICE=false
 RUN_SMOKE=false
 RUN_MIGRATE=false
 DRY_RUN=false
-EXPECTED_MIGRATION_HEAD="20260728_0016"
+EXPECTED_MIGRATION_HEAD="20260911_0017"
 
 PRODUCTION_SYSTEMD_UNITS=(
     "ato-api.service"
@@ -289,13 +289,29 @@ copy_repo_payload() {
 
 set_install_tree_permissions() {
     local runtime_data_path="$INSTALL_DIR/data"
+    local runtime_config_path="$INSTALL_DIR/runtime-config.json"
+
+    # WSL keeps operator credentials/configuration inside the install tree.
+    # Validate before any mutation, exclude it from the broad root-owned pass,
+    # then apply its service-readable permissions explicitly.
+    reject_non_regular_existing_file "$runtime_config_path"
     chown root:root "$INSTALL_DIR" || err "Failed to set ownership on $INSTALL_DIR"
-    find "$INSTALL_DIR" -path "$runtime_data_path" -prune -o -exec chown root:root {} + \
+    find "$INSTALL_DIR" \
+        -path "$runtime_data_path" -prune -o \
+        -path "$runtime_config_path" -prune -o \
+        -exec chown root:root {} + \
         || err "Failed to set ownership under $INSTALL_DIR"
-    find "$INSTALL_DIR" -path "$runtime_data_path" -prune -o -type d -exec chmod 755 {} + \
+    find "$INSTALL_DIR" \
+        -path "$runtime_data_path" -prune -o \
+        -path "$runtime_config_path" -prune -o \
+        -type d -exec chmod 755 {} + \
         || err "Failed to set directory permissions under $INSTALL_DIR"
-    find "$INSTALL_DIR" -path "$runtime_data_path" -prune -o -type f -exec chmod 644 {} + \
+    find "$INSTALL_DIR" \
+        -path "$runtime_data_path" -prune -o \
+        -path "$runtime_config_path" -prune -o \
+        -type f -exec chmod 644 {} + \
         || err "Failed to set file permissions under $INSTALL_DIR"
+    enforce_existing_regular_file "$runtime_config_path" "root:$SVC_USER" 640
     if [[ -d "$INSTALL_DIR/venv/bin" ]]; then
         chmod 755 "$INSTALL_DIR/venv/bin/"* || err "Failed to set venv bin permissions"
     fi
@@ -304,6 +320,7 @@ set_install_tree_permissions() {
 install_application_tree() {
     local venv_dir="$INSTALL_DIR/venv"
     local pyproject="$REPO_DIR/pyproject.toml"
+    local requirements_lock="$REPO_DIR/requirements.lock"
     local src_dir="$REPO_DIR/src"
     local readme="$REPO_DIR/README.md"
     local alembic_ini="$REPO_DIR/alembic.ini"
@@ -311,6 +328,7 @@ install_application_tree() {
     local operations_doc="$REPO_DIR/docs/OPERATIONS_AND_RECOVERY.md"
 
     [[ -f "$pyproject" ]] || err "Missing pyproject.toml: $pyproject"
+    [[ -f "$requirements_lock" ]] || err "Missing requirements.lock: $requirements_lock"
     [[ -f "$readme" ]] || err "Missing README required by pyproject.toml: $readme"
     [[ -d "$src_dir/ato_service" ]] || err "Missing package directory: $src_dir/ato_service"
     [[ -d "$REPO_DIR/docs/contracts" ]] || err "Missing contracts directory: $REPO_DIR/docs/contracts"
@@ -320,6 +338,7 @@ install_application_tree() {
     [[ -f "$operations_doc" ]] || err "Missing operations doc: $operations_doc"
 
     copy_repo_payload "$pyproject" "$INSTALL_DIR/pyproject.toml"
+    copy_repo_payload "$requirements_lock" "$INSTALL_DIR/requirements.lock"
     copy_repo_payload "$readme" "$INSTALL_DIR/README.md"
     copy_repo_payload "$alembic_ini" "$INSTALL_DIR/alembic.ini"
     rm -rf "$INSTALL_DIR/migrations"
@@ -336,7 +355,7 @@ install_application_tree() {
     if [[ ! -x "$venv_dir/bin/python" ]]; then
         "$PYTHON_BIN" -m venv "$venv_dir" || err "Failed to create virtual environment"
     fi
-    "$venv_dir/bin/pip" install "$INSTALL_DIR" \
+    "$venv_dir/bin/pip" install -c "$INSTALL_DIR/requirements.lock" "$INSTALL_DIR" \
         || err "Failed to install ato_service package dependencies"
     "$venv_dir/bin/pip" install --force-reinstall --no-deps "$INSTALL_DIR" \
         || err "Failed to reinstall ato_service package from install tree"
@@ -456,6 +475,8 @@ run_install_dry_run() {
 
     [[ -f "$REPO_DIR/deployment/config/runtime-config.onprem.example.json" ]] \
         || err "Missing onprem runtime config example"
+    [[ -f "$REPO_DIR/requirements.lock" ]] \
+        || err "Missing Python dependency lockfile: $REPO_DIR/requirements.lock"
     [[ -f "$REPO_DIR/scripts/smoke_service_chain.sh" ]] \
         || err "Missing smoke script"
     [[ -f "$REPO_DIR/scripts/drain_workers.sh" ]] \

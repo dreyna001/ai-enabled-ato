@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 import uuid
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -11,6 +12,7 @@ from ato_service.auth_context import AuthenticatedPrincipal
 from ato_service.main import create_app
 from ato_service.ssp_workspace.api import (
     CreateWorkspaceRequest,
+    _error_response,
     build_ssp_workspace_router,
     get_db_session,
     get_read_principal,
@@ -32,6 +34,9 @@ from ato_service.ssp_workspace.service import (
     _effective_metric_facts,
     _impact_profile_diff,
 )
+from ato_service.ssp_workspace.generation import SspGenerationError
+from ato_service.ssp_workspace.agency_docx import AgencyDocxError
+from ato_service.ssp_workspace.diagram_analysis import DiagramAnalysisError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +86,51 @@ def test_workspace_creation_does_not_require_impact_level() -> None:
     )
 
     assert request.model_dump().keys() == {"system_id", "profile_version_id"}
+
+
+def test_context_budget_error_exposes_only_stable_safe_detail() -> None:
+    response = _error_response(
+        SspGenerationError(
+            failure_kind="context_budget",
+            detail="model supplied secret prompt details",
+            attempts=1,
+            repair_attempted=False,
+            last_raw_response=None,
+        )
+    )
+
+    assert response.status_code == 422
+    assert response.body == (
+        b'{"error":"model_context_budget_exceeded",'
+        b'"error_code":"model_context_budget_exceeded",'
+        b'"detail":"SSP request exceeds the configured aggregate context budget; '
+        b'reduce the selected evidence or use an approved larger-context profile"}'
+    )
+
+
+@pytest.mark.parametrize(
+    "error",
+    (
+        AgencyDocxError(
+            "model supplied secret prompt details",
+            failure_kind="context_budget",
+            repairable=False,
+        ),
+        DiagramAnalysisError(
+            "model supplied secret prompt details",
+            failure_kind="context_budget",
+            repairable=False,
+        ),
+    ),
+)
+def test_context_budget_mapping_is_safe_for_vision_workflows(error: Exception) -> None:
+    response = _error_response(error)
+    body = response.body.decode("utf-8")
+
+    assert response.status_code == 422
+    assert "model_context_budget_exceeded" in body
+    assert "SSP request exceeds the configured aggregate context budget" in body
+    assert "secret prompt" not in body
 
 
 def test_categorization_change_diffs_control_baselines() -> None:

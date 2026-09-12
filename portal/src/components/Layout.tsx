@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { PortalCapabilityBanner } from "./PortalCapabilityBanner";
 import { PortalNavSidebar } from "./PortalNavSidebar";
+import { GlobalChatbotProvider } from "./ssp-workspace/GlobalChatbotProvider";
 import type { PortalReadinessState, SessionInfo } from "@/types";
 
 type AppLayoutProps = {
@@ -15,11 +16,13 @@ export function AppLayout({ session, readiness, onSignOut }: AppLayoutProps) {
       <PortalNavSidebar session={session} onSignOut={onSignOut} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <PortalCapabilityBanner readiness={readiness} />
-        <main className="portal-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-6 py-8">
-            <Outlet />
-          </div>
-        </main>
+        <GlobalChatbotProvider key={session.actor_id} session={session}>
+          <main className="portal-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-6xl px-6 py-8">
+              <Outlet />
+            </div>
+          </main>
+        </GlobalChatbotProvider>
       </div>
     </div>
   );

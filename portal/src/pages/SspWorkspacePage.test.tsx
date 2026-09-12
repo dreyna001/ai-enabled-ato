@@ -165,7 +165,6 @@ function workspaceFixture(): SspWorkspace {
         },
       ],
       confirmed: true,
-      agentSuggestion: null,
     },
   };
 }
@@ -206,6 +205,36 @@ describe("SspWorkspacePage", () => {
       screen.getByRole("button", { name: /Resolve 1 open questions/i }),
     );
     expect(screen.getByText("How often are privileged roles reviewed?")).toBeInTheDocument();
+  });
+
+  it("opens the exact control or SSP section named by a source target", () => {
+    const workspace = workspaceFixture();
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspace}
+        initialView="controls"
+        initialTargetId="AC-2"
+      />,
+    );
+    expect(screen.getByLabelText("Implementation statement")).toHaveAttribute(
+      "id",
+      "statement-AC-2",
+    );
+
+    cleanup();
+    render(
+      <SspWorkspacePage
+        state="success"
+        workspace={workspace}
+        initialView="ssp"
+        initialTargetId="section-1"
+      />,
+    );
+    expect(screen.getByLabelText("System Description content")).toHaveAttribute(
+      "id",
+      "ssp-section-section-1",
+    );
   });
 
   it("resolves a simple question with direct text instead of an agent call", () => {

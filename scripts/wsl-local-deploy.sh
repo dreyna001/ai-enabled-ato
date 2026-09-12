@@ -284,7 +284,7 @@ echo "[2/8] Provisioning credentials..."
 role_credential="$(generate_token)"
 audit_key="$(generate_token)"
 write_credential_file "$DATABASE_DSN_CREDENTIAL_PATH" "root:root" 600 \
-    "postgresql+asyncpg://${DB_USER}:${role_credential}@127.0.0.1:5432/${DB_NAME}"
+    "postgresql+psycopg://${DB_USER}:${role_credential}@127.0.0.1:5432/${DB_NAME}"
 write_credential_file "$AUDIT_HMAC_CREDENTIAL_PATH" "root:root" 600 "$audit_key"
 if [[ ! -s "$OIDC_CLIENT_CREDENTIAL_PATH" ]]; then
     oidc_credential_value="$(generate_token)"

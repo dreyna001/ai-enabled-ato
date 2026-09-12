@@ -165,7 +165,11 @@ def _review_result(*, blockers: bool) -> ReviewResult:
 def _config(*, runtime_profile: str = "dev_local") -> SimpleNamespace:
     return SimpleNamespace(
         limits=SimpleNamespace(max_single_file_bytes=5_000_000),
-        document={},
+        document={
+            "PROCESS_CAPABILITIES": {"text_model_calls": True},
+            "TEXT_MODEL_ENDPOINT_PROFILE": "mock",
+            "TEXT_MODEL_ENDPOINT_POLICY_APPROVED": True,
+        },
         runtime_profile=runtime_profile,
     )
 
@@ -228,7 +232,12 @@ def test_create_returns_exact_cache_hit(tmp_path, monkeypatch: pytest.MonkeyPatc
     session = _session()
     workspace_id = uuid.uuid4()
     revision_id = uuid.uuid4()
-    cached = SimpleNamespace(render_id=uuid.uuid4())
+    cached = SimpleNamespace(
+        render_id=uuid.uuid4(),
+        status="awaiting_approval",
+        output_storage_key="blobs/cached-output",
+        output_sha256="a" * 64,
+    )
     workspace = SimpleNamespace(profile_version_id=uuid.uuid4())
 
     async def execute(statement):  # noqa: ANN001
@@ -236,6 +245,7 @@ def test_create_returns_exact_cache_hit(tmp_path, monkeypatch: pytest.MonkeyPatc
         if "ssp_workspaces" in sql:
             result = MagicMock()
             result.scalar_one.return_value = workspace
+            result.scalar_one_or_none.return_value = workspace
             return result
         result = MagicMock()
         result.scalar_one_or_none.return_value = cached
@@ -263,7 +273,8 @@ def test_create_returns_exact_cache_hit(tmp_path, monkeypatch: pytest.MonkeyPatc
         )
     )
 
-    assert render is cached
+    assert render.render_id == cached.render_id
+    assert render.status == cached.status
     session.add.assert_not_called()
 
 
@@ -283,6 +294,7 @@ def test_create_persists_output_hash_and_review_failed_status(
         if "ssp_workspaces" in sql:
             result = MagicMock()
             result.scalar_one.return_value = workspace
+            result.scalar_one_or_none.return_value = workspace
             return result
         result = MagicMock()
         result.scalar_one_or_none.return_value = None
@@ -524,6 +536,7 @@ def test_create_translates_mapping_and_review_failures(
         result = MagicMock()
         if "ssp_workspaces" in str(statement):
             result.scalar_one.return_value = workspace
+            result.scalar_one_or_none.return_value = workspace
         else:
             result.scalar_one_or_none.return_value = None
         return result
@@ -560,6 +573,63 @@ def test_create_translates_mapping_and_review_failures(
         )
 
 
+def test_create_preserves_safe_context_budget_failure_kind(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _session()
+    workspace = SimpleNamespace(profile_version_id=uuid.uuid4())
+
+    async def execute(statement):  # noqa: ANN001
+        result = MagicMock()
+        if "ssp_workspaces" in str(statement):
+            result.scalar_one.return_value = workspace
+            result.scalar_one_or_none.return_value = workspace
+        else:
+            result.scalar_one_or_none.return_value = None
+        return result
+
+    session.execute = AsyncMock(side_effect=execute)
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.service._approved_export_snapshot",
+        AsyncMock(return_value=_snapshot()),
+    )
+    monkeypatch.setattr(
+        "ato_service.extraction.limits.resolve_extraction_limits_from_config",
+        lambda config: LIMITS,  # noqa: ARG001
+    )
+    monkeypatch.setattr(
+        "ato_service.ssp_workspace.agency_docx.generate_mapping_plan",
+        AsyncMock(
+            side_effect=AgencyDocxError(
+                "provider supplied secret context details",
+                failure_kind="context_budget",
+                repairable=False,
+            )
+        ),
+    )
+
+    with pytest.raises(AgencyDocxUploadError) as caught:
+        _run(
+            create_agency_docx_render(
+                session,
+                workspace_id=uuid.uuid4(),
+                source_revision_id=uuid.uuid4(),
+                template_filename="agency-template.docx",
+                template_bytes=_template_bytes(),
+                actor_id="isso@example.gov",
+                now=datetime.now(UTC),
+                blob_store=BlobStore(tmp_path),
+                config=_config(),
+                model=AsyncMock(),
+                audit_hmac_key=b"test-audit-key------",
+            )
+        )
+
+    assert caught.value.failure_kind == "context_budget"
+    assert "provider supplied secret" not in str(caught.value)
+    assert "configured aggregate context budget" in str(caught.value)
+
+
 def test_create_review_failed_when_mapping_exception_is_blocker(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -575,6 +645,7 @@ def test_create_review_failed_when_mapping_exception_is_blocker(
         if "ssp_workspaces" in sql:
             result = MagicMock()
             result.scalar_one.return_value = workspace
+            result.scalar_one_or_none.return_value = workspace
             return result
         result = MagicMock()
         result.scalar_one_or_none.return_value = None
@@ -794,11 +865,12 @@ def test_reuses_approved_mapping_across_newer_revision(
         if "ssp_workspaces" in sql:
             result = MagicMock()
             result.scalar_one.return_value = workspace
+            result.scalar_one_or_none.return_value = workspace
             return result
         if "ssp_agency_docx_renders" in sql:
             agency_queries["count"] += 1
             result = MagicMock()
-            if agency_queries["count"] == 1:
+            if agency_queries["count"] in {1, 3}:
                 result.scalar_one_or_none.return_value = None
             else:
                 result.scalar_one_or_none.return_value = reusable

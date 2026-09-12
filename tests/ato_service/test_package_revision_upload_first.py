@@ -15,7 +15,7 @@ import pytest
 from ato_service.audit import MIN_AUDIT_HMAC_KEY_BYTES
 from ato_service.auth_context import AuthenticatedPrincipal, AuthorizationDeniedError
 from ato_service.concurrency import EtagMismatchError, IfMatchRequiredError
-from ato_service.db.models import PackageRevision, System
+from ato_service.db.models import PackageRevision
 from ato_service.idempotency import IdempotencyReplay
 from ato_service.intake import IntakeRevisionSnapshot
 from ato_service.normalization_service import revision_metadata_ready_for_model
@@ -24,7 +24,6 @@ from ato_service.package_revisions import (
     PackageRevisionValidationError,
     ParentRevisionNotReadyError,
     PatchMetadataStateError,
-    PatchPackageRevisionMetadataInput,
     ProfileBoundaryError,
     create_package_revision,
     create_request_digest,

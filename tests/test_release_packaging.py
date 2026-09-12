@@ -107,6 +107,7 @@ def _write_minimal_release_tree(
 
     for relative_file in (
         "pyproject.toml",
+        "requirements.lock",
         "README.md",
         "alembic.ini",
         "portal/package-lock.json",
@@ -211,6 +212,15 @@ def test_collect_allowlisted_files_requires_airgap_manifest(tmp_path: Path) -> N
         collect_allowlisted_files(tree, require_portal_dist=True, require_airgap=True)
 
 
+def test_collect_allowlisted_files_requires_requirements_lock(tmp_path: Path) -> None:
+    tree = tmp_path / "repo"
+    _write_minimal_release_tree(tree, include_portal_dist=False)
+    (tree / "requirements.lock").unlink()
+
+    with pytest.raises(FileNotFoundError, match="requirements.lock"):
+        collect_allowlisted_files(tree, require_portal_dist=False, require_airgap=False)
+
+
 def test_build_release_archive_is_deterministic(
     release_tree: Path, tmp_path: Path
 ) -> None:
@@ -258,6 +268,45 @@ def test_verify_release_archive_passes_for_fresh_build(
     assert verify_report.passed is True
     assert verify_report.signature_status == "unavailable"
     assert verify_report.file_count > 0
+    with tarfile.open(report.archive_path, mode="r:gz") as tar:
+        assert "requirements.lock" in {member.name for member in tar.getmembers()}
+
+
+def test_verify_release_archive_requires_requirements_lock(
+    release_tree: Path, tmp_path: Path
+) -> None:
+    report = build_release_archive(
+        ReleaseBuildOptions(
+            project_root=release_tree,
+            output_dir=tmp_path / "releases",
+            require_portal_dist=True,
+            require_airgap=False,
+            source_date_epoch=1_700_000_000,
+        )
+    )
+    archive_without_lock = tmp_path / "without-lock.tar.gz"
+    with tarfile.open(report.archive_path, mode="r:gz") as source_tar:
+        members = {
+            member.name: source_tar.extractfile(member).read()
+            for member in source_tar.getmembers()
+            if member.isfile() and member.name != "requirements.lock"
+        }
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for name, data in sorted(members.items()):
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    archive_without_lock.write_bytes(buffer.getvalue())
+
+    verify_report = verify_release_archive(
+        archive_without_lock, project_root=release_tree
+    )
+    assert verify_report.passed is False
+    assert any(
+        "missing required dependency lockfile: requirements.lock" in error
+        for error in verify_report.errors
+    )
 
 
 def test_verify_release_archive_detects_checksum_tampering(

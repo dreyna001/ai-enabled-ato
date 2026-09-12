@@ -92,10 +92,14 @@ def test_portal_package_declares_e2e_scripts() -> None:
 def test_contracts_workflow_declares_offline_and_portal_gates() -> None:
     text = CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
     assert "ruff check ." in text
+    assert 'python -m pip install -c requirements.lock -e ".[dev,bedrock]"' in text
     assert 'python -m pytest tests/test_contracts.py' in text
     assert 'python -m pytest -m "not integration"' in text
     assert "python -m alembic upgrade head" in text
+    assert "postgresql+psycopg://ato:ato@localhost:5432/ato_test" in text
+    assert "postgresql+asyncpg://" not in text
     assert "test_workflow_e2e_integration.py" in text
+    assert "test_ssp_workspace_e2e_integration.py" in text
     assert "portal:" in text
     assert "portal-playwright-mocked:" in text
     assert "npm test" in text

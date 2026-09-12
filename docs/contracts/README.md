@@ -57,7 +57,7 @@ Install the development dependencies and run the deterministic, network-free
 contract suite:
 
 ```text
-python -m pip install -e ".[dev]"
+python -m pip install -c requirements.lock -e ".[dev]"
 python -m pytest tests/test_contracts.py
 python -m pytest tests/test_deployment_contract.py
 python scripts/compile_analysis_profiles.py --check

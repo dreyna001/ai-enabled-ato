@@ -48,6 +48,7 @@ def _write_minimal_allowlist_tree(root: Path) -> None:
 
     for relative_file in (
         "pyproject.toml",
+        "requirements.lock",
         "README.md",
         "alembic.ini",
         "portal/package-lock.json",
@@ -107,6 +108,12 @@ def test_profile_compiler_scripts_are_allowlisted() -> None:
         assert relative_path in ALLOWLIST_FILES
         assert is_allowlisted_relative_path(relative_path) is True
         assert is_excluded_relative_path(relative_path) is False
+
+
+def test_requirements_lock_is_allowlisted_and_required() -> None:
+    assert "requirements.lock" in ALLOWLIST_FILES
+    assert is_allowlisted_relative_path("requirements.lock") is True
+    assert is_excluded_relative_path("requirements.lock") is False
 
 
 def test_committed_bundled_profiles_exist() -> None:

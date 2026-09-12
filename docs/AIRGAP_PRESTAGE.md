@@ -31,12 +31,17 @@ This creates:
 
 ```text
 dist/airgap/
-  wheels/          # pip-downloaded dependencies with pinned SHA-256 digests
+  wheels/          # runtime and PEP 517 build dependencies with pinned SHA-256 digests
   manifest.json    # wheel, portal lock, and optional portal dist digests
 dist/releases/
   ato-analyzer-<version>.tar.gz
   release/checksums.sha256, release/sbom.json inside the archive
 ```
+
+The prestage script downloads the checked-in runtime lock plus the exact PEP 517
+build requirements declared in `pyproject.toml`, and records every wheel
+filename, size, and SHA-256 digest in `manifest.json`. It does not download or
+store credential material.
 
 Transfer the verified release archive (or extracted tree) to the airgap host through customer-approved media. See [`RELEASE_PACKAGING.md`](RELEASE_PACKAGING.md) for full connected and airgap target steps.
 
@@ -52,7 +57,8 @@ bash scripts/prestage_airgap_deps.sh --verify-only
 # Create venv and install from local wheels only
 sudo python3.12 -m venv /opt/ato-analyzer/venv
 sudo /opt/ato-analyzer/venv/bin/pip install \
-  --no-index --find-links dist/airgap/wheels /opt/ato-analyzer
+  --no-index --find-links dist/airgap/wheels \
+  -c /opt/ato-analyzer/requirements.lock /opt/ato-analyzer
 
 # Or use the installer after copying the full release tree
 sudo bash scripts/install.sh

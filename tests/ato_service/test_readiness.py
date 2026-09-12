@@ -23,7 +23,7 @@ from ato_service.runtime_config import RuntimeConfig, load_runtime_config_from_d
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_PATH = ROOT / "docs" / "contracts" / "authority-manifest.json"
-POSTGRES_URL = "postgresql+asyncpg://ato:secret@localhost:5432/ato_test"
+POSTGRES_URL = "postgresql+psycopg://ato:secret@localhost:5432/ato_test"
 
 
 def _run(coro):

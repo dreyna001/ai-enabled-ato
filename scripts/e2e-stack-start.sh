@@ -26,7 +26,7 @@ Options:
   -h, --help           Show this help
 
 Environment:
-  ATO_E2E_DATABASE_URL   Full asyncpg DSN (overrides auto-provisioned local DB)
+  ATO_E2E_DATABASE_URL   Full PostgreSQL DSN (overrides auto-provisioned local DB)
   ATO_E2E_STACK_DIR      Stack state directory (default: <repo>/.e2e-stack)
   ATO_E2E_API_PORT       API loopback port (default: 8000)
   ATO_E2E_PORTAL_PORT    Portal dev port (default: 5173)

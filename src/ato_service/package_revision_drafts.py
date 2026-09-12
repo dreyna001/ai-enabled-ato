@@ -923,7 +923,7 @@ async def get_draft_export_readiness(
     )
 
     if PackageRevisionStatus(package_revision.status) is not PackageRevisionStatus.AWAITING_CONFIRMATION:
-        raise PackageRevisionValidationError(
+        raise _validation_error(
             "draft export readiness is only available while awaiting confirmation",
             error_code="illegal_state_transition",
         )

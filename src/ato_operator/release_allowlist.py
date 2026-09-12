@@ -33,9 +33,10 @@ BUNDLED_PROFILE_FILENAMES: tuple[str, ...] = (
     "fedramp-rev5-transition-high.json",
 )
 
-# Individual files included when present.
+# Individual files included when present; requirements.lock is required below.
 ALLOWLIST_FILES: tuple[str, ...] = (
     "pyproject.toml",
+    "requirements.lock",
     "README.md",
     "alembic.ini",
     "portal/package-lock.json",
@@ -46,6 +47,7 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     "docs/CUSTOMER_ONBOARDING.md",
     "docs/AIRGAP_PRESTAGE.md",
     "docs/RELEASE_PACKAGING.md",
+    "docs/STACK_ALIGNMENT.md",
     "docs/AI_EVALUATION_GUIDE.md",
     "docs/THREAT_MODEL.md",
     "docs/NEW_INTERNAL_SSP_WORKFLOW_PLAN.md",
@@ -238,6 +240,13 @@ def collect_allowlisted_files(
         if not is_allowlisted_relative_path(relative):
             raise ValueError(f"path is not allowlisted for release packaging: {relative}")
         selected.append(path)
+
+    requirements_lock = root / "requirements.lock"
+    _reject_symlink(requirements_lock)
+    if not requirements_lock.is_file():
+        raise FileNotFoundError(
+            "missing required release file: requirements.lock"
+        )
 
     for relative_file in ALLOWLIST_FILES:
         maybe_add(root / relative_file)

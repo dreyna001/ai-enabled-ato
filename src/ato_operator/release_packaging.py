@@ -25,7 +25,6 @@ from jsonschema.exceptions import SchemaError, ValidationError
 
 from ato_operator.release_allowlist import (
     ALLOWLIST_ID,
-    BUNDLED_PROFILE_DIRECTORY,
     EXECUTABLE_SCRIPT_PREFIXES,
     FORBIDDEN_PATH_SEGMENTS,
     FORBIDDEN_SECRET_PATTERNS,
@@ -43,6 +42,7 @@ _RELEASE_PREFIX = "release/"
 _MANIFEST_RELATIVE = f"{_RELEASE_PREFIX}package-manifest.json"
 _CHECKSUMS_RELATIVE = f"{_RELEASE_PREFIX}checksums.sha256"
 _SBOM_RELATIVE = f"{_RELEASE_PREFIX}sbom.json"
+_REQUIREMENTS_LOCK_RELATIVE = "requirements.lock"
 _ONPREM_CONFIG_RELATIVE = "deployment/config/runtime-config.onprem.example.json"
 _RUNTIME_CONFIG_SCHEMA_RELATIVE = "docs/contracts/runtime-config.schema.json"
 _ANALYSIS_PROFILE_SCHEMA_RELATIVE = "docs/contracts/analysis-profile.schema.json"
@@ -723,8 +723,18 @@ def _validate_onprem_config_example(members: dict[str, bytes]) -> list[str]:
         schema = json.loads(members[_RUNTIME_CONFIG_SCHEMA_RELATIVE].decode("utf-8"))
         Draft202012Validator.check_schema(schema)
         document = json.loads(members[_ONPREM_CONFIG_RELATIVE].decode("utf-8"))
+        from ato_service.runtime_config import (
+            RuntimeConfigError,
+            load_runtime_config_from_dict,
+        )
+
+        try:
+            resolved_document = load_runtime_config_from_dict(document).document
+        except RuntimeConfigError as exc:
+            return [f"runtime config example semantic validation failed: {exc}"]
+
         validator = Draft202012Validator(schema, format_checker=_FORMAT_CHECKER)
-        error = next(validator.iter_errors(document), None)
+        error = next(validator.iter_errors(resolved_document), None)
         if error is not None:
             return [_format_schema_error(error)]
     except (json.JSONDecodeError, SchemaError, UnicodeDecodeError) as exc:
@@ -803,6 +813,10 @@ def verify_release_archive(
         errors.append(f"missing checksum manifest: {_CHECKSUMS_RELATIVE}")
     if _SBOM_RELATIVE not in members:
         errors.append(f"missing SBOM: {_SBOM_RELATIVE}")
+    if _REQUIREMENTS_LOCK_RELATIVE not in members:
+        errors.append(
+            f"missing required dependency lockfile: {_REQUIREMENTS_LOCK_RELATIVE}"
+        )
 
     manifest, manifest_errors = _validate_package_manifest_schema(members)
     errors.extend(manifest_errors)

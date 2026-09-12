@@ -59,7 +59,7 @@ Do not add a bundle/preset until at least three implemented optional capabilitie
 | Key | Role | Notes |
 | --- | --- | --- |
 | `VISION_MODEL_ENABLED` | **Optional capability** | Only current optional model capability. Defaults to off when absent in `dev_local`. Required boolean in `onprem_production`. When `true`, schema requires vision endpoint URL, name, context tokens, and profile; production further restricts profile to qualified external/internal OpenAI-compatible values and may require `VISION_MODEL_CREDENTIAL_REFERENCE` and allowlist entries. |
-| `TEXT_MODEL_PROVIDER` | **Text LLM backend** | `openai_compatible` (default) uses `TEXT_MODEL_ENDPOINT_URL` plus `TEXT_MODEL_CREDENTIAL_REFERENCE` or dev-only `ATO_TEXT_MODEL_API_KEY` / `ATO_TEXT_MODEL_API_KEY_FILE`. `aws_bedrock` uses `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, and the standard AWS credential chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or instance role). Install Bedrock support with `pip install -e ".[bedrock]"`. |
+| `TEXT_MODEL_PROVIDER` | **Text LLM backend** | `openai_compatible` (default) uses `TEXT_MODEL_ENDPOINT_URL` plus `TEXT_MODEL_CREDENTIAL_REFERENCE` or dev-only `ATO_TEXT_MODEL_API_KEY` / `ATO_TEXT_MODEL_API_KEY_FILE`. `aws_bedrock` uses `AWS_REGION`, `TEXT_MODEL_NAME` as the Bedrock model ID, and the standard AWS credential chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or instance role). Install Bedrock support with `pip install -c requirements.lock -e ".[bedrock]"`. |
 | `TEXT_MODEL_PROFILE_ID` | **Model capability limits** | Selects one provider-neutral entry from `src/ato_service/text_model_catalog.json`. The catalog is the single source for application context, maximum output, and timeout. Direct limit overrides are rejected when a profile is selected. |
 | `TEXT_MODEL_AUTH_MODE` | **OpenAI-compatible authentication** | `api_key` by default. `none` is accepted only for an `internal_openai_compatible` endpoint, such as an approved loopback local model. Bedrock always uses the AWS credential chain. |
 | `TEXT_MODEL_TEMPERATURE` | **Text LLM sampling** | Optional number `0..2`, default `0`. Applied to OpenAI-compatible and Bedrock text clients. |
@@ -244,7 +244,7 @@ Transport remains deployment-specific. The same catalog profile may be selected 
 Install Bedrock support when needed:
 
 ```powershell
-pip install -e ".[bedrock]"
+pip install -c requirements.lock -e ".[bedrock]"
 ```
 
 ### Example configs
@@ -274,7 +274,7 @@ The service loads `config.local.env` at startup for dev-only secrets. Never comm
 ### Bedrock setup
 
 ```powershell
-pip install -e ".[bedrock]"
+pip install -c requirements.lock -e ".[bedrock]"
 $env:AWS_PROFILE = 'your-profile'   # or use your normal AWS credentials
 ```
 
@@ -298,7 +298,7 @@ From the repository root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -c requirements.lock -e ".[dev]"
 
 $env:ATO_DATABASE_DSN_FILE = 'C:\secure\ato-dsn.txt'
 $env:ATO_RUNTIME_CONFIG_PATH = 'deployment\config\runtime-config.dev_local.json'
@@ -324,15 +324,15 @@ $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/ato_service -m
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/test_deployment_contract.py -q
 ```
 
-Optional live DB connectivity: set `ATO_TEST_DATABASE_URL` to run `tests/ato_service/test_db.py` integration cases and the Phase 5 workflow suites in `tests/ato_service/test_workflow_e2e_integration.py` and `tests/ato_service/test_workflow_recovery_integration.py`.
+Optional live DB connectivity: set `ATO_TEST_DATABASE_URL` to run `tests/ato_service/test_db.py` integration cases and the Phase 5 workflow suites in `tests/ato_service/test_workflow_e2e_integration.py`, `tests/ato_service/test_workflow_recovery_integration.py`, and `tests/ato_service/test_ssp_workspace_e2e_integration.py`.
 
 Phase 5 PostgreSQL workflow integration (requires migrated schema):
 
 ```powershell
 $env:ATO_DATABASE_DSN_FILE = 'C:\path\to\database.dsn'
 ato-operator migrate-db --config deployment\config\runtime-config.dev_local.json
-$env:ATO_TEST_DATABASE_URL = 'postgresql+asyncpg://ato:secret@localhost:5432/ato_test'
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/ato_service/test_workflow_e2e_integration.py tests/ato_service/test_workflow_recovery_integration.py -m integration -q
+$env:ATO_TEST_DATABASE_URL = 'postgresql+psycopg://ato:secret@localhost:5432/ato_test'
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.12 -m pytest tests/ato_service/test_workflow_e2e_integration.py tests/ato_service/test_workflow_recovery_integration.py tests/ato_service/test_ssp_workspace_e2e_integration.py -m integration -q
 ```
 
 When `ATO_TEST_DATABASE_URL` is unset, those tests skip cleanly. CI runs them in the optional `integration-postgres` job in `.github/workflows/contracts.yml`.

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
+from contextlib import asynccontextmanager
+import inspect
 import json
 import uuid
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from io import BytesIO
 from typing import Any
@@ -86,6 +89,7 @@ from ato_service.ssp_workspace.metrics import (
     controls_have_tracked_responses,
     requirement_is_satisfied,
 )
+from ato_service.ssp_workspace.model_policy import require_ssp_model_allowed
 from ato_service.ssp_workspace.oscal_export import build_draft_oscal_ssp_json_export
 from ato_service.ssp_workspace.persistence import (
     StaleWorkspaceRevisionError,
@@ -135,15 +139,73 @@ class AgencyDocxRenderStateError(ValueError):
 class AgencyDocxUploadError(ValueError):
     error_code = "agency_docx_upload_failed"
 
+    def __init__(
+        self,
+        detail: str,
+        *,
+        failure_kind: str | None = None,
+    ) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        if failure_kind is not None:
+            self.failure_kind = failure_kind
+
 
 class AgencyDocxMalwareScanRequiredError(AgencyDocxUploadError):
     error_code = "malware_scan_required"
+
 
     def __init__(self) -> None:
         super().__init__(
             "agency DOCX upload requires an approved malware scanner integration "
             "before customer template processing in onprem_production"
         )
+
+
+_SAFE_CONTEXT_BUDGET_DETAIL = (
+    "SSP request exceeds the configured aggregate context budget; reduce the "
+    "selected evidence or use an approved larger-context profile"
+)
+
+
+def _wrap_agency_docx_error(exc: Exception) -> AgencyDocxUploadError:
+    """Preserve the bounded failure class without exposing provider details."""
+    failure_kind = getattr(exc, "failure_kind", None)
+    detail = (
+        _SAFE_CONTEXT_BUDGET_DETAIL
+        if failure_kind == "context_budget"
+        else str(exc)
+    )
+    return AgencyDocxUploadError(detail, failure_kind=failure_kind)
+
+
+@dataclass(frozen=True, slots=True)
+class _GenerationSnapshot:
+    workspace_id: uuid.UUID
+    revision_id: uuid.UUID
+    revision_version: int
+    content: RevisionContent
+    system_name: str
+    profile: Any
+
+
+@dataclass(frozen=True, slots=True)
+class AgencyDocxRenderReference:
+    """Detached render identity returned after a cache or write decision."""
+
+    render_id: uuid.UUID
+    status: str
+    output_storage_key: str
+    output_sha256: str
+
+
+def _agency_docx_render_reference(render: Any) -> AgencyDocxRenderReference:
+    return AgencyDocxRenderReference(
+        render_id=render.render_id,
+        status=render.status,
+        output_storage_key=render.output_storage_key,
+        output_sha256=render.output_sha256,
+    )
 
 
 async def create_initialized_workspace(
@@ -598,20 +660,22 @@ async def generate_workspace_draft(
     workspace_id: uuid.UUID,
     expected_revision_id: uuid.UUID,
     model: ModelCallable,
+    config: Any,
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
 ) -> Any:
-    workspace, revision, system, profile = await _generation_context(
+    require_ssp_model_allowed(config)
+    snapshot = await _generation_context(
         session,
         workspace_id=workspace_id,
         expected_revision_id=expected_revision_id,
     )
-    content = RevisionContent.model_validate(revision.content)
+    content = snapshot.content
     execution = await generate_initial_ssp(
         InitialGenerationRequest(
-            system_name=system.display_name,
-            profile=profile,
+            system_name=snapshot.system_name,
+            profile=snapshot.profile,
             source_ids=tuple(
                 sorted(
                     {
@@ -627,9 +691,14 @@ async def generate_workspace_draft(
         model,
     )
     updated = merge_generation(content, execution.value)
+    await _require_current_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=snapshot.revision_id,
+    )
     return await _save_edited_revision(
         session,
-        workspace_id=workspace.workspace_id,
+        workspace_id=snapshot.workspace_id,
         expected_revision_id=expected_revision_id,
         content=updated,
         actor_id=actor_id,
@@ -646,6 +715,7 @@ async def analyze_workspace_categorization(
     workspace_id: uuid.UUID,
     expected_revision_id: uuid.UUID,
     model: ModelCallable,
+    config: Any,
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
@@ -655,12 +725,13 @@ async def analyze_workspace_categorization(
     from ato_service.ssp_workspace.categorization import active_categorization_status
     from ato_service.ssp_workspace.contracts import FactState
 
-    workspace, revision, system, profile = await _generation_context(
+    require_ssp_model_allowed(config)
+    snapshot = await _generation_context(
         session,
         workspace_id=workspace_id,
         expected_revision_id=expected_revision_id,
     )
-    content = RevisionContent.model_validate(revision.content)
+    content = snapshot.content
     facts_by_key = {
         item.key: item for item in content.facts if item.state is FactState.ACTIVE
     }
@@ -668,8 +739,8 @@ async def analyze_workspace_categorization(
         raise WorkspaceEditError("categorization is already confirmed")
     execution = await generate_categorization_proposal(
         CategorizationProposalRequest(
-            system_name=system.display_name,
-            profile=profile,
+            system_name=snapshot.system_name,
+            profile=snapshot.profile,
             source_ids=tuple(
                 sorted(
                     {
@@ -688,9 +759,14 @@ async def analyze_workspace_categorization(
             "insufficient evidence to propose FIPS 199 categorization"
         )
     updated = merge_categorization_proposal(content, execution.value)
+    await _require_current_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=snapshot.revision_id,
+    )
     return await _save_edited_revision(
         session,
-        workspace_id=workspace.workspace_id,
+        workspace_id=snapshot.workspace_id,
         expected_revision_id=expected_revision_id,
         content=updated,
         actor_id=actor_id,
@@ -708,22 +784,24 @@ async def propose_agent_patch(
     expected_revision_id: uuid.UUID,
     instruction: str,
     model: ModelCallable,
+    config: Any,
     actor_id: str,
     now: datetime,
     audit_hmac_key: bytes,
 ) -> Any:
     from ato_service.db.models import SspAgentPatch
 
-    workspace, revision, system, profile = await _generation_context(
+    require_ssp_model_allowed(config)
+    snapshot = await _generation_context(
         session,
         workspace_id=workspace_id,
         expected_revision_id=expected_revision_id,
     )
-    content = RevisionContent.model_validate(revision.content)
+    content = snapshot.content
     execution = await generate_contextual_patch(
         ContextualEditRequest(
-            system_name=system.display_name,
-            profile=profile,
+            system_name=snapshot.system_name,
+            profile=snapshot.profile,
             source_ids=tuple(
                 sorted(
                     {
@@ -737,7 +815,7 @@ async def propose_agent_patch(
             sections=tuple(
                 SspSectionState(
                     section_id=item.key,
-                    revision=revision.version,
+                    revision=snapshot.revision_version,
                     content=item.content,
                 )
                 for item in content.sections
@@ -745,7 +823,7 @@ async def propose_agent_patch(
             controls=tuple(
                 GenerationControlState(
                     control_id=item.control_id,
-                    revision=revision.version,
+                    revision=snapshot.revision_version,
                     implementation_status=item.implementation_status or "unknown",
                     responsibility=item.responsibility or "unknown",
                     implementation_statement=item.implementation_statement,
@@ -772,10 +850,15 @@ async def propose_agent_patch(
         ),
         model,
     )
+    await _require_current_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=snapshot.revision_id,
+    )
     row = SspAgentPatch(
         patch_id=uuid.uuid4(),
-        workspace_id=workspace.workspace_id,
-        base_revision_id=revision.revision_id,
+        workspace_id=snapshot.workspace_id,
+        base_revision_id=snapshot.revision_id,
         applied_revision_id=None,
         operations=[_serialize_patch_result(execution.value)],
         summary=execution.value.change_summary,
@@ -1199,38 +1282,39 @@ async def migrate_workspace_profile(
         facts.pop("system.provisional_impact_level", None)
         for key, fact in categorization.items():
             facts[key] = fact
-    migrated = replace(
-        content,
-        facts=tuple(facts[key] for key in sorted(facts)),
-        sections=tuple(
-            old_sections.get(item.item_id)
-            or SectionContent(
-                key=item.item_id,
-                title=item.title,
-                content="",
-                state=SectionState.EMPTY,
-            )
-            for item in new_profile.ssp_required_items
-        ),
-        controls=tuple(
-            old_controls.get(item.control_id)
-            or ControlContent(
-                control_id=item.control_id,
-                title=item.title,
-                implementation_status="unknown",
-                responsibility="unknown",
-                state=ControlState.EMPTY,
-            )
-            for item in new_profile.controls
-        ),
-        questions=tuple(
-            question.model_copy(update={"state": QuestionState.DISMISSED})
-            if question.state is QuestionState.OPEN
-            and question.target_type == "control"
-            and question.target_key not in new_control_ids
-            else question
-            for question in content.questions
-        ),
+    migrated = content.model_copy(
+        update={
+            "facts": tuple(facts[key] for key in sorted(facts)),
+            "sections": tuple(
+                old_sections.get(item.item_id)
+                or SectionContent(
+                    key=item.item_id,
+                    title=item.title,
+                    content="",
+                    state=SectionState.EMPTY,
+                )
+                for item in new_profile.ssp_required_items
+            ),
+            "controls": tuple(
+                old_controls.get(item.control_id)
+                or ControlContent(
+                    control_id=item.control_id,
+                    title=item.title,
+                    implementation_status="unknown",
+                    responsibility="unknown",
+                    state=ControlState.EMPTY,
+                )
+                for item in new_profile.controls
+            ),
+            "questions": tuple(
+                question.model_copy(update={"state": QuestionState.DISMISSED})
+                if question.state is QuestionState.OPEN
+                and question.target_type == "control"
+                and question.target_key not in new_control_ids
+                else question
+                for question in content.questions
+            ),
+        }
     )
     workspace.profile_version_id = profile_version_id
     saved = await _save_edited_revision(
@@ -1470,6 +1554,7 @@ async def analyze_workspace_diagram(
     audit_hmac_key: bytes,
     blob_store: Any,
     config: Any,
+    vision_client: Any | None = None,
 ) -> Any:
     """Analyze one architecture diagram artifact and propose system definition draft."""
 
@@ -1495,29 +1580,38 @@ async def analyze_workspace_diagram(
     if page_number < 1:
         raise ValueError("page_number must be >= 1")
 
-    revision = await _load_exact_current_revision(
-        session, workspace_id=workspace_id, revision_id=expected_revision_id
-    )
-    content = RevisionContent.model_validate(revision.content)
-    artifact = (
-        await session.execute(
-            select(SspEvidenceArtifact).where(
-                SspEvidenceArtifact.workspace_id == workspace_id,
-                SspEvidenceArtifact.evidence_artifact_id == artifact_id,
-                SspEvidenceArtifact.removed_at.is_(None),
-            )
+    require_ssp_model_allowed(config, vision=True)
+    async with _read_snapshot_transaction(session):
+        revision = await _load_exact_current_revision(
+            session, workspace_id=workspace_id, revision_id=expected_revision_id
         )
-    ).scalar_one_or_none()
-    if artifact is None:
-        raise ValueError("diagram evidence artifact not found")
-    if artifact.status != "processed":
-        raise ValueError("diagram evidence must be processed before analysis")
+        content = RevisionContent.model_validate(revision.content)
+        artifact = (
+            await session.execute(
+                select(SspEvidenceArtifact).where(
+                    SspEvidenceArtifact.workspace_id == workspace_id,
+                    SspEvidenceArtifact.evidence_artifact_id == artifact_id,
+                    SspEvidenceArtifact.removed_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if artifact is None:
+            raise ValueError("diagram evidence artifact not found")
+        if artifact.status != "processed":
+            raise ValueError("diagram evidence must be processed before analysis")
+        artifact_storage_key = artifact.storage_key
+        artifact_sha256 = artifact.sha256
+        artifact_detected_format = artifact.detected_format or ""
+        artifact_display_filename = artifact.display_filename
 
-    payload = _read_blob_bytes(blob_store, artifact.storage_key, artifact.sha256)
-    detected_format = artifact.detected_format or ""
+    payload = await asyncio.to_thread(
+        _read_blob_bytes, blob_store, artifact_storage_key, artifact_sha256
+    )
+    detected_format = artifact_detected_format
     locator: dict[str, Any] = {"page": page_number}
     if detected_format == "pdf":
-        image_bytes = render_page_png(
+        image_bytes = await asyncio.to_thread(
+            render_page_png,
             payload,
             page_number=page_number,
             limits=config.extraction_limits,
@@ -1534,33 +1628,69 @@ async def analyze_workspace_diagram(
         )
 
     text_context = collect_text_evidence_context(content, artifact_id=artifact_id)
+    resolved_vision_client = vision_client
+    owns_vision_client = resolved_vision_client is None
     try:
-        vision_client = build_vision_model_client(config)
-    except VisionConfigurationError as exc:
-        raise ValueError("vision model is not configured for diagram analysis") from exc
+        if owns_vision_client:
+            try:
+                resolved_vision_client = build_vision_model_client(config)
+            except VisionConfigurationError as exc:
+                raise ValueError(
+                    "vision model is not configured for diagram analysis"
+                ) from exc
+        analysis_kwargs = {
+            "artifact_id": artifact_id,
+            "image_bytes": image_bytes,
+            "media_type": media_type,
+            "text_context": text_context,
+            "model": resolved_vision_client,
+        }
+        model_call = getattr(resolved_vision_client, "__call__", resolved_vision_client)
+        if inspect.iscoroutinefunction(model_call):
+            analysis = await analyze_architecture_diagram(**analysis_kwargs)
+        else:
+            analysis = await asyncio.to_thread(
+                lambda: asyncio.run(analyze_architecture_diagram(**analysis_kwargs))
+            )
+    except DiagramAnalysisError:
+        raise
+    finally:
+        if owns_vision_client and resolved_vision_client is not None:
+            await resolved_vision_client.aclose()
 
-    try:
-        analysis = await analyze_architecture_diagram(
-            artifact_id=artifact_id,
-            image_bytes=image_bytes,
-            media_type=media_type,
-            text_context=text_context,
-            model=vision_client,
+    await _require_current_revision(
+        session,
+        workspace_id=workspace_id,
+        expected_revision_id=expected_revision_id,
+    )
+    current_artifact = (
+        await session.execute(
+            select(SspEvidenceArtifact).where(
+                SspEvidenceArtifact.workspace_id == workspace_id,
+                SspEvidenceArtifact.evidence_artifact_id == artifact_id,
+                SspEvidenceArtifact.removed_at.is_(None),
+            )
         )
-    except DiagramAnalysisError as exc:
-        raise ValueError(str(exc)) from exc
+    ).scalar_one_or_none()
+    if (
+        current_artifact is None
+        or current_artifact.status != "processed"
+        or current_artifact.storage_key != artifact_storage_key
+        or current_artifact.sha256 != artifact_sha256
+    ):
+        raise StaleWorkspaceRevisionError("diagram evidence changed")
 
     boundary, components, interconnections = build_system_definition_from_analysis(
         analysis,
         artifact_id=artifact_id,
         locator=locator,
-        diagram_label=artifact.display_filename,
+        diagram_label=artifact_display_filename,
     )
     metadata = proposal_metadata_from_analysis(
         analysis,
         artifact_id=artifact_id,
         locator=locator,
-        display_filename=artifact.display_filename,
+        display_filename=artifact_display_filename,
     )
     updated = apply_system_definition_proposal(
         content,
@@ -1736,35 +1866,92 @@ async def _resolved_profile_for_revision(
     return resolve_stored_profile(profile_row, _impact_level(content))
 
 
+@asynccontextmanager
+async def _read_snapshot_transaction(session: AsyncSession):
+    """Run only the read snapshot in a root transaction, then end it."""
+    if not isinstance(session, AsyncSession):
+        yield
+        return
+
+    if session.in_nested_transaction():
+        raise ValueError("SSP workflow requires a root transaction boundary")
+    if session.in_transaction():
+        if session.new or session.dirty or session.deleted:
+            raise ValueError(
+                "SSP workflow cannot start with pending database mutations"
+            )
+        raise ValueError("SSP workflow requires a clean transaction boundary")
+    try:
+        yield
+    except BaseException:
+        await session.rollback()
+        raise
+    else:
+        # A root rollback ends the PostgreSQL transaction, releasing its
+        # snapshot and every lock before storage, parsing, or model work.
+        await session.rollback()
+
+
+def _require_clean_root_transaction(session: AsyncSession) -> None:
+    """Reject caller work before a service-owned optimistic write phase."""
+    if not isinstance(session, AsyncSession):
+        return
+    if session.in_nested_transaction():
+        raise ValueError("SSP workflow requires a root transaction boundary")
+    if session.in_transaction():
+        if session.new or session.dirty or session.deleted:
+            raise ValueError(
+                "SSP workflow cannot start with pending database mutations"
+            )
+        raise ValueError("SSP workflow requires a clean transaction boundary")
+
+
+async def _require_current_revision(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    expected_revision_id: uuid.UUID,
+) -> Any:
+    """Revalidate the optimistic input immediately before a model-derived write."""
+    return await _load_exact_current_revision(
+        session,
+        workspace_id=workspace_id,
+        revision_id=expected_revision_id,
+    )
+
+
 async def _generation_context(
     session: AsyncSession,
     *,
     workspace_id: uuid.UUID,
     expected_revision_id: uuid.UUID,
-) -> tuple[Any, Any, Any, Any]:
+) -> _GenerationSnapshot:
     from ato_service.db.models import SspProfileVersion, SspWorkspace, System
 
-    revision = await _load_exact_current_revision(
-        session, workspace_id=workspace_id, revision_id=expected_revision_id
-    )
-    workspace, system, profile_row = (
-        await session.execute(
-            select(SspWorkspace, System, SspProfileVersion)
-            .join(System, System.system_id == SspWorkspace.system_id)
-            .join(
-                SspProfileVersion,
-                SspProfileVersion.profile_version_id == SspWorkspace.profile_version_id,
-            )
-            .where(SspWorkspace.workspace_id == workspace_id)
+    async with _read_snapshot_transaction(session):
+        revision = await _load_exact_current_revision(
+            session, workspace_id=workspace_id, revision_id=expected_revision_id
         )
-    ).one()
-    content = RevisionContent.model_validate(revision.content)
-    return (
-        workspace,
-        revision,
-        system,
-        resolve_stored_profile(profile_row, _impact_level(content)),
-    )
+        workspace, system, profile_row = (
+            await session.execute(
+                select(SspWorkspace, System, SspProfileVersion)
+                .join(System, System.system_id == SspWorkspace.system_id)
+                .join(
+                    SspProfileVersion,
+                    SspProfileVersion.profile_version_id == SspWorkspace.profile_version_id,
+                )
+                .where(SspWorkspace.workspace_id == workspace_id)
+            )
+        ).one()
+        content = RevisionContent.model_validate(revision.content)
+        return _GenerationSnapshot(
+            workspace_id=workspace.workspace_id,
+            revision_id=revision.revision_id,
+            revision_version=revision.version,
+            content=content,
+            system_name=system.display_name,
+            profile=resolve_stored_profile(profile_row, _impact_level(content)),
+        )
 
 
 def _generation_facts(content: RevisionContent) -> tuple[EvidenceFact, ...]:
@@ -2327,43 +2514,69 @@ async def create_agency_docx_render(
         raise AgencyDocxUploadError("template file exceeds configured limit")
 
     _require_agency_docx_malware_scan_ready(config)
+    require_ssp_model_allowed(config)
 
     if not isinstance(blob_store, BlobStore):
         raise TypeError("blob_store must be a BlobStore")
 
     extraction_limits = resolve_extraction_limits_from_config(config)
     try:
-        outline = extract_template_outline(template_bytes, extraction_limits)
+        outline = await asyncio.to_thread(
+            extract_template_outline, template_bytes, extraction_limits
+        )
     except AgencyDocxError as exc:
-        raise AgencyDocxUploadError(str(exc)) from exc
+        raise _wrap_agency_docx_error(exc) from exc
 
-    snapshot = await _approved_export_snapshot(
-        session,
-        workspace_id=workspace_id,
-        revision_id=source_revision_id,
-    )
-    workspace = (
-        await session.execute(
-            select(SspWorkspace).where(SspWorkspace.workspace_id == workspace_id)
-        )
-    ).scalar_one()
-    source_revision_sha256 = snapshot["content_sha256"]
     template_sha256 = hashlib.sha256(template_bytes).hexdigest()
-
-    cached = (
-        await session.execute(
-            select(SspAgencyDocxRender).where(
-                SspAgencyDocxRender.workspace_id == workspace_id,
-                SspAgencyDocxRender.profile_version_id == workspace.profile_version_id,
-                SspAgencyDocxRender.source_revision_id == source_revision_id,
-                SspAgencyDocxRender.template_sha256 == template_sha256,
-            )
+    cached_reference: AgencyDocxRenderReference | None = None
+    async with _read_snapshot_transaction(session):
+        snapshot = await _approved_export_snapshot(
+            session,
+            workspace_id=workspace_id,
+            revision_id=source_revision_id,
         )
-    ).scalar_one_or_none()
-    if cached is not None:
-        return cached
+        workspace = (
+            await session.execute(
+                select(SspWorkspace).where(SspWorkspace.workspace_id == workspace_id)
+            )
+        ).scalar_one()
+        profile_version_id = workspace.profile_version_id
+        cached = (
+            await session.execute(
+                select(SspAgencyDocxRender).where(
+                    SspAgencyDocxRender.workspace_id == workspace_id,
+                    SspAgencyDocxRender.profile_version_id == profile_version_id,
+                    SspAgencyDocxRender.source_revision_id == source_revision_id,
+                    SspAgencyDocxRender.template_sha256 == template_sha256,
+                )
+            )
+        ).scalar_one_or_none()
+        if cached is not None:
+            cached_reference = _agency_docx_render_reference(cached)
+        reusable_mapping_document = None
+        if cached is None:
+            reusable = (
+                await session.execute(
+                    select(SspAgencyDocxRender)
+                    .where(
+                        SspAgencyDocxRender.workspace_id == workspace_id,
+                        SspAgencyDocxRender.template_sha256 == template_sha256,
+                        SspAgencyDocxRender.profile_version_id == profile_version_id,
+                        SspAgencyDocxRender.status == "approved",
+                    )
+                    .order_by(SspAgencyDocxRender.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if reusable is not None:
+                reusable_mapping_document = dict(reusable.mapping_plan)
 
-    stored_template = blob_store.store_stream(
+    source_revision_sha256 = snapshot["content_sha256"]
+    if cached_reference is not None:
+        return cached_reference
+
+    stored_template = await asyncio.to_thread(
+        blob_store.store_stream,
         BytesIO(template_bytes),
         max_bytes=config.limits.max_single_file_bytes,
     )
@@ -2373,24 +2586,11 @@ async def create_agency_docx_render(
     section_ids = frozenset(item["section_id"] for item in snapshot["sections"])
     reused_mapping = False
     mapping_plan_document: dict[str, Any]
-    reusable = (
-        await session.execute(
-            select(SspAgencyDocxRender)
-            .where(
-                SspAgencyDocxRender.workspace_id == workspace_id,
-                SspAgencyDocxRender.template_sha256 == stored_template.sha256,
-                SspAgencyDocxRender.profile_version_id == workspace.profile_version_id,
-                SspAgencyDocxRender.status == "approved",
-            )
-            .order_by(SspAgencyDocxRender.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
     from ato_service.ssp_workspace.agency_docx_contracts import AgencyDocxContractError
 
     try:
-        if reusable is not None:
-            mapping_plan_document = dict(reusable.mapping_plan)
+        if reusable_mapping_document is not None:
+            mapping_plan_document = reusable_mapping_document
             reused_mapping = True
             mapping_plan = parse_mapping_plan(
                 json.dumps(mapping_plan_document),
@@ -2402,19 +2602,20 @@ async def create_agency_docx_render(
             mapping_plan = execution.plan
             mapping_plan_document = _mapping_plan_document(mapping_plan)
     except AgencyDocxError as exc:
-        raise AgencyDocxUploadError(str(exc)) from exc
+        raise _wrap_agency_docx_error(exc) from exc
     except AgencyDocxContractError as exc:
-        raise AgencyDocxUploadError(str(exc)) from exc
+        raise _wrap_agency_docx_error(exc) from exc
 
     try:
-        rendered_bytes = render_template(
+        rendered_bytes = await asyncio.to_thread(
+            render_template,
             template_bytes,
             mapping_plan,
             snapshot,
             extraction_limits=extraction_limits,
         )
     except AgencyDocxError as exc:
-        raise AgencyDocxUploadError(str(exc)) from exc
+        raise _wrap_agency_docx_error(exc) from exc
 
     try:
         review = await review_render(
@@ -2425,9 +2626,9 @@ async def create_agency_docx_render(
             model,
         )
     except AgencyDocxError as exc:
-        raise AgencyDocxUploadError(str(exc)) from exc
+        raise _wrap_agency_docx_error(exc) from exc
     except AgencyDocxContractError as exc:
-        raise AgencyDocxUploadError(str(exc)) from exc
+        raise _wrap_agency_docx_error(exc) from exc
     review_document = _review_result_document(review)
     status = _agency_docx_render_status(
         mapping_plan=mapping_plan,
@@ -2435,15 +2636,50 @@ async def create_agency_docx_render(
         review_document=review_document,
     )
 
-    stored_output = blob_store.store_stream(
+    stored_output = await asyncio.to_thread(
+        blob_store.store_stream,
         BytesIO(rendered_bytes),
         max_bytes=config.limits.max_single_file_bytes,
     )
 
+    _require_clean_root_transaction(session)
+    current_workspace = (
+        await session.execute(
+            select(SspWorkspace)
+            .where(SspWorkspace.workspace_id == workspace_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if current_workspace is None:
+        raise StaleWorkspaceRevisionError("workspace changed")
+    if current_workspace.profile_version_id != profile_version_id:
+        raise StaleWorkspaceRevisionError("workspace profile changed")
+    current_snapshot = await _approved_export_snapshot(
+        session,
+        workspace_id=workspace_id,
+        revision_id=source_revision_id,
+    )
+    if current_snapshot["content_sha256"] != source_revision_sha256:
+        raise StaleWorkspaceRevisionError("approved export inputs changed")
+    existing = (
+        await session.execute(
+            select(SspAgencyDocxRender)
+            .where(
+                SspAgencyDocxRender.workspace_id == workspace_id,
+                SspAgencyDocxRender.profile_version_id == profile_version_id,
+                SspAgencyDocxRender.source_revision_id == source_revision_id,
+                SspAgencyDocxRender.template_sha256 == stored_template.sha256,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return _agency_docx_render_reference(existing)
+
     render = SspAgencyDocxRender(
         render_id=uuid.uuid4(),
         workspace_id=workspace_id,
-        profile_version_id=workspace.profile_version_id,
+        profile_version_id=profile_version_id,
         source_revision_id=source_revision_id,
         source_revision_sha256=source_revision_sha256,
         template_storage_key=stored_template.storage_key,
@@ -2484,7 +2720,7 @@ async def create_agency_docx_render(
         },
         now=now,
     )
-    return render
+    return _agency_docx_render_reference(render)
 
 
 async def approve_agency_docx_render(

@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +23,6 @@ from ato_service.ssp_workspace.contracts import (
     FactState,
     Provenance,
     RevisionContent,
-    SectionContent,
     SectionState,
 )
 from ato_service.ssp_workspace.metrics import (

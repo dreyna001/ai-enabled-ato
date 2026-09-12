@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools==84.0.0", "wheel==0.48.0", "packaging==26.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic",
-    "asyncpg",
+    "psycopg[binary]==3.3.4",
     "fastapi",
     "httpx",
     "jsonschema[format]",
@@ -29,6 +29,8 @@ dependencies = [
     # Pillow: bounded PNG, JPEG, and WebP validation and decode.
     "Pillow==12.2.0",
     "pydantic>=2",
+    "pydantic-ai-slim[openai]==2.42.0",
+    "opentelemetry-sdk==1.39.1",
     "python-multipart",
     "sqlalchemy[asyncio]>=2",
     "uvicorn[standard]",
@@ -45,11 +47,13 @@ ato-operator = "ato_operator.cli:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "ruff",
+    "pytest==9.1.1",
+    "ruff==0.15.21",
+    "pydantic-evals==2.42.0",
 ]
 bedrock = [
     "boto3>=1.35",
+    "pydantic-ai-slim[bedrock]==2.42.0",
 ]
 
 [tool.setuptools.packages.find]

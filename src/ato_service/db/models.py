@@ -2720,3 +2720,214 @@ class SspAgencyDocxRender(Base):
             "profile_version_id",
         ),
     )
+
+
+class SspChatConversation(Base):
+    """Private chat state for one actor within one SSP workspace."""
+
+    __tablename__ = "ssp_chat_conversations"
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspaces.workspace_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    rate_window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    rate_window_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    daily_token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "actor_id",
+            name="uq_ssp_chat_conversations_workspace_actor",
+        ),
+        CheckConstraint(
+            "last_sequence >= 0",
+            name="ck_ssp_chat_conversations_last_sequence_nonnegative",
+        ),
+        CheckConstraint(
+            "rate_window_count >= 0",
+            name="ck_ssp_chat_conversations_rate_window_count_nonnegative",
+        ),
+        CheckConstraint(
+            "daily_token_count >= 0",
+            name="ck_ssp_chat_conversations_daily_token_count_nonnegative",
+        ),
+        CheckConstraint(
+            "char_length(actor_id) >= 1",
+            name="ck_ssp_chat_conversations_actor_id_min_length",
+        ),
+        Index("ix_ssp_chat_conversations_workspace_id", "workspace_id"),
+        Index(
+            "ix_ssp_chat_conversations_workspace_actor",
+            "workspace_id",
+            "actor_id",
+        ),
+    )
+
+
+class SspChatTurn(Base):
+    """Committed reservation and idempotency record for one chat turn."""
+
+    __tablename__ = "ssp_chat_turns"
+
+    turn_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_chat_conversations.conversation_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_workspace_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    context_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    lease_token: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            name="uq_ssp_chat_turns_conversation_sequence",
+        ),
+        UniqueConstraint(
+            "turn_id",
+            "conversation_id",
+            "sequence",
+            name="uq_ssp_chat_turns_turn_conversation_sequence",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "request_id",
+            name="uq_ssp_chat_turns_conversation_request_id",
+        ),
+        ck.enum_check(
+            "status",
+            ("pending", "completed"),
+            constraint_name="ck_ssp_chat_turns_status",
+        ),
+        ck.sha256_check(
+            "request_fingerprint",
+            constraint_name="ck_ssp_chat_turns_request_fingerprint",
+        ),
+        ck.sha256_check(
+            "context_fingerprint",
+            constraint_name="ck_ssp_chat_turns_context_fingerprint",
+        ),
+        CheckConstraint(
+            "sequence >= 1",
+            name="ck_ssp_chat_turns_sequence_positive",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND completed_at IS NULL AND expires_at IS NULL "
+            "AND lease_expires_at IS NOT NULL AND lease_expires_at > created_at) OR "
+            "(status = 'completed' AND completed_at IS NOT NULL "
+            "AND expires_at IS NOT NULL AND expires_at > completed_at "
+            "AND lease_expires_at IS NULL)",
+            name="ck_ssp_chat_turns_status_fields",
+        ),
+        Index("ix_ssp_chat_turns_conversation_sequence", "conversation_id", "sequence"),
+        Index(
+            "uq_ssp_chat_turns_one_pending_conversation",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+        Index("ix_ssp_chat_turns_expires_at", "expires_at"),
+    )
+
+
+class SspChatMessage(Base):
+    """One bounded persisted message belonging to a completed chat turn."""
+
+    __tablename__ = "ssp_chat_messages"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    turn_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssp_chat_conversations.conversation_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(String(12_000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sources: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    context_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["turn_id", "conversation_id", "sequence"],
+            [
+                "ssp_chat_turns.turn_id",
+                "ssp_chat_turns.conversation_id",
+                "ssp_chat_turns.sequence",
+            ],
+            ondelete="RESTRICT",
+            name="fk_ssp_chat_messages_turn_conversation_sequence",
+        ),
+        UniqueConstraint(
+            "turn_id",
+            "role",
+            name="uq_ssp_chat_messages_turn_role",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            "role",
+            name="uq_ssp_chat_messages_conversation_sequence_role",
+        ),
+        ck.enum_check(
+            "role",
+            ("user", "assistant"),
+            constraint_name="ck_ssp_chat_messages_role",
+        ),
+        ck.sha256_check(
+            "context_fingerprint",
+            constraint_name="ck_ssp_chat_messages_context_fingerprint",
+        ),
+        CheckConstraint(
+            "sequence >= 1",
+            name="ck_ssp_chat_messages_sequence_positive",
+        ),
+        CheckConstraint(
+            "char_length(trim(content)) >= 1",
+            name="ck_ssp_chat_messages_content_min_length",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(sources) = 'array'",
+            name="ck_ssp_chat_messages_sources_array",
+        ),
+        CheckConstraint(
+            "expires_at > created_at",
+            name="ck_ssp_chat_messages_expiry_after_creation",
+        ),
+        Index(
+            "ix_ssp_chat_messages_conversation_sequence",
+            "conversation_id",
+            "sequence",
+        ),
+        Index("ix_ssp_chat_messages_expires_at", "expires_at"),
+    )

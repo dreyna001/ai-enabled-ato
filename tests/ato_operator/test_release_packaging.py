@@ -96,6 +96,7 @@ def _write_minimal_release_tree(
 
     for relative_file in (
         "pyproject.toml",
+        "requirements.lock",
         "README.md",
         "alembic.ini",
         "portal/package-lock.json",

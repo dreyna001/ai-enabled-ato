@@ -14,7 +14,7 @@ RUN_MIGRATE=true
 RUN_SMOKE=false
 RESTART_API=true
 DRY_RUN=false
-EXPECTED_MIGRATION_HEAD="20260728_0016"
+EXPECTED_MIGRATION_HEAD="20260911_0017"
 
 usage() {
     cat <<'EOF'
@@ -80,6 +80,36 @@ run_upgrade_dry_run() {
     info "Live upgrade still requires explicit install.sh --migrate/--start and customer backup evidence"
 }
 
+validate_wsl_runtime_config_path() {
+    local runtime_config_dest="$INSTALL_DIR/runtime-config.json"
+
+    if [[ -L "$runtime_config_dest" ]]; then
+        err "WSL runtime config must be a regular file, not a symlink: $runtime_config_dest"
+    fi
+    if [[ -e "$runtime_config_dest" && ! -f "$runtime_config_dest" ]]; then
+        err "WSL runtime config must be a regular file: $runtime_config_dest"
+    fi
+}
+
+restore_wsl_runtime_config() {
+    local runtime_config_dest="$INSTALL_DIR/runtime-config.json"
+    local runtime_config_src="$REPO_DIR/deployment/config/runtime-config.wsl_local.json"
+
+    # Validate before and after install.sh: its tree permission pass must never
+    # follow an operator-controlled symlink to a credential/config target.
+    validate_wsl_runtime_config_path
+    if [[ ! -f "$runtime_config_dest" ]]; then
+        [[ -f "$runtime_config_src" ]] || err "Missing WSL runtime config template: $runtime_config_src"
+        cp "$runtime_config_src" "$runtime_config_dest"
+        sed -i 's/\r$//' "$runtime_config_dest" 2>/dev/null || true
+        info "Installed missing WSL runtime config: $runtime_config_dest"
+    else
+        info "Preserved existing WSL runtime config contents: $runtime_config_dest"
+    fi
+    chown root:ato "$runtime_config_dest" || err "Failed to set WSL runtime config owner: $runtime_config_dest"
+    chmod 640 "$runtime_config_dest" || err "Failed to set WSL runtime config permissions: $runtime_config_dest"
+}
+
 if [[ "$DRY_RUN" == "true" ]]; then
     run_upgrade_dry_run
     echo "Upgrade dry-run complete."
@@ -127,6 +157,7 @@ fi
 if [[ "$wsl_upgrade" == "true" ]]; then
     install_args+=(--skip-nginx --skip-systemd)
     info "WSL detected; passing --skip-nginx --skip-systemd to install.sh"
+    validate_wsl_runtime_config_path
     if [[ "$RUN_SMOKE" == "true" && "$RESTART_API" != "true" ]]; then
         err "--smoke requires API restart; omit --no-restart"
     fi
@@ -139,16 +170,7 @@ info "Refreshing installed package bytes"
 bash "$SCRIPT_DIR/install.sh" "${install_args[@]}"
 
 if [[ "$wsl_upgrade" == "true" ]]; then
-    runtime_config_dest="$INSTALL_DIR/runtime-config.json"
-    runtime_config_src="$REPO_DIR/deployment/config/runtime-config.wsl_local.json"
-    if [[ ! -f "$runtime_config_dest" ]]; then
-        [[ -f "$runtime_config_src" ]] || err "Missing WSL runtime config template: $runtime_config_src"
-        cp "$runtime_config_src" "$runtime_config_dest"
-        sed -i 's/\r$//' "$runtime_config_dest" 2>/dev/null || true
-        chown root:ato "$runtime_config_dest"
-        chmod 640 "$runtime_config_dest"
-        info "Installed missing WSL runtime config: $runtime_config_dest"
-    fi
+    restore_wsl_runtime_config
 
     local_api_unit="$REPO_DIR/deployment/systemd/ato-api.wsl-local.service"
     [[ -f "$local_api_unit" ]] || err "Missing WSL API unit: $local_api_unit"
