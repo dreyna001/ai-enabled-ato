@@ -12,6 +12,12 @@ backlog remains in [PROFILE_DRIVEN_WORKFLOW_TODO.md](PROFILE_DRIVEN_WORKFLOW_TOD
 
 ## Remaining work, in priority order
 
+The last implementation batch is finished, not the entire backlog. Prioritize
+release acceptance first, then contextual editing, profile-management UI,
+structured forms, and local reliability tests. Organization approvals, customer
+identity/scanner validation, and expert-reviewed model qualification remain
+separate from locally completed implementation.
+
 ### Execution constraint: defer live LLM calls
 
 Per the user's current instruction, do not call any live text, vision, embedding,
@@ -25,10 +31,13 @@ Deferral is not completion or permission to bypass a model-policy gate.
 
 - [x] Finish one clean full backend regression run: 2,429 passed, 64 skipped,
   38 deselected; no failures (four warnings).
+- [x] Commit and push the authorized implementation batch to remote `main`:
+  `55bb96c`; remote commit verified. This does not upgrade WSL.
 - [ ] Confirm release CI for the published September 11 increment.
   Upgrade WSL separately with the required sudo
   step; verify login, navigation, existing-history reload, and non-model paths.
-- [ ] Improve contextual editing: use confirmed system details when preparing
+- [ ] Improve contextual editing: use the same confirmed system context as
+  generation when preparing
   an edit to one section/control, and send only relevant pinned requirements.
   Implement and test with mocked responses; defer actual model edit trials.
 - [ ] Extend Profiles UI with version diffs, affected/pinned workspaces, and
