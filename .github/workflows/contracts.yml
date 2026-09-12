@@ -149,6 +149,7 @@ jobs:
           tests/ato_service/test_workflow_recovery_integration.py
           tests/ato_service/test_ssp_workspace_e2e_integration.py
           tests/ato_service/test_ssp_workspace_boundaries.py
+          tests/ato_service/test_ssp_profile_migration_boundaries.py
           tests/ato_service/test_unified_chat_retrieval.py
           tests/ato_service/test_unified_chat_http_integration.py
           tests/ato_service/test_ssp_chat_service.py

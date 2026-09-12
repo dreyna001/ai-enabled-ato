@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
@@ -21,18 +23,28 @@ from ato_service.ssp_workspace.editing import (
     WorkspaceQuestionStateError,
     answer_question,
 )
+from ato_service.ssp_workspace.generation import ModelPrompt, SspGenerationError
 from ato_service.ssp_workspace.service import (
     WorkspaceNotReviewableError,
     _impact_level,
+    _workspace_confirmation_context,
     approve_workspace_revision,
+    generate_workspace_draft,
     save_question_answer,
 )
+from ato_service.ssp_workspace.profile_bundles import load_profile_bundle, resolve_profile
 
 
 WORKSPACE_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
 REVISION_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 QUESTION_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
 NOW = datetime(2026, 8, 5, tzinfo=UTC)
+PROFILE_PATH = (
+    Path(__file__).parents[2]
+    / "reference"
+    / "ssp_profiles"
+    / "synthetic-fisma-rev5-1.0.0"
+)
 
 
 def _question_content(state: QuestionState) -> RevisionContent:
@@ -109,6 +121,122 @@ def test_save_question_answer_does_not_persist_rejected_replay() -> None:
             )
 
     save_revision.assert_not_awaited()
+
+
+def test_generation_control_terminal_failure_does_not_save_revision() -> None:
+    profile = resolve_profile(load_profile_bundle(PROFILE_PATH), "low")
+    snapshot = SimpleNamespace(
+        workspace_id=WORKSPACE_ID,
+        revision_id=REVISION_ID,
+        content=RevisionContent(),
+        system_name="Synthetic system",
+        profile=profile,
+    )
+    prompts: list[ModelPrompt] = []
+
+    async def model(prompt: ModelPrompt) -> str:
+        prompts.append(prompt)
+        if "sections" in prompt.output_schema["properties"]:
+            if len(prompts) == 1:
+                return "{"
+            return json.dumps(
+                {
+                    "schema_version": "1.0.0",
+                    "sections": [],
+                    "categorization": None,
+                }
+            )
+        return "{"
+
+    with (
+        patch(
+            "ato_service.ssp_workspace.service.require_ssp_model_allowed"
+        ),
+        patch(
+            "ato_service.ssp_workspace.service._generation_context",
+            new=AsyncMock(return_value=snapshot),
+        ),
+        patch(
+            "ato_service.ssp_workspace.service._save_edited_revision",
+            new=AsyncMock(),
+        ) as save_revision,
+        patch(
+            "ato_service.ssp_workspace.service._require_current_revision",
+            new=AsyncMock(),
+        ) as revalidate,
+        patch("ato_service.ssp_workspace.service.merge_generation") as merge,
+    ):
+        with pytest.raises(SspGenerationError) as caught:
+            asyncio.run(
+                generate_workspace_draft(
+                    AsyncMock(),
+                    workspace_id=WORKSPACE_ID,
+                    expected_revision_id=REVISION_ID,
+                    model=model,
+                    config=SimpleNamespace(),
+                    actor_id="isso@example.gov",
+                    now=NOW,
+                    audit_hmac_key=b"test-audit-key",
+                )
+            )
+
+    assert caught.value.attempts == 4
+    assert caught.value.repair_attempted is True
+    assert len(prompts) == 4
+    assert save_revision.await_count == 0
+    assert revalidate.await_count == 0
+    merge.assert_not_called()
+
+
+def test_workspace_confirmation_context_binds_canonical_sections_only_when_confirmed() -> None:
+    content = RevisionContent(
+        facts=(
+            FactContent(
+                key="system.system_definition_status",
+                value="confirmed",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
+            FactContent(
+                key="system.information_types_status",
+                value="stale",
+                provenance=Provenance.ISSO_ENTERED,
+            ),
+        ),
+        sections=(
+            SectionContent(
+                key="system.authorization_boundary",
+                title="Authorization boundary",
+                content="Confirmed boundary.",
+                state=SectionState.EDITED,
+            ),
+            SectionContent(
+                key="system.components",
+                title="Components",
+                content="Confirmed components.",
+                state=SectionState.EDITED,
+            ),
+            SectionContent(
+                key="system.data_types",
+                title="Information types",
+                content="Stale information types.",
+                state=SectionState.EDITED,
+            ),
+            SectionContent(
+                key="system.owner",
+                title="System owner",
+                content="Unrelated section.",
+                state=SectionState.EDITED,
+            ),
+        ),
+    )
+
+    context = _workspace_confirmation_context(content)
+
+    assert context.confirmed_system_definition_sections == (
+        ("system.authorization_boundary", "Confirmed boundary."),
+        ("system.components", "Confirmed components."),
+    )
+    assert context.confirmed_information_types_sections == ()
 
 
 def test_approval_rejects_provisional_impact_without_confirmation() -> None:

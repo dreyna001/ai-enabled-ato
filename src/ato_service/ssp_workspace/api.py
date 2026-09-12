@@ -39,7 +39,7 @@ from ato_service.problems import (
 from ato_service.ssp_workspace.categorization import CategorizationValidationError
 from ato_service.ssp_workspace.chat import load_chat_history, send_chat_message
 from ato_service.ssp_workspace.chat_contracts import ChatHistory, ChatMessageRequest
-from ato_service.ssp_workspace.contracts import EvidenceLink
+from ato_service.ssp_workspace.contracts import EvidenceLink, ProfileState
 from ato_service.ssp_workspace.editing import WorkspaceEditError
 from ato_service.ssp_workspace.evidence import (
     EvidenceRemovalError,
@@ -252,6 +252,31 @@ class ProposePatchRequest(ExpectedRevisionRequest):
 class MigrateProfileRequest(ExpectedRevisionRequest):
     profile_version_id: uuid.UUID
     impact_level: str = Field(pattern=r"^(low|moderate|high)$")
+
+
+class SspProfileVersionResponse(BaseModel):
+    """Profile version metadata exposed to the administration portal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile_version_id: uuid.UUID
+    profile_id: str = Field(min_length=1, max_length=128)
+    version: str = Field(min_length=1, max_length=64)
+    status: ProfileState
+    bundle_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    imported_by: str = Field(min_length=1, max_length=255)
+    imported_at: datetime
+    activated_at: datetime | None
+    display_name: str = Field(min_length=1)
+
+
+class SspProfilesResponse(BaseModel):
+    """Profile list plus the server-authoritative administration capability."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    can_manage: bool
+    items: list[SspProfileVersionResponse]
 
 
 ExportFormat = Literal["json", "docx", "oscal-json"]
@@ -544,31 +569,29 @@ def build_ssp_workspace_router() -> APIRouter:
         )
         return JSONResponse(status_code=result.status, content=result.payload)
 
-    @router.get("/ssp-profiles")
+    @router.get("/ssp-profiles", response_model=SspProfilesResponse)
     async def get_profiles(
         principal: Annotated[AuthenticatedPrincipal, Depends(get_read_principal)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
-    ) -> dict[str, Any]:
-        del principal
+    ) -> SspProfilesResponse:
         rows = await list_profiles(session)
-        return {
-            "items": [
-                {
-                    "profile_version_id": str(item.profile_version_id),
-                    "profile_id": item.profile_key,
-                    "version": item.version,
-                    "status": item.status,
-                    "bundle_sha256": item.bundle_sha256,
-                    "imported_by": item.imported_by,
-                    "imported_at": item.imported_at.isoformat(),
-                    "activated_at": (
-                        item.activated_at.isoformat() if item.activated_at else None
-                    ),
-                    "display_name": item.bundle["manifest"]["display_name"],
-                }
+        return SspProfilesResponse(
+            can_manage=principal_has_role(principal, "platform_admin"),
+            items=[
+                SspProfileVersionResponse(
+                    profile_version_id=item.profile_version_id,
+                    profile_id=item.profile_key,
+                    version=item.version,
+                    status=item.status,
+                    bundle_sha256=item.bundle_sha256,
+                    imported_by=item.imported_by,
+                    imported_at=item.imported_at,
+                    activated_at=item.activated_at,
+                    display_name=item.bundle["manifest"]["display_name"],
+                )
                 for item in rows
-            ]
-        }
+            ],
+        )
 
     @router.post("/ssp-profiles/import")
     async def post_profile_import(

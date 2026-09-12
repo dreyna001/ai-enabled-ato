@@ -222,10 +222,29 @@ export type SystemDefinitionProposalConflict = {
   note: string;
 };
 
+export type SystemDefinitionAnalysisStatus =
+  | "semantic_analysis_complete"
+  | "analysis_failed"
+  | "analysis_failure"
+  | "ingested"
+  | "ocr"
+  | "unknown";
+
 export type SystemDefinitionProposal = {
   source: string;
+  analysisStatus: SystemDefinitionAnalysisStatus;
   artifactId: string;
+  artifactSha256: string;
   displayFilename: string;
+  locator: Record<string, unknown>;
+  sourceRevisionId?: string;
+  componentCount: number | null;
+  interconnectionCount: number | null;
+  lowConfidenceComponentCount: number | null;
+  lowConfidenceInterconnectionCount: number | null;
+  conflictCount: number;
+  stale: boolean;
+  failureKind?: string;
   conflicts: SystemDefinitionProposalConflict[];
 };
 

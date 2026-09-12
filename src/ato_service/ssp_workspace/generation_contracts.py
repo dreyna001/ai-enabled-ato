@@ -15,6 +15,8 @@ from ato_service.ssp_workspace.profile_bundles import (
 )
 
 GENERATION_SCHEMA_VERSION = "1.0.0"
+NARRATIVE_GENERATION_SCHEMA_VERSION = "1.0.0"
+CONTROL_GENERATION_SCHEMA_VERSION = "1.0.0"
 PATCH_SCHEMA_VERSION = "1.0.0"
 CATEGORIZATION_PROPOSAL_SCHEMA_VERSION = "1.0.0"
 MAX_SECTIONS_PER_RESPONSE = 100
@@ -111,6 +113,22 @@ class GenerationResult:
     controls: tuple[GeneratedControl, ...]
     questions: tuple[GeneratedQuestion, ...]
     categorization: GeneratedCategorization | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeGenerationResult:
+    """Validated output from the SSP narrative generation pass."""
+
+    sections: tuple[GeneratedSection, ...]
+    categorization: GeneratedCategorization | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ControlGenerationResult:
+    """Validated output from the control implementation generation pass."""
+
+    controls: tuple[GeneratedControl, ...]
+    questions: tuple[GeneratedQuestion, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,6 +367,133 @@ def parse_generation_response(
         questions=questions,
         categorization=categorization,
     )
+
+
+def parse_narrative_generation_response(
+    raw_text: str,
+    *,
+    allowed_section_ids: set[str] | frozenset[str],
+    allowed_fact_ids: set[str] | frozenset[str],
+    profile_policy: SelectedProfilePolicy | None = None,
+) -> NarrativeGenerationResult:
+    """Parse the section-only SSP narrative pass response."""
+
+    payload = _parse_json_object(raw_text)
+    payload.setdefault("categorization", None)
+    _require_schema_version(payload, NARRATIVE_GENERATION_SCHEMA_VERSION)
+    _require_exact_keys(
+        payload,
+        {"schema_version", "sections", "categorization"},
+        context="narrative generation response",
+    )
+    section_entries = _object_list(
+        payload.get("sections"),
+        field_name="sections",
+        maximum=MAX_SECTIONS_PER_RESPONSE,
+    )
+    sections = tuple(
+        _parse_section(
+            entry,
+            allowed_section_ids=allowed_section_ids,
+            allowed_fact_ids=allowed_fact_ids,
+            section_requirements=(profile_policy.sections if profile_policy else None),
+        )
+        for entry in section_entries
+    )
+    _require_unique(
+        [section.section_id for section in sections],
+        field_name="section_id",
+    )
+    return NarrativeGenerationResult(
+        sections=sections,
+        categorization=_parse_categorization(
+            payload.get("categorization"),
+            allowed_fact_ids=allowed_fact_ids,
+        ),
+    )
+
+
+def parse_control_generation_response(
+    raw_text: str,
+    *,
+    allowed_section_ids: set[str] | frozenset[str],
+    allowed_control_ids: set[str] | frozenset[str],
+    allowed_fact_ids: set[str] | frozenset[str],
+    profile_policy: SelectedProfilePolicy | None = None,
+) -> ControlGenerationResult:
+    """Parse the control-only generation pass response."""
+
+    payload = _parse_json_object(raw_text)
+    payload.setdefault("questions", [])
+    _require_schema_version(payload, CONTROL_GENERATION_SCHEMA_VERSION)
+    _require_exact_keys(
+        payload,
+        {"schema_version", "controls", "questions"},
+        context="control generation response",
+    )
+    control_entries = _object_list(
+        payload.get("controls"),
+        field_name="controls",
+        maximum=MAX_CONTROLS_PER_RESPONSE,
+    )
+    question_entries = _object_list(
+        payload.get("questions"),
+        field_name="questions",
+        maximum=MAX_QUESTIONS_PER_RESPONSE,
+    )
+    (
+        status_allowlist,
+        responsibility_allowlist,
+        owner_allowlist,
+        agent_statement_evidence,
+        _section_requirements,
+    ) = _resolve_enforcement_policy(
+        profile_policy=profile_policy,
+        allowed_implementation_statuses=None,
+        allowed_responsibilities=None,
+        allowed_owner_types=None,
+        evidence_required_for_agent_statement=None,
+    )
+    reject_oscal_parameter_insert_syntax = (
+        profile_policy.implementation_statement_rules.reject_oscal_parameter_insert_syntax
+        if profile_policy is not None
+        else True
+    )
+    controls = tuple(
+        _parse_control(
+            entry,
+            allowed_control_ids=allowed_control_ids,
+            allowed_fact_ids=allowed_fact_ids,
+            allowed_implementation_statuses=status_allowlist,
+            allowed_responsibilities=responsibility_allowlist,
+            evidence_required_for_agent_statement=agent_statement_evidence,
+            reject_oscal_parameter_insert_syntax=reject_oscal_parameter_insert_syntax,
+        )
+        for entry in control_entries
+    )
+    questions = tuple(
+        _parse_question(
+            entry,
+            allowed_section_ids=allowed_section_ids,
+            allowed_control_ids=allowed_control_ids,
+            allowed_owner_types=owner_allowlist,
+        )
+        for entry in question_entries
+    )
+    _require_unique(
+        [control.control_id for control in controls],
+        field_name="control_id",
+    )
+    _require_unique(
+        [question.question_key for question in questions],
+        field_name="question_key",
+    )
+    _validate_parameterized_control_questions(
+        controls=controls,
+        questions=questions,
+        profile_policy=profile_policy,
+    )
+    return ControlGenerationResult(controls=controls, questions=questions)
 
 
 def _parse_categorization(

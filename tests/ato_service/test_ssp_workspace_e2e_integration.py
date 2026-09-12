@@ -237,17 +237,25 @@ def test_ssp_workspace_reaches_approved_json_and_docx_exports(tmp_path: Path) ->
                     ),
                     "system.data_types": "- Federal grant records\n- Account data",
                 }
+                properties = prompt.output_schema["properties"]
+                if "sections" in properties:
+                    return json.dumps(
+                        {
+                            "schema_version": "1.0.0",
+                            "sections": [
+                                {
+                                    "section_id": item.item_id,
+                                    "content": section_content[item.item_id],
+                                    "supporting_fact_ids": [fact_id],
+                                }
+                                for item in profile.ssp_required_items
+                            ],
+                            "categorization": None,
+                        }
+                    )
                 return json.dumps(
                     {
                         "schema_version": "1.0.0",
-                        "sections": [
-                            {
-                                "section_id": item.item_id,
-                                "content": section_content[item.item_id],
-                                "supporting_fact_ids": [fact_id],
-                            }
-                            for item in profile.ssp_required_items
-                        ],
                         "controls": [
                             {
                                 "control_id": control.control_id,

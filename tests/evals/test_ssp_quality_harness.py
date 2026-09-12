@@ -24,11 +24,12 @@ def test_contract_smoke_selftest_is_local_and_not_quality_evidence() -> None:
     assert all(case.assertions["contract_shape_smoke"].value for case in report.cases)
 
 
-def test_quality_dataset_is_three_grounded_cases_and_smoke_passes() -> None:
+def test_quality_dataset_covers_split_passes_and_smoke_passes() -> None:
     dataset = build_ssp_safety_quality_dataset()
-    assert len(dataset.cases) == 3
+    assert len(dataset.cases) == 4
     assert {case.inputs["step"] for case in dataset.cases} == {
-        "initial_generation",
+        "ssp_narrative_generation",
+        "control_generation",
         "categorization",
     }
     assert all("evidence_facts" in case.inputs for case in dataset.cases)
@@ -36,7 +37,7 @@ def test_quality_dataset_is_three_grounded_cases_and_smoke_passes() -> None:
 
     report = run_quality_smoke_selftest()
     assert not report.failures
-    assert len(report.cases) == 3
+    assert len(report.cases) == 4
     assert all(
         case.metadata == {"scope": CONTRACT_SMOKE_ONLY_LABEL}
         for case in report.cases

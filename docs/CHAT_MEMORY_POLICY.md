@@ -8,11 +8,14 @@ keep one private history for each authenticated user and system, while shared
 chat context is limited to explicitly authorized canonical system records.
 User chats are never automatically promoted to canonical records.
 
-The retention operator in this change is a manual, physical-expiry operation.
-It does not create, install, enable, or claim a scheduled cleanup mechanism.
-The backend uses PostgreSQL conversation, turn, and message records. It reuses
-the configured chat limits and guarded PydanticAI model runtime; no vector
-database or second model client is introduced.
+The retention operator performs explicit physical expiry. The existing bounded
+`purge-chat` command remains the only purge implementation; this change adds
+opt-in systemd scheduling artifacts around it. Install and upgrade scripts only
+stage those artifacts and explicitly leave them disabled. They do not invoke
+the purge or claim that recurring cleanup is active. The backend uses
+PostgreSQL conversation, turn, and message records. It reuses the configured
+chat limits and guarded PydanticAI model runtime; no vector database or second
+model client is introduced.
 
 ## Primary retention
 
@@ -50,7 +53,81 @@ This document therefore makes no claim of immediate backup removal.
 Legal-hold handling and customer-specific retention overrides are not supported
 by this scope. Until an approved customer policy is configured and validated,
 HS-010 remains at its normative default: this feature must not be presented as a
-customer compliance determination or as configured scheduled cleanup.
+customer compliance determination or as enabled scheduled cleanup. Organization
+evidence and ownership inputs are tracked separately in
+[`ORGANIZATION_INPUTS.md`](ORGANIZATION_INPUTS.md); the checklist does not close
+any hard stop.
+
+## Optional daily scheduling
+
+The deployment package contains a production-shaped pair and a WSL override:
+
+| Environment | Service configuration | Timer | Runtime config |
+| --- | --- | --- | --- |
+| On-prem | `ato-chat-retention.service` | `ato-chat-retention.timer` | `/etc/ato-analyzer/runtime-config.json` |
+| WSL local | `ato-chat-retention.wsl-local.service` restored as `ato-chat-retention.service` | `ato-chat-retention.timer` | `/opt/ato-analyzer/runtime-config.json` |
+
+The daily timer invokes one `Type=oneshot` service instance. The timer targets
+that same unit, so systemd does not start a second instance while a bounded
+batch is active. The service has no automatic restart: a non-zero `purge-chat`
+exit is a failed systemd invocation and remains visible in the journal and
+unit status. A successful invocation still processes only one bounded batch;
+`batch_limit_reached: true` means the next scheduled or approved manual run is
+needed.
+
+Fresh on-prem `install.sh` staging disables both units; an upgrade preserves an
+already-enabled retention timer and otherwise leaves it disabled. Before any
+upgrade reinstall, backup checks, worker drain, or migrations, `upgrade.sh`
+stops an active retention timer, service, or pending retention job. A stop
+failure aborts the upgrade before package or unit replacement. For WSL, the
+upgrade restores the WSL service override and common timer, reloads systemd,
+and only then restores the timer's prior enabled/active state. A previously
+disabled timer is not enabled. An interrupted in-flight purge is not restarted
+automatically; its operator must inspect the resulting unit/journal status.
+Neither path directly invokes `purge-chat` or newly opts in a previously
+disabled timer. After an upgrade restores the correct unit and configuration,
+a previously approved `Persistent=true` timer may resume overdue work.
+Only the database DSN and audit HMAC credentials are mapped through systemd;
+the purge has no model, OIDC, backup, or shell-sourced secret configuration.
+Output is limited to the command's redacted counts and timestamp in journald.
+
+After the organization has reviewed the [organization-input checklist](ORGANIZATION_INPUTS.md)
+and approved the applicable default-policy operation, an operator may opt in
+on the intended host with:
+
+```bash
+sudo systemctl enable --now ato-chat-retention.timer
+systemctl status ato-chat-retention.timer --no-pager
+```
+
+These commands are documentation only and were not executed as part of this
+change. Do not enable the timer for customer data when legal-hold behavior,
+customer retention policy, backup expiry, or required ownership evidence is
+unresolved.
+
+## Delivery boundary
+
+### Code-ready in this repository
+
+- Completed private turns have seven-calendar-year expiry under the normative
+  default, with calendar-safe February 29 handling.
+- `purge-chat` removes only eligible completed turns and idle conversations in
+  one bounded batch and records a non-sensitive audit event transactionally.
+- On-prem and WSL systemd service/timer artifacts are hardened, daily, and
+  opt-in. Fresh staging is disabled; upgrades safely preserve an explicitly
+  enabled timer only after the replacement is complete.
+
+### Needs organization input or host validation
+
+- Legal-hold semantics and any customer-specific retention or approval override.
+- Owner approval to schedule the command, plus backup expiry and restore
+  evidence for the intended database and storage.
+- Production systemd, PostgreSQL, credential metadata, journald, and failure
+  behavior on the target host.
+
+The code-ready items do not close HS-001 through HS-006, HS-008, HS-009, or
+HS-010, and do not substitute for the organization evidence listed in
+[`ORGANIZATION_INPUTS.md`](ORGANIZATION_INPUTS.md).
 
 ## Operator procedure
 
@@ -67,14 +144,14 @@ content, private history content, or user/actor identifiers. One invocation
 processes at most the configured operator batch and reports whether the batch
 limit was reached; repeat the command through the approved operations process
 until it reports `batch_limit_reached: false`. The command must be run only
-against the intended disposable or customer-approved database. It is not run
-automatically by this change.
+against the intended disposable or customer-approved database. The optional
+timer is not enabled automatically by this change.
 
-If an operator needs recurring execution, they must use the installation's
-already-approved operations mechanism and explicitly configure, review, and
-enable that invocation under the customer's change-control process. This
-change does not add a cron entry, systemd timer, scheduler unit, or claim that
-recurring cleanup is active.
+If an operator needs recurring execution, they must use the supplied systemd
+timer only after explicitly configuring, reviewing, and enabling that
+invocation under the customer's change-control process. A timer failure must
+be investigated before a later run is treated as successful; recurring cleanup
+is not active unless the operator has enabled the timer.
 
 ## Bounded LLM step
 

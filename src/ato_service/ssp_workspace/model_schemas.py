@@ -22,6 +22,7 @@ from ato_service.ssp_workspace.agency_docx_contracts import (
     SCHEMA_VERSION as AGENCY_DOCX_SCHEMA_VERSION,
 )
 from ato_service.ssp_workspace.generation_contracts import (
+    CONTROL_GENERATION_SCHEMA_VERSION,
     CATEGORIZATION_PROPOSAL_SCHEMA_VERSION,
     GENERATION_SCHEMA_VERSION,
     MAX_CONTROLS_PER_RESPONSE,
@@ -30,6 +31,7 @@ from ato_service.ssp_workspace.generation_contracts import (
     MAX_QUESTION_LENGTH,
     MAX_QUESTIONS_PER_RESPONSE,
     MAX_SECTIONS_PER_RESPONSE,
+    NARRATIVE_GENERATION_SCHEMA_VERSION,
     PATCH_SCHEMA_VERSION,
 )
 Schema = dict[str, object]
@@ -46,6 +48,8 @@ MAX_FACT_TEXT_CHARACTERS = 8_000
 MAX_VISION_FACTS = 200
 
 INITIAL_GENERATION_SCHEMA_NAME = "initial_generation"
+NARRATIVE_GENERATION_SCHEMA_NAME = "ssp_narrative_generation"
+CONTROL_GENERATION_SCHEMA_NAME = "control_generation"
 CATEGORIZATION_SCHEMA_NAME = "categorization"
 PATCH_SCHEMA_NAME = "patch"
 AGENCY_DOCX_MAPPING_SCHEMA_NAME = "agency_docx_mapping"
@@ -138,6 +142,24 @@ class InitialGenerationOutput(_StrictOutputModel):
         max_length=MAX_QUESTIONS_PER_RESPONSE
     )
     categorization: CategorizationOutput | None
+
+
+class SspNarrativeGenerationOutput(_StrictOutputModel):
+    """Closed provider-facing contract for the SSP narrative pass."""
+
+    schema_version: Literal[NARRATIVE_GENERATION_SCHEMA_VERSION]
+    sections: list[GenerationSectionOutput] = Field(max_length=MAX_SECTIONS_PER_RESPONSE)
+    categorization: CategorizationOutput | None
+
+
+class ControlGenerationOutput(_StrictOutputModel):
+    """Closed provider-facing contract for the control implementation pass."""
+
+    schema_version: Literal[CONTROL_GENERATION_SCHEMA_VERSION]
+    controls: list[GenerationControlOutput] = Field(max_length=MAX_CONTROLS_PER_RESPONSE)
+    questions: list[GenerationQuestionOutput] = Field(
+        max_length=MAX_QUESTIONS_PER_RESPONSE
+    )
 
 
 class CategorizationProposalOutput(_StrictOutputModel):
@@ -377,6 +399,8 @@ class DiagramProposalOutput(_StrictOutputModel):
 
 _SCHEMA_MODELS: dict[str, type[BaseModel]] = {
     INITIAL_GENERATION_SCHEMA_NAME: InitialGenerationOutput,
+    NARRATIVE_GENERATION_SCHEMA_NAME: SspNarrativeGenerationOutput,
+    CONTROL_GENERATION_SCHEMA_NAME: ControlGenerationOutput,
     CATEGORIZATION_SCHEMA_NAME: CategorizationProposalOutput,
     PATCH_SCHEMA_NAME: PatchOutput,
     AGENCY_DOCX_MAPPING_SCHEMA_NAME: AgencyDocxMappingOutput,
@@ -451,6 +475,8 @@ __all__ = [
     "CATEGORIZATION_SCHEMA_NAME",
     "DIAGRAM_PROPOSAL_SCHEMA_NAME",
     "INITIAL_GENERATION_SCHEMA_NAME",
+    "NARRATIVE_GENERATION_SCHEMA_NAME",
+    "CONTROL_GENERATION_SCHEMA_NAME",
     "PATCH_SCHEMA_NAME",
     "VISION_FACTS_SCHEMA_NAME",
     "AgencyDocxMappingOutput",
@@ -471,6 +497,8 @@ __all__ = [
     "GenerationQuestionOutput",
     "GenerationSectionOutput",
     "InitialGenerationOutput",
+    "SspNarrativeGenerationOutput",
+    "ControlGenerationOutput",
     "PatchOutput",
     "Schema",
     "SectionPatchChanges",

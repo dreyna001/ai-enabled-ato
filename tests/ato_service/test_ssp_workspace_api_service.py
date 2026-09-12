@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 import uuid
 
@@ -10,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from ato_service.auth_context import AuthenticatedPrincipal
 from ato_service.main import create_app
+from ato_service.package_rbac import configure_package_role_groups
 from ato_service.ssp_workspace.api import (
     CreateWorkspaceRequest,
     _error_response,
@@ -40,6 +43,101 @@ from ato_service.ssp_workspace.diagram_analysis import DiagramAnalysisError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture
+def reset_package_role_groups():
+    configure_package_role_groups({})
+    yield
+    configure_package_role_groups({})
+
+
+def _profile_get_principal(groups: tuple[str, ...]) -> AuthenticatedPrincipal:
+    return AuthenticatedPrincipal(
+        actor_id="profile-reader@example.gov",
+        groups=groups,
+        csrf_token="c" * 32,
+        allowed_origins=("https://portal.example.gov",),
+    )
+
+
+def _profile_row() -> SimpleNamespace:
+    return SimpleNamespace(
+        profile_version_id=uuid.UUID("11111111-1111-4111-8111-111111111111"),
+        profile_key="agency-fisma-nist-sp800-53-rev5",
+        version="1.4.0",
+        status="inactive",
+        bundle_sha256="a" * 64,
+        imported_by="profile-reader@example.gov",
+        imported_at=datetime(2026, 9, 10, 12, 0, tzinfo=UTC),
+        activated_at=None,
+        bundle={"manifest": {"display_name": "Agency FISMA profile"}},
+    )
+
+
+def _get_profiles_response(
+    principal: AuthenticatedPrincipal,
+):
+    app = FastAPI()
+    app.include_router(build_ssp_workspace_router())
+    app.dependency_overrides[get_read_principal] = lambda: principal
+    app.dependency_overrides[get_db_session] = lambda: AsyncMock()
+    with patch(
+        "ato_service.ssp_workspace.api.list_profiles",
+        new=AsyncMock(return_value=[_profile_row()]),
+    ):
+        with TestClient(app) as client:
+            return client.get("/ssp-profiles")
+
+
+def test_get_profiles_reports_default_platform_admin_capability(
+    reset_package_role_groups,
+) -> None:
+    response = _get_profiles_response(
+        _profile_get_principal(("platform-admins",)),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"can_manage", "items"}
+    assert body["can_manage"] is True
+    assert set(body["items"][0]) == {
+        "profile_version_id",
+        "profile_id",
+        "version",
+        "status",
+        "bundle_sha256",
+        "imported_by",
+        "imported_at",
+        "activated_at",
+        "display_name",
+    }
+    assert body["items"][0]["profile_id"] == "agency-fisma-nist-sp800-53-rev5"
+    assert body["items"][0]["bundle_sha256"] == "a" * 64
+
+
+def test_get_profiles_uses_configured_platform_admin_group(
+    reset_package_role_groups,
+) -> None:
+    configure_package_role_groups(
+        {"OIDC_GROUP_ROLE_MAPPING": {"platform_admin": ["profile-operators"]}}
+    )
+
+    response = _get_profiles_response(
+        _profile_get_principal(("profile-operators",)),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["can_manage"] is True
+
+
+def test_get_profiles_reports_non_admin_capability(
+    reset_package_role_groups,
+) -> None:
+    response = _get_profiles_response(_profile_get_principal(("owners",)))
+
+    assert response.status_code == 200
+    assert response.json()["can_manage"] is False
 
 
 def test_workspace_router_exposes_complete_bounded_workflow() -> None:

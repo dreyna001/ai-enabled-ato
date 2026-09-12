@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "boundary_narrative": "The authorization boundary contains the application and data tiers shown inside the managed production zone.",
+  "components": [
+    {
+      "component_id": "web",
+      "name": "Web tier",
+      "purpose": "Serves the user interface",
+      "placement": "inside",
+      "source": "diagram",
+      "confidence": "high"
+    },
+    {
+      "component_id": "logging",
+      "name": "Shared logging service",
+      "purpose": "Receives audit events outside the managed boundary",
+      "placement": "outside",
+      "source": "diagram",
+      "confidence": "low"
+    }
+  ],
+  "interconnections": [
+    {
+      "interconnection_id": "logging-link",
+      "connected_organization": "Agency operations",
+      "connected_system": "Shared logging service",
+      "direction": "outbound",
+      "data_types": ["audit events"],
+      "interface_protocol": "TLS",
+      "source": "diagram",
+      "confidence": "low"
+    }
+  ],
+  "conflicts": [
+    {
+      "field": "logging placement",
+      "diagram_value": "outside",
+      "text_value": "inside",
+      "note": "Confirm the service boundary and ownership before confirmation."
+    }
+  ]
+}

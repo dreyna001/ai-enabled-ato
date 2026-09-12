@@ -21,7 +21,9 @@ usage() {
 Usage: upgrade.sh [options]
 
 Drain workers, reinstall package bytes from the repository, optionally migrate,
-and restart ato-api.service when it was active. Worker units remain disabled.
+and restart ato-api.service when it was active. Worker and chat-retention units
+remain disabled on fresh staging; an existing enabled chat-retention timer is
+preserved.
 
 Options:
   --no-migrate           Skip alembic upgrade head
@@ -110,6 +112,79 @@ restore_wsl_runtime_config() {
     chmod 640 "$runtime_config_dest" || err "Failed to set WSL runtime config permissions: $runtime_config_dest"
 }
 
+install_wsl_retention_unit_file() {
+    local src="$1"
+    local dest="$2"
+    [[ -f "$src" ]] || err "Missing WSL retention unit: $src"
+    if [[ -L "$dest" ]]; then
+        err "WSL retention unit destination must be a regular file, not a symlink: $dest"
+    fi
+    if [[ -e "$dest" && ! -f "$dest" ]]; then
+        err "WSL retention unit destination must be a regular file: $dest"
+    fi
+    cp "$src" "$dest" || err "Failed to install WSL retention unit: $dest"
+    sed -i 's/\r$//' "$dest" 2>/dev/null || true
+    chown root:root "$dest" || err "Failed to set owner on $dest"
+    chmod 644 "$dest" || err "Failed to set permissions on $dest"
+}
+
+install_wsl_chat_retention_units() {
+    install_wsl_retention_unit_file \
+        "$REPO_DIR/deployment/systemd/ato-chat-retention.wsl-local.service" \
+        /etc/systemd/system/ato-chat-retention.service
+    install_wsl_retention_unit_file \
+        "$REPO_DIR/deployment/systemd/ato-chat-retention.timer" \
+        /etc/systemd/system/ato-chat-retention.timer
+}
+
+chat_retention_unit_has_job() {
+    local unit="$1"
+    systemctl list-jobs --no-legend 2>/dev/null \
+        | awk -v unit="$unit" '$2 == unit { found=1 } END { exit found ? 0 : 1 }'
+}
+
+stop_chat_retention_before_upgrade() {
+    chat_retention_timer_was_enabled=false
+    chat_retention_timer_was_active=false
+
+    if systemctl is-enabled --quiet ato-chat-retention.timer 2>/dev/null; then
+        chat_retention_timer_was_enabled=true
+    fi
+    if systemctl is-active --quiet ato-chat-retention.timer 2>/dev/null; then
+        chat_retention_timer_was_active=true
+    fi
+
+    if systemctl is-active --quiet ato-chat-retention.timer 2>/dev/null \
+        || chat_retention_unit_has_job ato-chat-retention.timer; then
+        systemctl stop ato-chat-retention.timer \
+            || err "Failed to stop ato-chat-retention.timer before upgrade"
+    fi
+    if systemctl is-active --quiet ato-chat-retention.service 2>/dev/null \
+        || chat_retention_unit_has_job ato-chat-retention.service; then
+        systemctl stop ato-chat-retention.service \
+            || err "Failed to stop ato-chat-retention.service before upgrade"
+    fi
+
+    if [[ "$chat_retention_timer_was_enabled" == "true" ]]; then
+        systemctl disable ato-chat-retention.timer \
+            || err "Failed to temporarily disable ato-chat-retention.timer during upgrade"
+        if systemctl is-enabled --quiet ato-chat-retention.timer 2>/dev/null; then
+            err "ato-chat-retention.timer remained enabled during upgrade"
+        fi
+    fi
+}
+
+restore_chat_retention_state() {
+    if [[ "$chat_retention_timer_was_enabled" == "true" ]]; then
+        systemctl enable ato-chat-retention.timer \
+            || err "Failed to restore enabled ato-chat-retention.timer"
+    fi
+    if [[ "$chat_retention_timer_was_active" == "true" ]]; then
+        systemctl start ato-chat-retention.timer \
+            || err "Failed to restore active ato-chat-retention.timer"
+    fi
+}
+
 if [[ "$DRY_RUN" == "true" ]]; then
     run_upgrade_dry_run
     echo "Upgrade dry-run complete."
@@ -124,16 +199,20 @@ if systemctl is-active --quiet ato-api.service; then
     api_was_active=true
 fi
 
+wsl_upgrade=false
+if is_wsl; then
+    wsl_upgrade=true
+fi
+
+# Keep retention out of package/config replacement, backup checks, worker drain,
+# and migrations. Restoration happens only after the correct unit is installed.
+stop_chat_retention_before_upgrade
+
 info "Verifying backup contract prerequisites (fail-safe; HS-008 may block production claims)"
 bash "$SCRIPT_DIR/verify_backup_contract.sh" --pre-upgrade || err "Backup contract verification failed"
 
 info "Draining workers"
 bash "$SCRIPT_DIR/drain_workers.sh"
-
-wsl_upgrade=false
-if is_wsl; then
-    wsl_upgrade=true
-fi
 
 install_args=()
 if [[ "$RUN_MIGRATE" == "true" ]]; then
@@ -184,7 +263,14 @@ if [[ "$wsl_upgrade" == "true" ]]; then
         cp "$REPO_DIR/deployment/systemd/ato-analyzer-worker.wsl-local.service" \
             /etc/systemd/system/ato-analyzer-worker.service
     fi
+    install_wsl_chat_retention_units
     systemctl daemon-reload || err "Failed to reload systemd after WSL unit restore"
+    restore_chat_retention_state
+    if [[ "$chat_retention_timer_was_enabled" == "true" ]]; then
+        info "Preserved enabled WSL chat-retention timer"
+    else
+        info "WSL chat-retention timer remains disabled"
+    fi
     info "Restored WSL systemd units (API on 8001, /opt runtime config)"
     storage_bind="$INSTALL_DIR/data/ato-storage"
     if [[ -d /var/ato-packages ]] && ! mountpoint -q "$storage_bind" 2>/dev/null; then
@@ -214,6 +300,8 @@ if [[ "$wsl_upgrade" == "true" ]]; then
 
     echo ""
     echo "WSL upgrade verified at ${WSL_API_LOOPBACK_URL}/health/live"
+else
+    restore_chat_retention_state
 fi
 
-info "Upgrade complete; worker units remain disabled until explicitly enabled"
+info "Upgrade complete; worker units remain disabled; existing chat-retention timer enablement was preserved"

@@ -9,6 +9,7 @@ import {
   mapControlResponse,
   mapInformationTypes,
   mapSystemDefinition,
+  mapSystemDefinitionProposal,
   mapWorkspaceEnvelope,
   previewAgencyDocxRender,
 } from "./sspWorkspace";
@@ -578,6 +579,90 @@ describe("mapSystemDefinition", () => {
       components: [],
       interconnections: [],
       proposal: null,
+    });
+  });
+});
+
+describe("mapSystemDefinitionProposal", () => {
+  it("maps semantic-analysis provenance, coverage, and review signals", () => {
+    const proposal = mapSystemDefinitionProposal([
+      {
+        key: "system.system_definition_proposal",
+        value: JSON.stringify({
+          source: "diagram_analysis",
+          analysis_status: "semantic_analysis_complete",
+          artifact_id: "30000000-0000-4000-8000-000000000010",
+          artifact_sha256: "a".repeat(64),
+          display_filename: "architecture.pdf",
+          locator: { kind: "rendered_page", page: 3 },
+          source_revision_id: "10000000-0000-4000-8000-000000000004",
+          component_count: 2,
+          interconnection_count: 1,
+          low_confidence_component_count: 1,
+          low_confidence_interconnection_count: 0,
+          conflicts: [
+            {
+              field: "component placement",
+              diagram_value: "outside",
+              text_value: "inside",
+              note: "Confirm the boundary.",
+            },
+          ],
+        }),
+      },
+    ]);
+
+    expect(proposal).toEqual({
+      source: "diagram_analysis",
+      analysisStatus: "semantic_analysis_complete",
+      artifactId: "30000000-0000-4000-8000-000000000010",
+      artifactSha256: "a".repeat(64),
+      displayFilename: "architecture.pdf",
+      locator: { kind: "rendered_page", page: 3 },
+      sourceRevisionId: "10000000-0000-4000-8000-000000000004",
+      componentCount: 2,
+      interconnectionCount: 1,
+      lowConfidenceComponentCount: 1,
+      lowConfidenceInterconnectionCount: 0,
+      conflictCount: 1,
+      stale: false,
+      conflicts: [
+        {
+          field: "component placement",
+          diagramValue: "outside",
+          textValue: "inside",
+          note: "Confirm the boundary.",
+        },
+      ],
+    });
+  });
+
+  it("preserves OCR status and missing coverage rather than claiming analysis", () => {
+    expect(
+      mapSystemDefinitionProposal([
+        {
+          key: "system.system_definition_proposal",
+          value: JSON.stringify({
+            source: "ocr",
+            artifact_id: "30000000-0000-4000-8000-000000000010",
+            conflicts: [],
+          }),
+        },
+      ]),
+    ).toEqual({
+      source: "ocr",
+      analysisStatus: "ocr",
+      artifactId: "30000000-0000-4000-8000-000000000010",
+      artifactSha256: "",
+      displayFilename: "",
+      locator: {},
+      componentCount: null,
+      interconnectionCount: null,
+      lowConfidenceComponentCount: null,
+      lowConfidenceInterconnectionCount: null,
+      conflictCount: 0,
+      stale: false,
+      conflicts: [],
     });
   });
 });

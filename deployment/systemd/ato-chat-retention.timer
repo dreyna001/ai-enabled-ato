@@ -1,0 +1,11 @@
+[Unit]
+Description=Run bounded chat retention purge daily (opt-in)
+Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=ato-chat-retention.service
+
+[Install]
+WantedBy=timers.target

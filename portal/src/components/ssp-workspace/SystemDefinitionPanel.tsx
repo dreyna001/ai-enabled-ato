@@ -56,6 +56,14 @@ function formatLocator(locator: Record<string, unknown>): string {
   return JSON.stringify(locator);
 }
 
+function sourceLocation(locator: Record<string, unknown>): string {
+  const page = locator.page;
+  if (typeof page === "number" && Number.isInteger(page) && page > 0) {
+    return `page ${page}`;
+  }
+  return formatLocator(locator);
+}
+
 function emptyComponent(): SystemDefinitionComponent {
   return {
     componentId: "",
@@ -148,14 +156,8 @@ export function SystemDefinitionPanel({
   const [values, setValues] = useState<SystemDefinitionChange>({
     boundaryNarrative: systemDefinition.boundaryNarrative,
     diagramLinks: systemDefinition.diagramLinks,
-    components:
-      systemDefinition.components.length > 0
-        ? systemDefinition.components
-        : [emptyComponent()],
-    interconnections:
-      systemDefinition.interconnections.length > 0
-        ? systemDefinition.interconnections
-        : [emptyInterconnection()],
+    components: systemDefinition.components,
+    interconnections: systemDefinition.interconnections,
   });
   const [diagramArtifactId, setDiagramArtifactId] = useState(
     diagramEvidence[0]?.id ?? processedEvidence[0]?.id ?? "",
@@ -168,14 +170,8 @@ export function SystemDefinitionPanel({
     setValues({
       boundaryNarrative: systemDefinition.boundaryNarrative,
       diagramLinks: systemDefinition.diagramLinks,
-      components:
-        systemDefinition.components.length > 0
-          ? systemDefinition.components
-          : [emptyComponent()],
-      interconnections:
-        systemDefinition.interconnections.length > 0
-          ? systemDefinition.interconnections
-          : [emptyInterconnection()],
+      components: systemDefinition.components,
+      interconnections: systemDefinition.interconnections,
     });
   }, [
     systemDefinition.boundaryNarrative,
@@ -256,16 +252,111 @@ export function SystemDefinitionPanel({
             </p>
           ) : null}
           {systemDefinition.proposal ? (
-            <div className="space-y-2 rounded-sm border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-muted-foreground">
-              <p>
-                Draft generated from{" "}
-                <span className="font-medium text-foreground">
-                  {systemDefinition.proposal.displayFilename || "diagram"}
-                </span>
-                . Review every field before confirming.
+            <div
+              className={
+                systemDefinition.proposal.analysisStatus === "analysis_failed" ||
+                systemDefinition.proposal.analysisStatus === "analysis_failure" ||
+                systemDefinition.proposal.stale ||
+                systemDefinition.status === "stale"
+                  ? "space-y-2 rounded-sm border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-muted-foreground"
+                  : "space-y-2 rounded-sm border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-muted-foreground"
+              }
+            >
+              <p className="font-medium text-foreground">
+                {systemDefinition.proposal.analysisStatus ===
+                "semantic_analysis_complete"
+                  ? "Semantic diagram analysis complete"
+                  : systemDefinition.proposal.analysisStatus === "ingested"
+                    ? "Evidence ingested; semantic diagram analysis has not run"
+                    : systemDefinition.proposal.analysisStatus === "ocr"
+                      ? "OCR completed; semantic diagram analysis has not run"
+                      : systemDefinition.proposal.analysisStatus ===
+                          "analysis_failed" ||
+                        systemDefinition.proposal.analysisStatus ===
+                          "analysis_failure"
+                        ? "Semantic diagram analysis failed"
+                        : "Diagram analysis status is unknown"}
               </p>
+              <p>
+                Source artifact: {" "}
+                <span className="font-medium text-foreground">
+                  {systemDefinition.proposal.displayFilename || "unknown filename"}
+                </span>{" "}
+                ({systemDefinition.proposal.artifactId || "unknown artifact"})
+                {systemDefinition.proposal.artifactSha256 ? (
+                  <>
+                    {" "}· SHA-256{" "}
+                    <span className="break-all font-mono text-foreground">
+                      {systemDefinition.proposal.artifactSha256}
+                    </span>
+                  </>
+                ) : null}
+                {Object.keys(systemDefinition.proposal.locator).length > 0 ? (
+                  <> · {sourceLocation(systemDefinition.proposal.locator)}</>
+                ) : null}
+              </p>
+              {systemDefinition.proposal.sourceRevisionId ? (
+                <p>
+                  Source revision: {" "}
+                  <span className="break-all font-mono text-foreground">
+                    {systemDefinition.proposal.sourceRevisionId}
+                  </span>
+                </p>
+              ) : null}
+              {systemDefinition.proposal.analysisStatus ===
+                "semantic_analysis_complete" ? (
+                <p>
+                  Observed coverage: {" "}
+                  {systemDefinition.proposal.componentCount ?? "unknown"} component
+                  {systemDefinition.proposal.componentCount === 1 ? "" : "s"}
+                  {" · "}
+                  {systemDefinition.proposal.interconnectionCount ?? "unknown"}{" "}
+                  interconnection
+                  {systemDefinition.proposal.interconnectionCount === 1 ? "" : "s"}.
+                </p>
+              ) : null}
+              {systemDefinition.proposal.lowConfidenceComponentCount !== null &&
+              systemDefinition.proposal.lowConfidenceInterconnectionCount !==
+                null &&
+              systemDefinition.proposal.lowConfidenceComponentCount +
+                systemDefinition.proposal.lowConfidenceInterconnectionCount >
+                0 ? (
+                <p role="alert" className="text-amber-300">
+                  Low-confidence extraction: {" "}
+                  {systemDefinition.proposal.lowConfidenceComponentCount} component
+                  {systemDefinition.proposal.lowConfidenceComponentCount === 1
+                    ? ""
+                    : "s"}
+                  {" and "}
+                  {systemDefinition.proposal.lowConfidenceInterconnectionCount}{" "}
+                  interconnection
+                  {systemDefinition.proposal.lowConfidenceInterconnectionCount === 1
+                    ? ""
+                    : "s"}
+                  . Review and correct these fields before confirming.
+                </p>
+              ) : null}
+              {systemDefinition.proposal.stale ||
+              systemDefinition.status === "stale" ? (
+                <p role="alert" className="text-amber-300">
+                  This proposal is stale relative to the current system definition.
+                  Review the current fields and confirm again; it is not an
+                  authoritative approval.
+                </p>
+              ) : null}
+              {systemDefinition.proposal.failureKind ? (
+                <p role="alert" className="text-amber-300">
+                  Failure classification: {systemDefinition.proposal.failureKind}.
+                </p>
+              ) : null}
               {systemDefinition.proposal.conflicts.length > 0 ? (
-                <ul className="list-disc space-y-1 pl-4">
+                <>
+                  <p className="font-medium text-foreground">
+                    {systemDefinition.proposal.conflicts.length} conflict
+                    {systemDefinition.proposal.conflicts.length === 1 ? "" : "s"}{" "}
+                    require review.
+                  </p>
+                  <ul className="list-disc space-y-1 pl-4">
                   {systemDefinition.proposal.conflicts.map((conflict) => (
                     <li key={`${conflict.field}-${conflict.note}`}>
                       <span className="font-medium text-foreground">
@@ -273,11 +364,19 @@ export function SystemDefinitionPanel({
                       </span>{" "}
                       diagram shows {conflict.diagramValue || "—"}; text says{" "}
                       {conflict.textValue || "—"}. {conflict.note}
-                    </li>
+                      </li>
                   ))}
-                </ul>
+                  </ul>
+                </>
               ) : null}
             </div>
+          ) : null}
+          {!systemDefinition.proposal && diagramEvidence.length > 0 ? (
+            <p className="rounded-sm border border-slate-500/40 bg-slate-500/10 p-3 text-xs text-muted-foreground">
+              Processed evidence is available, but semantic diagram analysis has
+              not run. Ingestion or OCR alone does not establish diagram
+              components or interconnections.
+            </p>
           ) : null}
 
           {onAnalyzeDiagram && diagramEvidence.length > 0 ? (
@@ -449,6 +548,12 @@ export function SystemDefinitionPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {values.components.length === 0 ? (
+            <p className="rounded-sm border border-dashed p-3 text-xs text-muted-foreground">
+              No components were observed or recorded. Add a component only when
+              supported by the diagram or another evidence source.
+            </p>
+          ) : null}
           {values.components.map((component, index) => (
             <div
               key={`component-${index}`}
@@ -540,6 +645,12 @@ export function SystemDefinitionPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {values.interconnections.length === 0 ? (
+            <p className="rounded-sm border border-dashed p-3 text-xs text-muted-foreground">
+              No interconnections were observed or recorded. Add one only when a
+              connected system and direction are supported by evidence.
+            </p>
+          ) : null}
           {values.interconnections.map((interconnection, index) => (
             <div
               key={`interconnection-${index}`}

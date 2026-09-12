@@ -8,7 +8,18 @@
 > rules, draft OSCAL JSON export, and profile-bound implementation-statement policy
 > (bundle **1.2.0**) do **not** check off the broader items below.
 
-**Last audited:** 2026-09-06 against repository state on `main`.
+**Last reconciled:** 2026-09-11 against `main` commit `544491f` and the current
+hard-stop register. Prioritized next actions and local verification are in
+[Remaining work, in priority order](NEW_INTERNAL_SSP_WORKFLOW_PLAN.md#remaining-work-in-priority-order).
+Checked items mean the stated bounded implementation exists, not production qualification.
+**Current constraint:** all live LLM calls, including local inference and
+text/vision/embedding evaluations, are deferred until the user explicitly resumes
+them. Offline implementation, synthetic fixtures, and mocked tests may continue.
+The prioritized no-model-call work is listed in the
+[active plan](NEW_INTERNAL_SSP_WORKFLOW_PLAN.md#work-we-can-complete-here-without-llm-calls).
+Organization-owned decisions and required evidence are tracked separately in
+[ORGANIZATION_INPUTS.md](ORGANIZATION_INPUTS.md). The September 11 increment
+is distinct from the previously installed `544491f` release.
 
 ## Current state summary
 
@@ -26,19 +37,21 @@
 - Offline profile compile, validate, import (inactive), activate, deterministic
   diff, and migrate-profile API scaffolding.
 - Screenshot vision fact extraction with image-region locators.
+- Unified private chatbot, source-linked memory, bounded retrieval, context
+  freshness, and manual retention cleanup; preferred-stack hardening is shipped.
 
 **Still open (needs code unless noted):**
 
 - **Unified chatbot qualification:** the bounded implementation is delivered;
   approved-provider answer-quality evaluation remains open (see below).
-- **Internal generation passes:** separate SSP narrative vs control statement model passes (see
-  **Agent Grounding** and [`SSP_WORKSPACE_GENERATION_BOUNDARIES.md`](SSP_WORKSPACE_GENERATION_BOUNDARIES.md)).
-- Authorization boundary narrative requirements, interconnection register,
-  diagram workflow polish (status UI, manual correction, evaluation fixtures),
-  profile admin UI, bundle signing, full migration semantics, FedRAMP SSP profiles,
+- **Internal generation qualification:** split narrative/control passes are
+  implemented locally; comparative live-model quality remains unqualified.
+- Full authorization boundary and interconnection workflow qualification,
+  live diagram accuracy evaluation, bundle signing, full migration semantics, FedRAMP SSP profiles,
   and profile-driven export mappings.
-- Hard stops **HS-001** through **HS-009** (mostly customer/review gates, not
-  greenfield product features).
+- Hard stops **HS-001–006**, **HS-008**, and **HS-009** remain open;
+  **HS-007** (GRC writeback) is out of scope, and **HS-010** uses normative
+  defaults. These are mostly customer/review gates, not greenfield features.
 
 ## Objective
 
@@ -49,7 +62,8 @@
 
 ## Initial Profile
 
-**Profile:** `agency-fisma-nist-sp800-53-rev5` (shipped built-in bundle version **1.2.0**)
+**Profile:** `agency-fisma-nist-sp800-53-rev5` (latest bundled version **1.4.0**).
+Existing workspaces remain on their pinned version until explicitly migrated.
 
 **Delivered in 1.2.0 (agency only):** explicit `implementation_statement_policy`
 in `ssp-requirements.json` (deterministic flags, agent instruction blocks, authority
@@ -65,13 +79,20 @@ evidence pre-selection from agent links), and approval blocked until
 
 ## Concrete code scope for the streamlined operator workflow
 
-1. Surface the existing information-types field in the categorization panel.
-2. Let the agent populate it from documents.
+1. [x] Surface structured information types in the dedicated workflow panel
+   (`InformationTypesPanel`; a separate panel, not a new categorization field).
+2. [ ] Qualify agent-populated information types from documents with representative
+   fixtures; structured generation support alone is not acceptance evidence.
 3. [x] Clearly label agent suggestions.
-4. Add `confirmed_system_context` to generation and editing requests.
-5. Generate one full categorization narrative from the confirmed values.
-6. Ensure every export includes it.
-7. Add the simple foundational-change warning and reconfirmation requirement.
+4. [ ] Add explicit `confirmed_system_context` to the split generation/editing
+   contract. Generation now receives dimension-bound confirmation status,
+   evidence IDs, and confirmed canonical section values; full contextual-editing
+   parity remains open.
+5. [ ] Qualify one full categorization narrative from the confirmed values.
+6. [ ] Verify that narrative consistently across every supported export; structured
+   categorization export exists, but this end-to-end narrative criterion remains open.
+7. [x] Mark foundational information stale and require reconfirmation; current
+   categorization, system-definition, and information-types workflows implement this.
 
 ## Security Categorization
 
@@ -88,19 +109,19 @@ evidence pre-selection from agent links), and approval blocked until
 ## Authorization Boundary and Diagrams
 
 - [ ] Require the boundary narrative to reference diagram artifact, version, and page or image.
-- [ ] Identify components inside, outside, and crossing the authorization boundary.
+- [x] Identify components inside, outside, and crossing the authorization boundary
+  (`SystemComponent.placement` and the system-definition editor).
 - [ ] Identify trust zones, trust boundaries, shared services, and external services.
 - [x] Extract labeled nodes, connections, directions, protocols, and data flows from diagrams (first slice: `POST /diagram-analysis` on PNG/JPEG/WebP/PDF).
 - [x] Reconcile diagram-derived facts with text evidence (conflict list in proposal; ISSO confirms manually).
-- [ ] Flag conflicts, unreadable diagrams, and low-confidence extraction for review.
-- [ ] Preserve artifact hash and precise image-region or page locators.
-  - **Partial:** screenshot vision extraction stores image-region locators in
-    `vision.py` / `evidence.py`; not wired to authorization-boundary workflow.
-- [ ] Allow manual correction of extracted diagram structure.
+- [x] Surface conflicts, analysis failures, and low-confidence extraction for review.
+- [x] Preserve artifact hash and source page/locator in diagram proposals.
+  Individual node bounding boxes are not inferred when the model does not supply them.
+- [x] Allow manual correction of extracted diagram structure.
 
 ## Interconnection Register
 
-- [ ] Add profile-defined interconnection fields:
+- [x] Add structured interconnection fields to the agency profile workflow:
   - Connected organization, system, or service
   - Inbound, outbound, or bidirectional direction
   - Data and information types exchanged
@@ -110,21 +131,27 @@ evidence pre-selection from agent links), and approval blocked until
   - Agreement identifier, status, and expiration
   - Boundary-crossing protections
   - Evidence references
-  - **Today:** profile item `system.interconnections` is a `string_list` only.
+  - **Today:** profile 1.4.0 declares `structured_kind: interconnection_register`;
+    `system_definition.Interconnection` and `SystemDefinitionPanel` persist and
+    edit these fields. Arbitrary per-profile schemas and full downstream
+    acceptance remain separate work; this is not an unstructured list only.
 - [ ] Generate follow-up questions for missing required fields.
 - [ ] Reuse the register in SSP sections, controls, review, and exports.
 - [ ] Mark affected content stale when an interconnection changes.
 
 ## Diagram and Vision Analysis
 
-- [ ] Separate file ingestion, OCR, generic vision extraction, and semantic diagram analysis statuses.
-- [ ] Add a provider-neutral diagram-analysis contract for OpenAI, Bedrock, and local models.
+- [x] Distinguish ingestion/OCR from semantic diagram analysis in the review UI.
+  This is proposal status/coverage, not a new persisted processing-job state machine.
+- [x] Add a shared structured diagram-proposal contract at the model adapter
+  boundary. Exact OpenAI, Bedrock, and local model support still needs qualification.
 - [ ] Define diagram extraction requirements inside the pinned profile.
 - [ ] Validate structured nodes, edges, trust boundaries, and data flows before persistence.
 - [x] Add rendered-page vision support for diagrams embedded in PDFs (diagram analysis renders PDF pages via pypdfium2).
-- [ ] Show analysis coverage and failures in the UI.
-- [ ] Never label a diagram **Analyzed** when only file ingestion or OCR completed.
-- [ ] Add synthetic diagram evaluation fixtures and expected graph assertions.
+- [x] Show observed node/connection counts, warnings, and failures in the UI.
+- [x] Never label a diagram semantically analyzed when only ingestion or OCR completed.
+- [x] Add synthetic diagram fixtures and expected structure assertions, including
+  empty output without invented components or connections.
 - [ ] Measure node, connection, direction, trust-boundary, and data-flow extraction accuracy.
 
 ## NIST SP 800-18 Rev. 2 SSP Coverage (core)
@@ -156,7 +183,9 @@ Outline file.
   - [ ] Evidence and follow-up-question rules (partial: `evidence_required_for_agent` and generation validation exist; no per-item follow-up rule config in profile)
   - [ ] UI editor (partial: generic section textarea in `SspDocumentPanel`; no typed editors for `string_list` or enum fields)
   - [ ] Export mapping (partial: SP 800-18 DOCX via `standard_coverage`; not a full per-profile export contract)
-  - [ ] Migration behavior (partial: `migrate_workspace_profile` adds empty new items; no stale/revalidate semantics)
+  - [ ] Migration behavior (partial: empty new items, changed-content review
+    markers, stale foundational confirmations, and incompatible control-value
+    rejection exist; arbitrary per-field/ODP migration semantics remain open)
 - [x] Add deterministic exact-set coverage tests against final SP 800-18r2 Table 1.
 
 ## Outline supplements and overlay-only (nice-to-have, not core)
@@ -235,9 +264,10 @@ control_response:
 - [ ] Require a rationale for `not_applicable`.
 - [x] Reject values not allowed by the pinned profile.
 - [ ] Add bulk review and confirmation.
-- [ ] Mark incompatible values for review after profile migration.
-  - **Partial:** out-of-profile values can remain visible in selects after migration;
-    no dedicated review markers or profile-admin UI.
+- [x] Reject incompatible control enum values before profile migration writes.
+  Changed requirements and response policies also return carried control content
+  to review with an explicit unresolved reason. Arbitrary inheritance and ODP
+  migrations remain separate work.
 
 ## Additional Authorization Paths
 
@@ -325,20 +355,21 @@ signature: detached-signature-reference
 - [x] Display SSP requirement (item) changes.
 - [ ] Display baseline, overlay, parameter, control-field schema, export-template, common-control, and agent-content changes.
   - **Partial:** `implementation_statement_policy_changed` and source version changes
-    in offline `diff_profiles`; no profile-admin UI yet.
+    in offline `diff_profiles`; the administration view does not yet display diffs.
 - [ ] Bind the diff to both bundle hashes.
 - [ ] Store reviewer, decision, timestamp, and rationale.
 
 ## Workspace Migration Effects
 
 - [x] Keep existing workspaces pinned until explicitly migrated.
-- [ ] Preserve approved revisions with their original profile version.
-  - **Partial:** revisions store profile id/version; export resolves historical
-    profile row when workspace profile differs.
+- [x] Preserve approved revisions with their original profile version.
+  PostgreSQL migration tests verify approved history and historical export
+  against the original pinned profile.
 - [ ] On migration:
-  - [ ] Add new controls as `unaddressed` (partial: new controls get `ControlState.EMPTY`)
-  - [ ] Preserve removed controls in revision history (partial: old revisions retain them; working revision drops removed controls)
-  - [ ] Mark changed control statements as `stale`
+  - [x] Add new controls as unaddressed using existing `ControlState.EMPTY`.
+  - [x] Preserve removed controls in immutable revision history.
+  - [x] Return changed controls to review using `ControlState.PARTIAL` plus an
+    explicit migration reason (not a new `stale` control enum).
   - [ ] Revalidate statuses, designations, inheritance, and N/A rationales
   - [ ] Revalidate SSP fields and organization-defined parameters
   - [ ] Rebuild profile-derived UI selections (partial: envelope reloads `control_response`)
@@ -348,12 +379,15 @@ signature: detached-signature-reference
 - [ ] Support rollback to the prior pinned profile version.
   - **Partial:** revision restore can repoint workspace to a historical profile row
     if still imported; no dedicated profile rollback endpoint.
-  - **Tests:** migrate API route exists; no behavioral migration/rollback tests yet.
+  - **Tests:** PostgreSQL behavioral tests cover migration, historical export,
+    prior-profile restore, incompatible values, no-op, and stale revision guards.
+    A dedicated profile rollback endpoint remains unimplemented.
 
 ## Unified System Chatbot
 
-**Updated:** 2026-09-11. The bounded implementation is delivered in this checkout;
-deployment verification and approved-provider quality evaluation are separate.
+**Updated:** 2026-09-11. The bounded implementation is pushed in `544491f` and
+installed WSL application bytes matched the checkout. Authenticated live chat
+acceptance and approved-provider quality evaluation remain separate.
 See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
 
 - [x] Provide one unified user-facing chatbot across the application. Moving
@@ -384,30 +418,45 @@ See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
 - [x] Regression-test persistence, authorization, source-reference validation,
   evidence freshness, bounded context, idempotency, and retention on PostgreSQL.
   Retrieval covers current materialized facts, sections, controls, questions,
-  evidence excerpts, pinned requirements, and approval/revision metadata. Full
+  evidence excerpts with locators, pinned requirements, and approval/revision
+  metadata. History/comparison questions now also retrieve bounded relevant
+  historical excerpts, labeled as non-current. Confirmation status is explicit
+  in current revision context. Full
   historical revision bodies and exhaustive diagram/categorization reasoning
   are not claimed; the broader whole-system acceptance item remains open.
-- [ ] Prove cross-page continuity, permission isolation, context freshness,
-  source-grounded answers, and bounded long-conversation behavior with regression
-  tests and an approved quality-evaluation dataset.
+- [x] Automated cross-page continuity, permission isolation, context freshness,
+  source-ID validation, and bounded history/context regressions.
+- [ ] Complete authenticated live WSL acceptance and qualify answer correctness
+  against an approved, expert-reviewed dataset. Valid source IDs alone do not
+  prove that the answer is supported by those sources.
+  - WSL login, workspace listing, and session reload passed; live chat acceptance
+    remains open. Six synthetic acceptance cases and a Pydantic Evals harness
+    now cover grounding, stale context, history, missing/conflicting evidence,
+    and artifact injection. Evaluator self-tests are not live quality evidence.
+- [ ] Assign and verify an approved recurring retention-cleanup procedure.
+  Optional hardened daily systemd units now exist, disabled on fresh staging.
+  Upgrade preserves prior operator opt-in after stopping retention during replacement.
+  No timer has been enabled here. Legal holds and customer overrides remain
+  unimplemented. Do not infer shared chats or automatic fact promotion.
 
 ## Agent Grounding
 
 - [x] Load the exact pinned profile version for every generation or agent call.
-- [ ] **Split SSP narrative and control statement generation into separate model passes.**
+- [x] **Split SSP narrative and control statement generation into separate model passes.**
   - Internal execution only; retain the single chatbot experience described above.
-  - **Today:** one `generate_initial_ssp` call returns SSP sections, controls,
-    questions, and optional categorization in one JSON response.
-  - **Target:** sequential passes — SSP Table 1 sections first, controls second
-    with confirmed categorization, system definition, information types, and
-    drafted SSP context injected; optional single **Generate** button with two
-    server-side calls merged into one revision save.
+  - **Today:** `generate_initial_ssp` runs narrative first, controls second,
+    with separate closed schemas and repair budgets. Application-owned
+    confirmation states, dimension-bound evidence, and confirmed canonical
+    section values are injected; validated
+    narrative is advisory handoff context, not new evidence. One Generate action
+    merges both results into a revision only after both passes succeed.
   - **Rationale:** [`SSP_WORKSPACE_GENERATION_BOUNDARIES.md`](SSP_WORKSPACE_GENERATION_BOUNDARIES.md)
     (quality: smaller schemas, focused policy, independent retry).
   - **Do not replace:** categorization analyze, diagram analyze, or Ask agent
     patches — those are already bounded propose flows with ISSO confirm gates.
 - [ ] Send only relevant profile requirements for the current section or control.
-  - **Today:** every generation/patch prompt includes all SSP sections and all controls.
+  - **Partial:** generation now separates narrative and control requirements;
+    contextual patch prompts still need narrower per-target requirements.
 - [ ] Include profile ID, version, and bundle hash in model-call metadata.
   - **Partial:** present in prompt payload; audit metadata records `model_attempts` only.
 - [x] Require output control IDs and values to match the profile allowlists.
@@ -420,8 +469,8 @@ See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
 
 ## Profile Administration UI
 
-- [ ] Add a local **Profiles** administration view.
-  - Mockup only in `docs/theme-mockups/internal-ssp-workflow-ui.html`.
+- [x] Add a local **Profiles** administration view with explicit import and
+  activation; configured server roles determine administration capability.
 - [ ] Display:
   - Profile ID and version
   - Active, inactive, archived, or retired state
@@ -431,9 +480,10 @@ See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
   - Import and activation history
   - Workspaces pinned to each version
   - Available migration diff
-  - **Partial:** API `GET /ssp-profiles` returns id, version, status, bundle hash,
-    import/activation timestamps; portal uses list only for workspace creation.
-- [ ] Label currency as **Latest imported version**, not globally current.
+  - **Partial:** view shows ID, version, active/inactive/archived state, hash,
+    importer and import/activation timestamps. Signature/qualification status,
+    source dates, pinned-workspace inventory, and migration diff remain open.
+- [x] Label currency as **Latest imported version**, not globally current.
 - [ ] Add configurable age and review-due warnings.
 - [x] Do not perform direct internet retrieval from deployed environments.
 
@@ -448,9 +498,8 @@ See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
 - [ ] Test FISMA and FedRAMP profiles with different field schemas.
   - FedRAMP analysis profiles tested; no FedRAMP SSP workspace profile bundles.
 - [x] Test deterministic profile diffs.
-- [ ] Test workspace migration and rollback.
-- [ ] Test historical export against the original pinned profile.
-  - **Partial:** export code resolves historical profile; no dedicated test.
+- [x] Test workspace migration and existing revision-restore rollback.
+- [x] Test historical export against the original pinned profile.
 - [ ] Test that prompts use pinned profile content, not model memory.
 - [ ] Analyze whether claim-level evidence verification materially improves SSP
   quality beyond the current evidence-link and human-review gates before adding
@@ -473,4 +522,5 @@ See [Chat Memory Policy](CHAT_MEMORY_POLICY.md) for ownership and retention.
     embed profile version text.
 - [ ] Administrators can update, diff, qualify, activate, migrate, and roll back profiles offline.
   - **Partial:** import, activate, diff, migrate API and operator scripts exist;
-    signing, qualification workflow, admin UI, and rollback remain open.
+    admin import/activate UI is implemented; signing, qualification workflow,
+    diff/migration UI, and dedicated rollback remain open.

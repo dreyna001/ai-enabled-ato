@@ -335,8 +335,13 @@ def test_systemd_units_include_production_api_intake_and_wsl_local_assets() -> N
         "ato-analyzer-worker.wsl-local.service",
         "ato-intake-worker.service",
         "ato-synthetic-intake-worker.service",
+        "ato-chat-retention.service",
+        "ato-chat-retention.wsl-local.service",
     }
-    assert timer_names == {"ato-synthetic-intake-worker.timer"}
+    assert timer_names == {
+        "ato-synthetic-intake-worker.timer",
+        "ato-chat-retention.timer",
+    }
     for forbidden in ("portal", "model", "nginx"):
         for name in service_names:
             assert forbidden not in name

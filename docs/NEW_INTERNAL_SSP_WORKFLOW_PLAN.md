@@ -1,17 +1,156 @@
 # New Internal SSP Drafting Workflow
 
-**Status:** Implemented, cut over, and locally validated. Active increments A–D
-below are **delivered**; no open “do now” increments. Destructive legacy cleanup
-remains deferred pending deployment-data confirmation.
+**Status:** Core workflow and increments A–D are delivered. Preferred-stack
+hardening and the bounded unified chatbot were pushed to `main` in `544491f`.
+The installed WSL application was checked against that checkout: 215 Python
+files and all three portal bundle files matched. This is local deployment
+evidence, not production or live-model qualification.
 
-**Current work:** Later profile-registry, inheritance UI, qualified export
-mappings, and FedRAMP backlog live in
-[`docs/PROFILE_DRIVEN_WORKFLOW_TODO.md`](PROFILE_DRIVEN_WORKFLOW_TODO.md).
+**Last reconciled:** 2026-09-11 against the September 11 implementation increment,
+local verification results, and the hard-stop register. Current priorities are below; detailed product
+backlog remains in [PROFILE_DRIVEN_WORKFLOW_TODO.md](PROFILE_DRIVEN_WORKFLOW_TODO.md).
+
+## Remaining work, in priority order
+
+### Execution constraint: defer live LLM calls
+
+Per the user's current instruction, do not call any live text, vision, embedding,
+or other LLM endpoint for this backlog until explicitly resumed. This includes
+local inference endpoints, live chatbot sends, generation/editing trials, and
+provider-quality evaluation. Synthetic fixtures, mocked model responses,
+deterministic tests, and code preparation may proceed without live calls.
+Deferral is not completion or permission to bypass a model-policy gate.
+
+### Work we can complete here without LLM calls
+
+- [x] Finish one clean full backend regression run: 2,429 passed, 64 skipped,
+  38 deselected; no failures (four warnings).
+- [ ] Confirm release CI for the published September 11 increment.
+  Upgrade WSL separately with the required sudo
+  step; verify login, navigation, existing-history reload, and non-model paths.
+- [ ] Improve contextual editing: use confirmed system details when preparing
+  an edit to one section/control, and send only relevant pinned requirements.
+  Implement and test with mocked responses; defer actual model edit trials.
+- [ ] Extend Profiles UI with version diffs, affected/pinned workspaces, and
+  explicit migration/review actions. Preserve server authorization and history.
+- [ ] Add profile-driven list/enum editors and deterministic missing-field
+  guidance; do not invent organization-defined values or inheritance decisions.
+- [ ] Expand offline reliability tests for interrupted requests, concurrent
+  edits, slow work, retrieval, and synthetic export consistency.
+
+### Acceptance and organization-dependent work
+
+1. [ ] **Finish release acceptance.** All four GitHub Actions jobs for `544491f`
+   passed (run `34661626000`). Authenticated WSL OIDC login, workspace listing,
+   and session reload passed on 2026-09-11. Still perform authenticated WSL
+   chat acceptance (**live model portions deferred**): send, refresh/reopen, change pages, switch systems, inspect
+   citations, and verify an evidence change marks old context stale. Use approved
+   synthetic inputs; local automated tests do not replace this live acceptance.
+2. [ ] **Qualify chatbot coverage and answer quality (live calls deferred).** Test representative
+   questions across categorization, boundaries, diagrams, controls, evidence,
+   decisions, and history. Current retrieval is bounded and uses current records
+   plus bounded relevant historical excerpts on history/comparison questions,
+   not every historical body. Establish SME-reviewed
+   fixtures, missing/conflicting-evidence behavior, citation correctness, and
+   exact provider/model native-schema support before expanding retrieval.
+3. [x] **Split SSP narrative and control generation (code).** Separate bounded
+   passes, dimension-bound confirmation context, focused requirements, independent
+   repair, and one final revision save are implemented. Comparative live-model
+   quality remains open; retain one user-facing chatbot.
+4. [ ] **Complete production safety and operations.** Implement governed SSP
+   data-origin/sensitivity classification before enabling customer model calls;
+   qualify model provenance and endpoint approval, live scanner behavior, and the
+   agency DOCX template scanning path (shared gate implemented locally; live
+   scanner qualification remains open). Complete customer identity,
+   backup/restore, air-gap, load, and deployment drills. Do not clear hard stops
+   merely because code or WSL smoke tests pass.
+5. [ ] **Operationalize memory retention.** Private user/system histories and
+   seven-calendar-year expiry are implemented. Assign an operator and approved
+   schedule for bounded `purge-chat`, verify backup expiry handling, and obtain
+   policy decisions before adding legal holds or custom retention. No cleanup
+   scheduler is enabled here. Opt-in hardened daily systemd artifacts now exist;
+   upgrades pause retention during replacement and preserve prior operator opt-in.
+6. [ ] **Deliver remaining follow-on product work.** Diagram coverage/review UI,
+   basic profile administration, and bounded migration safeguards are implemented
+   locally. Remaining work includes live diagram evaluation, signing and broader
+   migration semantics, ODP/common-control fields, and qualified export mappings.
+   FedRAMP SSP profiles and destructive legacy cleanup remain deferred; external
+   GRC writeback is out of scope.
+
+Hard-stop source of truth: [requirements/hard-stops.yaml](requirements/hard-stops.yaml).
+Organization-owned decisions, required owner roles, evidence, and blocking
+behavior are tracked in [ORGANIZATION_INPUTS.md](ORGANIZATION_INPUTS.md).
+HS-001–006, HS-008 and HS-009 remain open; HS-007 is out of scope and HS-010
+uses normative defaults. HS-009 concerns future FedRAMP readiness, not a request
+to implement assessor conclusions in the current agency SSP workflow.
+
+## September 11 implementation increment
+
+Implemented with Luna xhigh subagents and integration review:
+
+- Split narrative/control generation with independent schemas and repair limits.
+- Agency DOCX scan-before-parse integration, retaining model-policy gates.
+- Diagram provenance/coverage/warnings, manual correction, and empty-output safety.
+- Profiles import/activate UI using configured server roles and a typed API contract.
+- Explicit migration review markers, incompatible-value rejection, immutable
+  approved history, prior-profile restore tests, and no-op/concurrency safeguards.
+- Bounded historical chat retrieval, explicit confirmation context, source locators,
+  and synthetic evaluation assets (not live answer-quality qualification).
+- Opt-in retention deployment artifacts and the organization-input checklist.
+
+Repository history and the remote `main` ref are the publication evidence;
+publication does not deploy the installed application. The WSL backend still
+requires a separate upgrade. The earlier installed-copy comparison
+applies to `544491f`, not this increment. Do not mark organization hard stops
+complete from this work.
+
+Verification: all 225 portal tests and six mocked browser security tests passed;
+production portal build and Ruff passed. PostgreSQL chat/retention checks passed
+(16 tests), as did migration plus SSP end-to-end export checks (six tests).
+Evaluation/deployment/portal contracts passed (171 tests), and API/model/diagram/
+scanner contracts passed (99 tests). After correcting old generation fixtures
+and deployment expectations, the clean full non-integration backend run passed:
+2,429 passed, 64 skipped, 38 deselected, and four warnings (584.96 seconds).
+Warnings concern a deprecated test-client alias and unawaited coroutines;
+they remain follow-up items, not test failures. These are
+overlapping runs, not a single combined count. Live provider quality, customer
+scanner acceptance, and full WSL chat acceptance remain unverified. Systemd
+syntax verification passed with mounted-file permission warnings; installers
+set root ownership and mode 0644 on installed units.
+- [ ] Resolve the backend suite's deprecation and unawaited-coroutine warnings
+  with offline regression coverage.
+Final combined generation/contract/service-gate, PostgreSQL export/migration,
+and evaluation regression run: 70 passed, including independent repairs,
+no partial save on control failure, aggregate failure-call counts, and
+confirmed section values versus stale-context exclusion.
+
+## Previously delivered: hardening and unified chat
+
+- [x] Guarded asynchronous PydanticAI calls, native output schemas, truncation
+  handling, aggregate context budgets, and short database transaction boundaries.
+- [x] Production evidence scan-before-parse gate; API contracts, dependency locks,
+  CI coverage, and preferred backend/frontend stack alignment synchronized.
+- [x] One app-wide chat surface; durable private history per authenticated user
+  and system; source-linked, permission-aware bounded retrieval and stale-context
+  detection. Shared context is canonical system data, not other users' chats.
+- [x] Seven-year completion-based expiry, bounded manual purge with atomic audit,
+  request replay/concurrency protection, and system/actor isolation tests.
+- [x] WSL upgrade path uses migration `20260911_0017`, preserves configuration
+  and credentials, and protects the WSL runtime config during installation.
+
+Verification: 41 combined chatbot/backend/retention tests including PostgreSQL;
+65 frontend tests; six mocked browser security tests; production portal build;
+209 schema/operator/deployment tests (one skipped); and 29 documentation/contract
+tests. A broader run passed 2,259 tests before migration-head expectations were
+updated; its 15 failures were rerun after synchronization. These overlapping
+runs are not a single aggregate test count. Live provider quality and customer
+qualification were not established. See [STACK_ALIGNMENT.md](STACK_ALIGNMENT.md)
+and [CHAT_MEMORY_POLICY.md](CHAT_MEMORY_POLICY.md).
 
 ## Active increments (do now)
 
-All increments below are **delivered**. Acceptance boundaries list follow-on
-backlog only; see [`PROFILE_DRIVEN_WORKFLOW_TODO.md`](PROFILE_DRIVEN_WORKFLOW_TODO.md).
+The historical A–D increments below are **delivered**. Their acceptance boundaries
+remain open where stated; current priorities are listed above.
 
 ### Increment A — Minimal ODP detection and question prompting
 
@@ -83,11 +222,11 @@ and database migrations.
 - Backend product boundary: `src/ato_service/ssp_workspace/`
 - Portal product route: `/ssp`
 - API product routes: `/api/v1/ssp-*`
-- Database migration: `20260728_0015` (evidence removal); `20260728_0016` (agency DOCX renders)
+- Database migration: `20260728_0015` (evidence removal); `20260728_0016` (agency DOCX renders); current head `20260911_0017` (private unified chat)
 - Built-in offline profile: **Agency FISMA — NIST SP 800-53 Rev. 5** bundle
-  `agency-fisma-nist-sp800-53-rev5` version **1.2.0** (NIST control catalog release
-  **5.2.0**, `implementation_statement_policy`), with legacy **1.1.0** and **1.0.0**
-  load compatibility
+  `agency-fisma-nist-sp800-53-rev5` latest bundled version **1.4.0** (NIST control
+  catalog release **5.2.0**, statement policy and structured system registers).
+  Earlier bundled versions remain available; workspace pins do not auto-upgrade.
 - Profile pins final **NIST SP 800-18 Rev. 2** (version 2.0.0,
   `doi.org/10.6028/NIST.SP.800-18r2`) Table 1 **standard_coverage** metadata,
   **33** SSP items (**digital identity acceptance** optional), and profile-defined
@@ -112,7 +251,7 @@ and database migrations.
   reuse scoped to workspace, revision, template digest, and profile version;
   synchronous, DOCX-only, no generic field-map UI (**HS-002** open)
 - Legacy package, analysis, and review routes are not mounted
-- Validation completed:
+- Historical A–D validation snapshot (not the current release totals above):
   - Empty PostgreSQL database migrated through `20260728_0016`
   - Live PostgreSQL workflow passed from evidence and screenshot intake through
     generation, editing, agent patching, approval, and JSON/DOCX export
@@ -149,7 +288,9 @@ Agency ISSO.
    - Request changes to the SSP
    - Request changes to one or more controls
    - Add additional evidence
-5. The chatbot updates the same SSP and control objects. It does not create a separate chat-only answer.
+5. Chat answers are advisory and remain in private history. To change the SSP or
+   controls, the ISSO explicitly requests a shared edit proposal, reviews it, and
+   applies or rejects it. Conversation text never silently updates canonical facts.
 6. Agents regenerate affected content after new answers or evidence are added.
 7. The ISSO edits the SSP or individual control statements when needed.
 8. When ready, the ISSO approves and exports:
@@ -162,7 +303,7 @@ The ISSO does not approve every answer or agent edit. Approval is a single actio
 ## First Profile
 
 **Agency FISMA — NIST SP 800-53 Revision 5** (`agency-fisma-nist-sp800-53-rev5`,
-version **1.2.0**; legacy **1.1.0** and **1.0.0** remain loadable)
+latest bundled version **1.4.0**; earlier bundled versions remain loadable)
 
 This profile supports agency-authorized systems hosted:
 
@@ -212,16 +353,13 @@ Agents and users can edit control objects. SSP control sections are rendered fro
 
 ### Chatbot
 
-The chatbot is a contextual document-editing interface. It opens beside the
-current SSP section or control and:
-
-- Resolves missing information
-- Updates system facts
-- Updates SSP sections
-- Updates control objects
-- Adds or links evidence
-- Regenerates only affected content
-- Shows a targeted patch before it is applied
+The chatbot is one app-wide conversation surface with separate private histories
+for each authenticated user and system. Answers use bounded, source-linked
+canonical context. Its explicit shared **Propose edit** action supports contextual
+document changes and shows a targeted patch before application. The ISSO must
+explicitly apply that proposal; ordinary answers do not update facts, sections,
+controls, or evidence. Evidence upload and generation remain explicit workspace
+actions, not unrestricted chatbot tools. See [CHAT_MEMORY_POLICY.md](CHAT_MEMORY_POLICY.md).
 
 The chatbot does not regenerate the full SSP for a local edit. Applying a patch
 is atomic, versioned, and reversible.
@@ -297,6 +435,8 @@ control, question, approval, and metric logic remains provider-neutral.
 | `AgentPatch` | Proposed bounded document edit | `proposed`, `applied`, `rejected`, `stale` |
 | `ProfileVersion` | Immutable imported agency bundle | `inactive`, `active`, `archived` |
 | `ApprovalSnapshot` | ISSO approval tied to exact content | immutable |
+| `SspChatConversation` | Private history scoped to authenticated user and system | persistent sequence and usage state |
+| `SspChatTurn` / `SspChatMessage` | Replay-safe turns and source-linked private messages | pending lease, completed, seven-year expiry |
 
 Each factual value records provenance as `extracted`, `agent_generated`, or
 `isso_entered`. Extracted and agent-generated facts retain evidence locators.

@@ -90,6 +90,8 @@ class DiagramAnalysisResult:
 class DiagramAnalysisError(ValueError):
     """Raised when diagram analysis fails validation or model contract."""
 
+    error_code = "diagram_analysis_failed"
+
     def __init__(
         self,
         detail: str,
@@ -243,19 +245,6 @@ def build_system_definition_from_analysis(
                 evidence=diagram_evidence,
             )
         )
-    if not components:
-        components.append(
-            SystemComponent(
-                component_id=str(uuid.uuid4()),
-                name="Authorization boundary (review diagram)",
-                purpose=(
-                    "Placeholder component generated from diagram analysis; "
-                    "edit or replace after review."
-                ),
-                placement="inside",
-                evidence=diagram_evidence,
-            )
-        )
 
     interconnections: list[Interconnection] = []
     for item in analysis.interconnections:
@@ -267,24 +256,6 @@ def build_system_definition_from_analysis(
                 direction=item.direction,
                 data_types=item.data_types,
                 interface_protocol=item.interface_protocol,
-                connection_owner="Pending ISSO review",
-                agreement_type="Pending ISSO review",
-                agreement_id="",
-                agreement_status="",
-                agreement_expiration="",
-                boundary_protections="Pending ISSO review",
-                evidence=diagram_evidence,
-            )
-        )
-    if not interconnections:
-        interconnections.append(
-            Interconnection(
-                interconnection_id=str(uuid.uuid4()),
-                connected_organization="External system (from diagram)",
-                connected_system="Review diagram for connected systems",
-                direction="bidirectional",
-                data_types=("Review diagram for data flows",),
-                interface_protocol="Review diagram",
                 connection_owner="Pending ISSO review",
                 agreement_type="Pending ISSO review",
                 agreement_id="",
@@ -367,12 +338,24 @@ def proposal_metadata_from_analysis(
     artifact_id: uuid.UUID,
     locator: Mapping[str, Any],
     display_filename: str,
+    artifact_sha256: str | None = None,
+    source_revision_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
-    return {
+    metadata: dict[str, Any] = {
         "source": "diagram_analysis",
+        "analysis_status": "semantic_analysis_complete",
         "artifact_id": str(artifact_id),
         "display_filename": display_filename,
         "locator": dict(locator),
+        "component_count": len(analysis.components),
+        "interconnection_count": len(analysis.interconnections),
+        "low_confidence_component_count": sum(
+            item.confidence == "low" for item in analysis.components
+        ),
+        "low_confidence_interconnection_count": sum(
+            item.confidence == "low" for item in analysis.interconnections
+        ),
+        "conflict_count": len(analysis.conflicts),
         "attempts": analysis.attempts,
         "repair_attempted": analysis.repair_attempted,
         "conflicts": [
@@ -385,6 +368,11 @@ def proposal_metadata_from_analysis(
             for item in analysis.conflicts
         ],
     }
+    if artifact_sha256 is not None:
+        metadata["artifact_sha256"] = artifact_sha256
+    if source_revision_id is not None:
+        metadata["source_revision_id"] = str(source_revision_id)
+    return metadata
 
 
 _SYSTEM_PROMPT = """You analyze architecture and data-flow diagrams for an ISSO

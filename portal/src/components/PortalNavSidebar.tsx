@@ -1,4 +1,4 @@
-import { FileText, LogOut, Shield } from "lucide-react";
+import { FileText, Layers3, LogOut, Shield } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,20 @@ export function PortalNavHeader() {
           <span className="inline-flex items-center gap-1">
             <FileText className="size-3" />
             SSP Workspace
+          </span>
+        </NavLink>
+        <NavLink
+          className={({ isActive }) =>
+            cn(
+              "rounded-sm px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              isActive && "border border-link bg-sidebar-accent text-sidebar-accent-foreground",
+            )
+          }
+          to="/profiles"
+        >
+          <span className="inline-flex items-center gap-1">
+            <Layers3 className="size-3" />
+            Profiles
           </span>
         </NavLink>
       </nav>

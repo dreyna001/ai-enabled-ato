@@ -19,6 +19,50 @@ It does not qualify an authorization decision, certification, risk acceptance, o
 
 ## 2. Unresolved hard stop
 
+### Active SSP and unified-chat evaluation assets
+
+**Current execution hold:** live LLM API calls are deferred by user instruction,
+including local inference endpoints. Run only offline evaluator checks with
+synthetic or mocked outputs until the user explicitly resumes live evaluation
+and the applicable organization/model-policy gates are satisfied. The live
+procedure below is documentation, not current authorization.
+
+The mounted product is the internal SSP workflow, not the retained sufficiency
+matrix routes. Apply the evidence discipline below to each active model step;
+the historical matrix-specific thresholds are not automatically a chatbot score.
+
+- `tests/evals/ssp_quality_harness.py` exercises structured SSP contracts and
+  safety properties using Pydantic Evals.
+- `tests/evals/chat_quality_harness.py` provides six bounded synthetic cases:
+  boundary grounding, stale categorization, previous/current comparison, missing
+  evidence, source-text instruction injection, and conflicting evidence. Expected
+  citation labels and answer markers remain evaluator metadata, not model input.
+- `tests/ato_service/test_unified_chat_retrieval.py` exercises the actual
+  PostgreSQL retrieval path, including late evidence segments, historical
+  content, bounded records, locators, domain vocabulary, and explicit confirmation
+  status. These tests are deterministic retrieval evidence, not model evaluations.
+
+Run offline evaluator checks with:
+
+```bash
+python -m pytest -q tests/evals
+```
+
+For an approved live evaluation, supply a callable using the actual guarded
+application prompt/model path to `build_chat_acceptance_dataset().evaluate_sync`,
+with `max_concurrency=1` and `progress=False`. The dataset never resolves secrets,
+constructs a provider client, or grants model access. Do not pass expected labels
+to the model. Keep reports within the approved data boundary: Pydantic Evals
+reports may retain input and output text.
+
+Record the exact model/version, endpoint provenance and approval reference,
+fixture/dataset digest, first-pass schema validity, repair rate, citation
+precision/recall, unsupported claims, latency and token/cost budget. Compare the
+baseline and candidate on the same reviewed cases. The included lexical markers
+only test explicit fixture properties; they do not measure semantic entailment
+or establish full factual correctness. Organization-owned SME review, accepted
+thresholds, sealed holdout, and a passing immutable live record remain required.
+
 **HS-006 is unresolved.** This guide supplies the written labeling contract, but no two-SME adjudicated holdout is established by this document. AI qualification and every pilot-readiness or pilot-eligibility claim MUST stop until:
 
 1. two qualified SMEs independently label and adjudicate the sealed holdout under this guide;

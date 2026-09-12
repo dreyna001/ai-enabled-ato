@@ -2,7 +2,7 @@
 
 **Purpose:** AI assists ATO/SSP work — extract evidence, normalize fields, assess sufficiency, draft SSP text, answer bounded questions. Humans review; models never auto-approve.
 
-**Normative contract:** [`../ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md) Sections 17–19  
+**Normative contract:** [`../ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md) Sections 17–19
 **Qualification:** [`AI_EVALUATION_GUIDE.md`](AI_EVALUATION_GUIDE.md)
 
 ---
@@ -15,7 +15,9 @@ Deterministic rules first → bounded fact bundles → LLM → JSON schema + dom
 
 - No vector RAG today — grounding = sealed package text + evidence facts + citations
 - Embeddings disabled at gateway
-- Chat retrieval = PostgreSQL full-text search over revision chunks
+- Active SSP chat retrieval = bounded PostgreSQL canonical records, processed
+  evidence snippets, pinned requirements, approvals, and relevant revision history.
+  Legacy package chat uses full-text search over sealed revision chunks.
 
 ---
 
@@ -27,11 +29,15 @@ Deterministic rules first → bounded fact bundles → LLM → JSON schema + dom
 | `intake_map` | Live | Per-artifact structured fact extraction |
 | `sufficiency_matrix` | Live | Evidence sufficiency per assessment item |
 | `package_chat` | Live | Q&A over one sealed revision |
-| SSP generate/patch | Live | Draft + contextual edits to workspace |
+| SSP generate/patch | Implemented | Sequential narrative/control passes + bounded contextual edits |
+| Unified SSP chat | Implemented | Private persistent conversation with permission-aware canonical retrieval |
 | `vision_extraction` | Live (optional) | Screenshot → bounded facts |
 | `consistency_brief`, `narrative_flags`, `provider_draft`, `ksi_summary`, `ocr_summary` | Contract only | No runners yet |
 
-Step types are defined in `src/ato_service/model_gateway.py` (`ModelStepType`).
+Package step types are defined in `src/ato_service/model_gateway.py`
+(`ModelStepType`). Active SSP contracts and adapters live in
+`ssp_workspace/model_schemas.py` and `ssp_workspace/model_runtime.py`.
+Implemented or live paths are not evidence of customer model qualification.
 
 ---
 
@@ -54,11 +60,23 @@ Sealed revision → deterministic rule/inventory selection (no model)
 **SSP workspace (API)**
 
 ```
-Evidence facts + pinned profile → generation prompt → text_llm → parse/validate patches
+Evidence facts + confirmation status + pinned profile → narrative pass → validated handoff → control pass
 → Provenance.AGENT_GENERATED revision → human edit/approve → OSCAL export (deterministic)
 ```
 
-**Package chat (API)**
+**Unified SSP chat (active API)**
+
+```
+Authenticated actor + selected system → permission check → bounded canonical retrieval
+→ private advisory history + source pack → guarded PydanticAI → validated citations
+→ persistent private messages; changed canonical context marks old context stale
+```
+
+Other users' conversations are not shared memory. Canonical system records are
+shared according to existing access checks. Retrieval is bounded, not a claim
+that the model sees the entire database on every turn.
+
+**Package chat (legacy API)**
 
 ```
 Question → injection checks → FTS chunks (≤8) → context pack → gateway → {answer, citations}
@@ -68,7 +86,7 @@ Question → injection checks → FTS chunks (≤8) → context pack → gateway
 **Vision (optional)**
 
 ```
-Screenshot → vision HTTP (if enabled) → validated JSON → VisionFact records
+Screenshot → guarded asynchronous PydanticAI vision (if approved/enabled) → validated JSON → VisionFact records
 ```
 
 ---
@@ -81,9 +99,13 @@ Screenshot → vision HTTP (if enabled) → validated JSON → VisionFact record
 Runner → model_gateway → routing policy → capability/budget checks → text_llm → callback
 ```
 
-**SSP + vision:** call `text_llm` / vision HTTP directly (bypass gateway)
+**Active SSP + vision:** policy checks → aggregate context preflight → asynchronous
+PydanticAI with provider-native closed schemas → truncation and domain validation.
+Slow model work occurs outside database transactions. Narrative and control
+generation each have one repair budget; neither partial pass is saved if the
+overall generation fails. These are bounded calls, not autonomous tool loops.
 
-**Transport:** OpenAI-compatible `/chat/completions` or AWS Bedrock Converse  
+**Transport:** OpenAI-compatible `/chat/completions` or AWS Bedrock Converse
 **Catalog:** `src/ato_service/text_model_catalog.json` — profiles, token limits, timeouts
 
 ---
@@ -109,11 +131,14 @@ Runner → model_gateway → routing policy → capability/budget checks → tex
 | `PROCESS_CAPABILITIES.text_model_calls` | Enables text-model processes |
 | `PROCESS_CAPABILITIES.vision_model_calls` | Requires `VISION_MODEL_ENABLED` |
 | `PROCESS_CAPABILITIES.package_chat` / `package_search` | Gates assistant routes |
-| `TEXT_MODEL_ENDPOINT_POLICY_APPROVED` | Required for prod text calls |
+| `TEXT_MODEL_ENDPOINT_POLICY_APPROVED` | Required by the SSP policy gate, not sufficient to approve customer data |
 | `CUI_MODEL_BOUNDARY_APPROVED` | Required before CUI revisions call models |
 | `VISION_MODEL_ENABLED` | Only optional model capability flag |
 
 Secrets stay outside JSON; runtime config via `ATO_RUNTIME_CONFIG_PATH`. See [`CONFIGURATION.md`](CONFIGURATION.md).
+Active SSP production model calls remain fail-closed for unknown data
+classification. Governed classification, endpoint provenance, and live model
+qualification remain open; see [ORGANIZATION_INPUTS.md](ORGANIZATION_INPUTS.md).
 
 ---
 
@@ -126,7 +151,7 @@ Secrets stay outside JSON; runtime config via `ATO_RUNTIME_CONFIG_PATH`. See [`C
        │                     │                       │
        └─────────────────────┼───────────────────────┘
                              ▼
-               model_gateway (package path) / text_llm (SSP path)
+               model_gateway (package path) / guarded PydanticAI (SSP path)
                              ▼
                     External text/vision endpoint
 ```

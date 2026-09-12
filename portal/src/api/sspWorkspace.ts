@@ -398,6 +398,12 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
   }
 }
 
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
 function parseSystemDefinitionEvidenceRef(
   raw: unknown,
 ): SystemDefinitionEvidenceRef | null {
@@ -572,10 +578,45 @@ export function mapSystemDefinitionProposal(
     : [];
   const artifactId = text(parsed.artifact_id);
   if (!artifactId) return null;
+  const source = text(parsed.source);
+  const analysisStatusRaw = text(parsed.analysis_status);
+  const analysisStatus =
+    analysisStatusRaw === "semantic_analysis_complete" ||
+    analysisStatusRaw === "analysis_failed" ||
+    analysisStatusRaw === "analysis_failure" ||
+    analysisStatusRaw === "ingested" ||
+    analysisStatusRaw === "ocr"
+      ? analysisStatusRaw
+      : source === "diagram_analysis"
+        ? "semantic_analysis_complete"
+        : source === "ingested"
+          ? "ingested"
+          : source === "ocr"
+            ? "ocr"
+            : "unknown";
   return {
-    source: text(parsed.source) || "diagram_analysis",
+    source: source || "diagram_analysis",
+    analysisStatus,
     artifactId,
+    artifactSha256: text(parsed.artifact_sha256),
     displayFilename: text(parsed.display_filename),
+    locator: record(parsed.locator),
+    ...(text(parsed.source_revision_id)
+      ? { sourceRevisionId: text(parsed.source_revision_id) }
+      : {}),
+    componentCount: nonNegativeInteger(parsed.component_count),
+    interconnectionCount: nonNegativeInteger(parsed.interconnection_count),
+    lowConfidenceComponentCount: nonNegativeInteger(
+      parsed.low_confidence_component_count,
+    ),
+    lowConfidenceInterconnectionCount: nonNegativeInteger(
+      parsed.low_confidence_interconnection_count,
+    ),
+    conflictCount: conflicts.length,
+    stale: parsed.stale === true,
+    ...(text(parsed.failure_kind)
+      ? { failureKind: text(parsed.failure_kind) }
+      : {}),
     conflicts,
   };
 }

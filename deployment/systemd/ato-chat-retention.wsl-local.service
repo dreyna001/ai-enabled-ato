@@ -1,0 +1,51 @@
+[Unit]
+Description=ATO bounded chat retention purge (WSL local, opt-in)
+Documentation=file:///opt/ato-analyzer/docs/OPERATIONS_AND_RECOVERY.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ato
+Group=ato
+
+WorkingDirectory=/opt/ato-analyzer
+
+Environment=ATO_RUNTIME_CONFIG_PATH=/opt/ato-analyzer/runtime-config.json
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# WSL uses the same protected systemd credentials as the production-shaped
+# units. No model, OIDC, or backup credential is consumed by this purge.
+LoadCredential=database-dsn:/etc/ato-analyzer/credentials/database-dsn
+LoadCredential=audit-hmac-key:/etc/ato-analyzer/credentials/audit-hmac-key
+
+ExecStart=/opt/ato-analyzer/venv/bin/ato-operator purge-chat --config /opt/ato-analyzer/runtime-config.json --json
+
+TimeoutStartSec=15min
+Restart=no
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+
+MemoryMax=512M
+CPUQuota=50%
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ato-chat-retention

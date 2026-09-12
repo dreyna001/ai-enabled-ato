@@ -1,6 +1,9 @@
 # Third-Party Hardening and Production Adapter Plan
 
-Status: Contract work delivered (Authlib OIDC, ClamAV adapter); optional jsonpointer consolidation remains backlog.
+Status (reconciled 2026-09-11): Authlib OIDC and ClamAV adapter code delivered;
+live customer drills remain open. The jsonpointer evaluation is closed as no-go,
+not an outstanding consolidation task. Current SSP model-stack decisions are
+recorded in [STACK_ALIGNMENT.md](STACK_ALIGNMENT.md).
 
 Normative contracts remain in [`ATO_TECHNICAL_SPEC.md`](../ATO_TECHNICAL_SPEC.md),
 [`docs/THREAT_MODEL.md`](THREAT_MODEL.md), and
@@ -14,11 +17,13 @@ This document plans four bounded workstreams identified in the third-party libra
 audit:
 
 1. **Implemented:** production OIDC/JWT handling with **Authlib** (`src/ato_service/oidc_auth.py`, `oidc_jwt.py`) — see [`P5_GATE_RECORD.md`](P5_GATE_RECORD.md). Live customer IdP drill remains **HS-003** customer-gated.
-2. **Evaluate:** consolidate duplicate RFC 6901 helpers with **`jsonpointer`**, only
-   if custom set semantics remain intact.
+2. **Closed, no-go:** the `jsonpointer` evaluation could not preserve automatic
+   intermediate-object creation; retain the existing helpers (section 5).
 3. **Implemented (contract):** production malware scanner via **local ClamAV** adapter behind `MalwareScanner` protocol (`src/ato_service/malware_scan.py`). Live scanner drill remains **HS-005** customer-gated.
-4. **Keep current:** OpenAI-compatible HTTP client, PostgreSQL job leases, idempotency,
-   audit hash chain, blob storage, routing, and bounded LLM normalization workflow.
+4. **Keep domain mechanisms:** PostgreSQL job leases, idempotency, audit hash
+   chain, blob storage, routing, and bounded normalization. Active SSP text and
+   vision calls now use guarded asynchronous PydanticAI; the legacy HTTP client
+   is retained only for its remaining consumers.
 
 The product target is **single-customer, on-prem, airgapped operation**. Runtime
 must not depend on outbound internet access. Operator procedures may use offline
@@ -27,7 +32,17 @@ not call public SaaS APIs for auth, scanning, or model hosting in production pro
 
 ## Open backlog
 
-- jsonpointer RFC 6901 consolidation (optional, no gate blocker)
+- Customer IdP validation (HS-003) and live scanner/signature/failure drills (HS-005).
+- Agency DOCX now reuses the evidence scan-before-parse gate in the working
+  checkout. Focused clean, infected, unavailable, disabled, and unconfigured
+  scanner tests pass; live scanner/signature qualification remains HS-005.
+- Exact model/endpoint provenance, native-schema support, data-policy approval,
+  and quality qualification. No additional library replacement is required merely
+  to match a preferred-stack list.
+
+Required organization owners and acceptance evidence are listed in
+[ORGANIZATION_INPUTS.md](ORGANIZATION_INPUTS.md). Code and synthetic checks do
+not close these gates.
 
 ## 2. On-prem and airgap constraints (all workstreams)
 
@@ -35,7 +50,7 @@ not call public SaaS APIs for auth, scanning, or model hosting in production pro
 | --- | --- | --- |
 | OIDC / JWT | HTTPS to customer-configured **internal** IdP (`OIDC_ISSUER_URL`); JWKS cached in-process with bounded refresh | Trusting unsigned tokens; calling external identity SaaS not configured by the customer |
 | Malware scan | Local `clamd` over **Unix socket** or **loopback TCP**; scan bytes already read from local blob storage | Cloud AV APIs, reputation lookups, or upload-to-vendor scanning |
-| LLM (unchanged) | Customer-configured on-prem or VPC endpoint via existing httpx client | Hard dependency on vendor SDKs that require runtime internet |
+| LLM | Customer-approved on-prem or VPC endpoint through the guarded SSP PydanticAI runtime; legacy consumers retain their transport | Unapproved endpoint/data routing or a runtime dependency on public internet in production |
 | Config / secrets | Schema-validated JSON + credential files per [`docs/CONFIGURATION.md`](CONFIGURATION.md) | Per-setting env overrides or secrets in JSON |
 
 **ClamAV airgap answer:** Yes. ClamAV is designed for disconnected sites. The
@@ -241,7 +256,7 @@ These areas stay custom; do not replace with third-party frameworks in this plan
 
 | Area | Rationale |
 | --- | --- |
-| OpenAI-compatible httpx client (`text_llm.py`) | Bounded retries, explicit timeouts, no SDK lock-in; works with on-prem model servers |
+| Legacy OpenAI-compatible client (`text_llm.py`) | Retained for remaining consumers; active SSP calls moved to guarded PydanticAI, so this historical keep decision is not a prohibition on the shipped SSP change |
 | PostgreSQL job / intake leases (`jobs.py`, `intake_work.py`) | Explicit lease fencing and auditability |
 | Idempotency store | Domain-specific replay semantics |
 | Audit hash chain | Contracted canonical serialization |

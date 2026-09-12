@@ -10,6 +10,7 @@ import {
 import { AppLayout } from "@/components/Layout";
 import { SessionBootstrapSkeleton } from "@/components/LoadingSkeletons";
 import { LoginPage } from "@/pages/LoginPage";
+import { ProfilesPage } from "@/pages/ProfilesPage";
 import { SspWorkspaceRoute } from "@/pages/SspWorkspaceRoute";
 import type { PortalReadinessState, SessionInfo } from "@/types";
 import { formatApiError } from "@/utils/formatApiError";
@@ -118,6 +119,7 @@ export function PortalApp() {
         }
       >
         <Route path="/ssp" element={<SspWorkspaceRoute session={session} />} />
+        <Route path="/profiles" element={<ProfilesPage session={session} />} />
       </Route>
       <Route path="/login" element={<Navigate replace to="/ssp" />} />
       <Route path="*" element={<Navigate replace to="/ssp" />} />

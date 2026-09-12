@@ -35,6 +35,8 @@ PRODUCTION_SYSTEMD_UNITS=(
     "ato-api.service"
     "ato-intake-worker.service"
     "ato-analyzer-worker.service"
+    "ato-chat-retention.service"
+    "ato-chat-retention.timer"
 )
 
 NGINX_EXAMPLE_TEMPLATES=(
@@ -51,7 +53,8 @@ usage() {
 Usage: install.sh [options]
 
 Install the ATO application package, portal bundle, deployment assets, and
-least-privilege host layout. Worker units are installed but not enabled.
+least-privilege host layout. Fresh installs leave worker and chat-retention
+units disabled; an existing enabled chat-retention timer is preserved.
 Does not start services unless --start is supplied. Does not run smoke checks
 unless --smoke is supplied. Does not run database migrations unless --migrate
 is supplied.
@@ -387,6 +390,7 @@ install_systemd_unit_file() {
     local src="$REPO_DIR/deployment/systemd/$unit"
     local dest="/etc/systemd/system/$unit"
     [[ -f "$src" ]] || err "Missing systemd unit: $src"
+    reject_non_regular_existing_file "$dest"
     cp "$src" "$dest" || err "Failed to copy $unit"
     normalize_dest_file_crlf "$dest"
     chown root:root "$dest" || err "Failed to set owner on $dest"
@@ -396,12 +400,24 @@ install_systemd_unit_file() {
 
 install_systemd_units() {
     local unit
+    local retention_timer_was_enabled=false
+    if systemctl is-enabled --quiet ato-chat-retention.timer 2>/dev/null; then
+        retention_timer_was_enabled=true
+    fi
     for unit in "${PRODUCTION_SYSTEMD_UNITS[@]}"; do
         install_systemd_unit_file "$unit"
     done
     systemctl daemon-reload || err "Failed to reload systemd"
     for unit in "${PRODUCTION_SYSTEMD_UNITS[@]}"; do
-        if [[ "$unit" != "ato-api.service" ]]; then
+        if [[ "$unit" == "ato-chat-retention.timer" ]]; then
+            if [[ "$retention_timer_was_enabled" == "true" ]]; then
+                systemctl enable "$unit" || err "Failed to preserve enabled $unit"
+                info "Chat retention timer enablement preserved: $unit"
+            else
+                systemctl disable --now "$unit" 2>/dev/null || true
+                info "Chat retention timer left disabled: $unit"
+            fi
+        elif [[ "$unit" != "ato-api.service" ]]; then
             systemctl disable "$unit" 2>/dev/null || true
             info "Worker unit left disabled: $unit"
         fi
@@ -674,6 +690,7 @@ echo "  Database DSN credential: $DATABASE_DSN_CREDENTIAL_PATH"
 echo "  Portal bundle: $PORTAL_INSTALL_DIR"
 echo "  API loopback: 127.0.0.1:8000 (nginx is the external listener)"
 echo "  Worker units: installed disabled; enable explicitly after acceptance tests"
+echo "  Chat retention: fresh installs disabled; existing timer enablement preserved"
 echo "  Upgrade flow:   sudo bash scripts/upgrade.sh"
 echo "  Worker drain:   sudo bash scripts/drain_workers.sh"
 echo "  Rollback flow:  sudo bash scripts/rollback.sh"

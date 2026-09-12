@@ -785,6 +785,15 @@
         "title": "MigrateProfileRequest",
         "type": "object"
       },
+      "ProfileState": {
+        "enum": [
+          "inactive",
+          "active",
+          "archived"
+        ],
+        "title": "ProfileState",
+        "type": "string"
+      },
       "ProposePatchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -958,6 +967,101 @@
           "interconnections"
         ],
         "title": "SaveSystemDefinitionRequest",
+        "type": "object"
+      },
+      "SspProfileVersionResponse": {
+        "additionalProperties": false,
+        "description": "Profile version metadata exposed to the administration portal.",
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "imported_at": {
+            "format": "date-time",
+            "title": "Imported At",
+            "type": "string"
+          },
+          "imported_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Imported By",
+            "type": "string"
+          },
+          "profile_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_version_id": {
+            "format": "uuid",
+            "title": "Profile Version Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProfileState"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_version_id",
+          "profile_id",
+          "version",
+          "status",
+          "bundle_sha256",
+          "imported_by",
+          "imported_at",
+          "activated_at",
+          "display_name"
+        ],
+        "title": "SspProfileVersionResponse",
+        "type": "object"
+      },
+      "SspProfilesResponse": {
+        "additionalProperties": false,
+        "description": "Profile list plus the server-authoritative administration capability.",
+        "properties": {
+          "can_manage": {
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SspProfileVersionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "can_manage",
+          "items"
+        ],
+        "title": "SspProfilesResponse",
         "type": "object"
       },
       "SystemComponentRequest": {
@@ -1362,9 +1466,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Profiles Api V1 Ssp Profiles Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SspProfilesResponse"
                 }
               }
             },

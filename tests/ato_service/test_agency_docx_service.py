@@ -15,6 +15,7 @@ from docx import Document
 
 from ato_service.blobs import BlobStore
 from ato_service.extraction.types import ExtractionLimits
+from ato_service.malware_scan import MalwareScannerUnavailableError
 from ato_service.ssp_workspace.agency_docx import AgencyDocxError
 from ato_service.ssp_workspace.agency_docx_contracts import (
     ControlTablePlan,
@@ -26,7 +27,6 @@ from ato_service.ssp_workspace.agency_docx_contracts import (
     canonical_append_column_map,
 )
 from ato_service.ssp_workspace.service import (
-    AgencyDocxMalwareScanRequiredError,
     AgencyDocxRenderNotFoundError,
     AgencyDocxRenderStateError,
     AgencyDocxUploadError,
@@ -818,7 +818,7 @@ def test_onprem_production_blocks_before_outline_blob_or_model(
 
     blob_store.store_stream = tracked_store  # type: ignore[method-assign]
 
-    with pytest.raises(AgencyDocxMalwareScanRequiredError):
+    with pytest.raises(MalwareScannerUnavailableError):
         _run(
             create_agency_docx_render(
                 session,

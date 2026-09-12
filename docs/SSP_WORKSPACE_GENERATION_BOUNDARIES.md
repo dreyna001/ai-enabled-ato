@@ -1,6 +1,6 @@
 # SSP Workspace: Generation Boundaries and Agent Split Analysis
 
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-11
 
 This document records what the internal SSP workspace must **not** treat as
 authoritative generated output, and evaluates whether splitting SSP drafting
@@ -97,31 +97,43 @@ would produce **better model results**.
 
 | Step | Scope | Output |
 | --- | --- | --- |
-| **Generate or update documents** | SSP sections + controls + questions (+ optional CIA proposal) | One large structured JSON response |
+| **Generate or update documents** | Sequential SSP narrative then control pass, plus targeted questions and optional CIA proposal | Two bounded native-schema responses merged into one draft envelope |
 | **Analyze from evidence** | Categorization only | Small categorization proposal |
 | **Analyze from diagram** | System definition draft | Boundary / components proposal |
 | **Ask agent** | One section or control (+ instruction) | Bounded patch |
 
-Implementation: `src/ato_service/ssp_workspace/generation.py` (`generate_initial_ssp`,
-`generate_categorization_proposal`, `generate_contextual_patch`).
+Implementation: `src/ato_service/ssp_workspace/generation.py` (`generate_initial_ssp`
+orchestrates `generate_ssp_narrative` and `generate_control_implementations`,
+alongside `generate_categorization_proposal` and `generate_contextual_patch`).
 
-The profile already carries **separate policy blocks** inside one generation
-call: SSP required items vs `implementation_statement_policy` (control enums,
-statement content rules, ODP rules, inherited/hybrid rules, semantic review).
+The profile carries separate policy blocks for the two passes: SSP required items
+for the narrative pass and `implementation_statement_policy` (control enums,
+statement content rules, ODP rules, inherited/hybrid rules, semantic review) for
+the control pass.
 
-### Why one combined generate call helps
+### Legacy tradeoffs of one combined generate call
 
-- **Narrative consistency.** SSP sections (purpose, boundary narrative, architecture)
-  and control statements should describe the same system. One pass sees the same
-  evidence and can align story and implementation claims.
-- **Shared question budget.** Material gaps can be deduplicated across SSP and
-  controls instead of each agent opening redundant questions.
-- **Operator simplicity.** One wait, one retry, one audit event for a first draft.
-- **Lower cost and latency** for the common “empty workspace → first draft” path.
+Before the split was implemented, a combined response had these apparent
+advantages. They are retained here as historical tradeoffs; the active Generate
+path is now two sequential bounded passes, not one combined model response.
 
-### Why splitting would likely improve results
+- **Narrative consistency.** SSP sections and control statements should describe
+  the same system. The active control pass receives validated narrative content
+  and the same evidence context, preserving this benefit without a combined
+  output contract.
+- **Shared question budget.** A combined response could deduplicate questions
+  across SSP and controls, but it also coupled validation of both output types.
+  The active path keeps one final merge and deduplicates questions at persistence.
+- **Operator simplicity.** One Generate action and one audit event remain; the
+  server performs the two model calls behind that action.
+- **Lower cost and latency.** This was a potential benefit of the legacy path;
+  the active path accepts two bounded calls for smaller contracts and repairable
+  failure domains.
 
-The combined call is the weakest link for **model quality**, not for manual ATO.
+### Why the implemented split improves results
+
+The legacy combined call was the weakest link for **model quality**, not for
+manual ATO.
 
 | Factor | Combined call problem | Split benefit |
 | --- | --- | --- |
@@ -131,10 +143,10 @@ The combined call is the weakest link for **model quality**, not for manual ATO.
 | **Policy focus** | Control rules (`implementation_statement_policy`) compete with SSP section constraints in one `task` string | Control agent loads only statement policy; SSP agent loads only section catalog |
 | **Timing** | Controls generated before baseline / ODP / system context are confirmed | Control pass can run **after** confirms with confirmed context injected |
 
-### Recommended split (quality-first, not required today)
+### Implemented split (quality-first)
 
-If the goal is **better results**, prefer **sequenced specialized passes** over
-two peer agents run in parallel with no shared state:
+The active path uses sequenced specialized passes rather than two peer agents
+running in parallel with no shared state:
 
 ```
 1. Evidence processed
@@ -156,7 +168,7 @@ two peer agents run in parallel with no shared state:
 → ISSO confirm → deterministic lock**. Splitting SSP vs controls does not replace
 those gates.
 
-### What to split first (highest ROI)
+### Split priorities reflected in the implementation
 
 1. **Controls out of the bulk generate** — largest output surface (~hundreds of
    controls), strictest profile policy, most ODP and inheritance edge cases.
@@ -165,10 +177,19 @@ those gates.
 3. **Leave Ask agent and categorization analyze as-is** — already bounded and
    task-specific.
 
-A lighter-weight alternative without new UI buttons: keep one **Generate** button
-but run **two sequential model calls server-side** (SSP pass, then controls pass),
-merging into one revision save. That improves quality without changing operator
-steps.
+The implemented path keeps one **Generate** button and runs two sequential model
+calls server-side (`ssp_narrative_generation`, then `control_generation`), merging
+only after both validated results are available. Each call has its own bounded
+repair. The second prompt receives the validated first-pass sections and the
+application-owned confirmation statuses/fact IDs; it cannot return narrative
+sections or categorization. A failure in either pass produces no revision save.
+
+The legacy `initial_generation` schema remains registered for public envelope
+compatibility. New provider-facing schemas are version `1.0.0` and intentionally
+have no cross-pass output fields:
+
+- `ssp_narrative_generation`: `schema_version`, `sections`, `categorization`
+- `control_generation`: `schema_version`, `controls`, `questions`
 
 ### What not to split (diminishing returns)
 
@@ -177,7 +198,7 @@ steps.
 - **Per-control Ask agent** — already scoped; splitting further per control family
   rarely helps unless statements are batched by baseline slice for token limits.
 
-### Skills / rules mapping (if split)
+### Skills / rules mapping (active split)
 
 | Pass | Prompt focus | Rules source |
 | --- | --- | --- |

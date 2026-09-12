@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import inspect
 import json
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from io import BytesIO
 from typing import Any
@@ -62,6 +62,7 @@ from ato_service.ssp_workspace.generation import (
     InitialGenerationRequest,
     ModelCallable,
     OpenQuestionState,
+    SspConfirmationContext,
     SspSectionState,
     generate_categorization_proposal,
     generate_contextual_patch,
@@ -149,17 +150,6 @@ class AgencyDocxUploadError(ValueError):
         self.detail = detail
         if failure_kind is not None:
             self.failure_kind = failure_kind
-
-
-class AgencyDocxMalwareScanRequiredError(AgencyDocxUploadError):
-    error_code = "malware_scan_required"
-
-
-    def __init__(self) -> None:
-        super().__init__(
-            "agency DOCX upload requires an approved malware scanner integration "
-            "before customer template processing in onprem_production"
-        )
 
 
 _SAFE_CONTEXT_BUDGET_DETAIL = (
@@ -687,6 +677,7 @@ async def generate_workspace_draft(
             ),
             facts=_generation_facts(content),
             categorization_confirmed=_confirmed_impact_level(content) is not None,
+            confirmation_context=_workspace_confirmation_context(content),
         ),
         model,
     )
@@ -1220,9 +1211,22 @@ async def migrate_workspace_profile(
     categorization: dict[str, FactContent] | None = None,
     audit_action: str = "ssp_profile_migrated",
 ) -> tuple[Any, Any]:
-    """Create a new working revision reconciled to an active profile version."""
+    """Create a new working revision for an explicit profile migration.
+
+    Existing content is carried forward only when its profile meaning is still
+    compatible.  Changed requirements are made reviewable, while incompatible
+    control enum values fail before the workspace or revision is mutated.
+    """
 
     from ato_service.db.models import SspProfileVersion, SspWorkspace
+    from ato_service.ssp_workspace.information_types import (
+        INFORMATION_TYPES_STATUS_KEY,
+        active_information_types_status,
+    )
+    from ato_service.ssp_workspace.system_definition import (
+        SYSTEM_DEFINITION_STATUS_KEY,
+        active_system_definition_status,
+    )
 
     current = await _load_exact_current_revision(
         session, workspace_id=workspace_id, revision_id=expected_revision_id
@@ -1234,6 +1238,8 @@ async def migrate_workspace_profile(
             .with_for_update()
         )
     ).scalar_one()
+    if workspace.current_revision_id != expected_revision_id:
+        raise StaleWorkspaceRevisionError("workspace revision changed")
     old_profile_row = (
         await session.execute(
             select(SspProfileVersion).where(
@@ -1257,16 +1263,102 @@ async def migrate_workspace_profile(
     new_profile = resolve_stored_profile(new_profile_row, impact_level)
     if old_profile.profile_id != new_profile.profile_id:
         raise ValueError("profile migration requires the same profile_id")
-    profile_diff = (
-        _impact_profile_diff(old_profile, new_profile)
-        if old_profile.profile_version == new_profile.profile_version
-        and old_profile.impact_level != new_profile.impact_level
-        else diff_profiles(old_profile, new_profile)
-    )
+
     content = RevisionContent.model_validate(current.content)
+    current_impact_level = _impact_level(content)
+    if (
+        categorization is None
+        and workspace.profile_version_id == profile_version_id
+        and current_impact_level == impact_level
+    ):
+        return current, _impact_profile_diff(old_profile, new_profile)
+
+    if old_profile.profile_version == new_profile.profile_version:
+        profile_diff = (
+            _impact_profile_diff(old_profile, new_profile)
+            if old_profile.impact_level != new_profile.impact_level
+            else diff_profiles(old_profile, new_profile)
+        )
+    else:
+        # ``diff_profiles`` compares one impact level at a time.  Use it for
+        # version-independent semantics at the source impact, then correct
+        # the baseline sets and changed IDs to the actual source/target pair.
+        target_at_source_impact = (
+            new_profile
+            if old_profile.impact_level == new_profile.impact_level
+            else resolve_stored_profile(new_profile_row, old_profile.impact_level)
+        )
+        source_diff = diff_profiles(old_profile, target_at_source_impact)
+        old_controls_by_id = {
+            control.control_id: control for control in old_profile.controls
+        }
+        new_controls_by_id = {
+            control.control_id: control for control in new_profile.controls
+        }
+        actual_common_control_ids = (
+            old_controls_by_id.keys() & new_controls_by_id.keys()
+        )
+        profile_diff = replace(
+            source_diff,
+            impact_level=new_profile.impact_level,
+            added_control_ids=tuple(
+                sorted(new_controls_by_id.keys() - old_controls_by_id.keys())
+            ),
+            removed_control_ids=tuple(
+                sorted(old_controls_by_id.keys() - new_controls_by_id.keys())
+            ),
+            changed_control_ids=tuple(
+                sorted(
+                    control_id
+                    for control_id in actual_common_control_ids
+                    if (
+                        old_controls_by_id[control_id].title,
+                        old_controls_by_id[control_id].requirement_text,
+                    )
+                    != (
+                        new_controls_by_id[control_id].title,
+                        new_controls_by_id[control_id].requirement_text,
+                    )
+                )
+            ),
+        )
     old_sections = {item.key: item for item in content.sections}
     old_controls = {item.control_id: item for item in content.controls}
+    new_section_ids = {item.item_id for item in new_profile.ssp_required_items}
     new_control_ids = {item.control_id for item in new_profile.controls}
+
+    incompatible_values: list[str] = []
+    allowed_statuses = set(new_profile.control_response.implementation_statuses)
+    allowed_responsibilities = set(new_profile.control_response.responsibilities)
+    for control_id in sorted(old_controls.keys() & new_control_ids):
+        control = old_controls[control_id]
+        if (
+            control.implementation_status is not None
+            and control.implementation_status not in allowed_statuses
+        ):
+            incompatible_values.append(
+                f"{control_id}.implementation_status={control.implementation_status!r}"
+            )
+        if (
+            control.responsibility is not None
+            and control.responsibility not in allowed_responsibilities
+        ):
+            incompatible_values.append(
+                f"{control_id}.responsibility={control.responsibility!r}"
+            )
+    if incompatible_values:
+        raise WorkspaceProfileValidationError(
+            "profile migration cannot preserve incompatible control enum values: "
+            + ", ".join(incompatible_values)
+        )
+
+    changed_section_ids = set(profile_diff.changed_ssp_item_ids)
+    changed_control_ids = set(profile_diff.changed_control_ids)
+    if profile_diff.implementation_statement_policy_changed:
+        changed_control_ids.update(old_controls.keys() & new_control_ids)
+    if old_profile.control_response != new_profile.control_response:
+        changed_control_ids.update(old_controls.keys() & new_control_ids)
+
     facts = {item.key: item for item in content.facts}
     for key, value in (
         ("profile_id", new_profile.profile_id),
@@ -1282,35 +1374,114 @@ async def migrate_workspace_profile(
         facts.pop("system.provisional_impact_level", None)
         for key, fact in categorization.items():
             facts[key] = fact
+    elif active_categorization_status(facts) == "confirmed":
+        # A profile or baseline migration invalidates the prior confirmation;
+        # keep the selected impact visible as provisional until re-confirmed.
+        facts["system.categorization_status"] = FactContent(
+            key="system.categorization_status",
+            value="stale",
+            provenance=Provenance.ISSO_ENTERED,
+        )
+        facts["system.provisional_impact_level"] = FactContent(
+            key="system.provisional_impact_level",
+            value=impact_level,
+            provenance=Provenance.ISSO_ENTERED,
+        )
+
+    affected_foundational_items = (
+        set(profile_diff.added_ssp_item_ids)
+        | set(profile_diff.removed_ssp_item_ids)
+        | set(profile_diff.changed_ssp_item_ids)
+    )
+    if (
+        affected_foundational_items
+        & {
+            "system.authorization_boundary",
+            "system.components",
+            "system.interconnections",
+        }
+        and active_system_definition_status(facts) == "confirmed"
+    ):
+        facts[SYSTEM_DEFINITION_STATUS_KEY] = FactContent(
+            key=SYSTEM_DEFINITION_STATUS_KEY,
+            value="stale",
+            provenance=Provenance.ISSO_ENTERED,
+        )
+    if (
+        "system.data_types" in affected_foundational_items
+        and active_information_types_status(facts) == "confirmed"
+    ):
+        facts[INFORMATION_TYPES_STATUS_KEY] = FactContent(
+            key=INFORMATION_TYPES_STATUS_KEY,
+            value="stale",
+            provenance=Provenance.ISSO_ENTERED,
+        )
+
+    def migrated_section(item: Any) -> SectionContent:
+        existing = old_sections.get(item.item_id)
+        if existing is None:
+            return SectionContent(
+                key=item.item_id,
+                title=item.title,
+                content="",
+                state=SectionState.EMPTY,
+            )
+        updates: dict[str, Any] = {"title": item.title}
+        if item.item_id in changed_section_ids and existing.state is SectionState.REVIEWED:
+            updates["state"] = SectionState.EDITED
+        return existing.model_copy(update=updates)
+
+    def migrated_control(item: Any) -> ControlContent:
+        existing = old_controls.get(item.control_id)
+        if existing is None:
+            return ControlContent(
+                control_id=item.control_id,
+                title=item.title,
+                implementation_status=(
+                    "unknown"
+                    if "unknown" in allowed_statuses
+                    else None
+                ),
+                responsibility=(
+                    "unknown"
+                    if "unknown" in allowed_responsibilities
+                    else None
+                ),
+                state=ControlState.EMPTY,
+            )
+        updates: dict[str, Any] = {"title": item.title}
+        if item.control_id in changed_control_ids:
+            updates["state"] = ControlState.PARTIAL
+            marker = (
+                "Profile migration changed this control requirement; review it "
+                f"against profile {new_profile.profile_version} before approval."
+            )
+            updates["unresolved_reason"] = (
+                f"{existing.unresolved_reason.strip()}\n{marker}"
+                if existing.unresolved_reason
+                and existing.unresolved_reason.strip()
+                else marker
+            )
+        return existing.model_copy(update=updates)
+
     migrated = content.model_copy(
         update={
             "facts": tuple(facts[key] for key in sorted(facts)),
-            "sections": tuple(
-                old_sections.get(item.item_id)
-                or SectionContent(
-                    key=item.item_id,
-                    title=item.title,
-                    content="",
-                    state=SectionState.EMPTY,
-                )
-                for item in new_profile.ssp_required_items
-            ),
-            "controls": tuple(
-                old_controls.get(item.control_id)
-                or ControlContent(
-                    control_id=item.control_id,
-                    title=item.title,
-                    implementation_status="unknown",
-                    responsibility="unknown",
-                    state=ControlState.EMPTY,
-                )
-                for item in new_profile.controls
-            ),
+            "sections": tuple(migrated_section(item) for item in new_profile.ssp_required_items),
+            "controls": tuple(migrated_control(item) for item in new_profile.controls),
             "questions": tuple(
                 question.model_copy(update={"state": QuestionState.DISMISSED})
                 if question.state is QuestionState.OPEN
-                and question.target_type == "control"
-                and question.target_key not in new_control_ids
+                and (
+                    (
+                        question.target_type == "control"
+                        and question.target_key not in new_control_ids
+                    )
+                    or (
+                        question.target_type == "ssp_section"
+                        and question.target_key not in new_section_ids
+                    )
+                )
                 else question
                 for question in content.questions
             ),
@@ -1691,6 +1862,8 @@ async def analyze_workspace_diagram(
         artifact_id=artifact_id,
         locator=locator,
         display_filename=artifact_display_filename,
+        artifact_sha256=artifact_sha256,
+        source_revision_id=expected_revision_id,
     )
     updated = apply_system_definition_proposal(
         content,
@@ -1963,6 +2136,111 @@ def _generation_facts(content: RevisionContent) -> tuple[EvidenceFact, ...]:
         text = fact.value if isinstance(fact.value, str) else str(fact.value)
         facts.append(EvidenceFact(fact_id=fact.key, source_id=source_id, text=text))
     return tuple(facts)
+
+
+def _workspace_confirmation_context(
+    content: RevisionContent,
+) -> SspConfirmationContext:
+    """Project persisted confirmation flags, evidence, and canonical sections."""
+
+    from ato_service.ssp_workspace.categorization import (
+        CATEGORIZATION_STATUS_KEY,
+        IMPACT_FACT_KEYS,
+        RATIONALE_FACT_KEYS,
+    )
+    from ato_service.ssp_workspace.information_types import (
+        INFORMATION_TYPES_SECTION_KEY,
+        INFORMATION_TYPES_STATUS_KEY,
+        active_information_types_status,
+    )
+    from ato_service.ssp_workspace.system_definition import (
+        STRUCTURED_SECTION_KEYS,
+        SYSTEM_DEFINITION_STATUS_KEY,
+        active_system_definition_status,
+    )
+
+    facts_by_key = {
+        item.key: item for item in content.facts if item.state is FactState.ACTIVE
+    }
+    categorization_status = active_categorization_status(facts_by_key) or "unconfirmed"
+    system_definition_status = (
+        active_system_definition_status(facts_by_key) or "unconfirmed"
+    )
+    information_types_status = (
+        active_information_types_status(facts_by_key) or "unconfirmed"
+    )
+
+    def bound_fact_ids(canonical_keys: set[str] | frozenset[str]) -> tuple[str, ...]:
+        """Return only active, evidence-linked facts owned by one dimension."""
+
+        return tuple(
+            sorted(
+                fact.key
+                for fact in content.facts
+                if fact.state is FactState.ACTIVE
+                and fact.key in canonical_keys
+                and fact.evidence
+            )
+        )
+
+    categorization_fact_ids = bound_fact_ids(
+        frozenset(
+            (
+                CATEGORIZATION_STATUS_KEY,
+                *IMPACT_FACT_KEYS,
+                *RATIONALE_FACT_KEYS,
+            )
+        )
+    )
+    system_definition_fact_ids = bound_fact_ids(
+        frozenset(STRUCTURED_SECTION_KEYS | {SYSTEM_DEFINITION_STATUS_KEY})
+    )
+    information_types_fact_ids = bound_fact_ids(
+        frozenset({INFORMATION_TYPES_SECTION_KEY, INFORMATION_TYPES_STATUS_KEY})
+    )
+
+    def confirmed_sections(
+        canonical_keys: set[str] | frozenset[str],
+        status: str,
+    ) -> tuple[tuple[str, str], ...]:
+        """Return non-empty canonical section values only after confirmation."""
+
+        if status != "confirmed":
+            return ()
+        return tuple(
+            (section.key, section.content)
+            for section in sorted(content.sections, key=lambda item: item.key)
+            if section.key in canonical_keys and section.content.strip()
+        )
+
+    system_definition_sections = confirmed_sections(
+        STRUCTURED_SECTION_KEYS,
+        system_definition_status,
+    )
+    information_types_sections = confirmed_sections(
+        frozenset({INFORMATION_TYPES_SECTION_KEY}),
+        information_types_status,
+    )
+    return SspConfirmationContext(
+        categorization_status=categorization_status,
+        system_definition_status=system_definition_status,
+        information_types_status=information_types_status,
+        categorization_fact_ids=(
+            categorization_fact_ids if categorization_status == "confirmed" else ()
+        ),
+        system_definition_fact_ids=(
+            system_definition_fact_ids
+            if system_definition_status == "confirmed"
+            else ()
+        ),
+        information_types_fact_ids=(
+            information_types_fact_ids
+            if information_types_status == "confirmed"
+            else ()
+        ),
+        confirmed_system_definition_sections=system_definition_sections,
+        confirmed_information_types_sections=information_types_sections,
+    )
 
 
 def _control_response_envelope(
@@ -2513,7 +2791,10 @@ async def create_agency_docx_render(
     if len(template_bytes) > config.limits.max_single_file_bytes:
         raise AgencyDocxUploadError("template file exceeds configured limit")
 
-    _require_agency_docx_malware_scan_ready(config)
+    await _scan_agency_docx_before_processing(
+        config=config,
+        template_bytes=template_bytes,
+    )
     require_ssp_model_allowed(config)
 
     if not isinstance(blob_store, BlobStore):
@@ -2999,9 +3280,24 @@ def _review_result_document(result: Any) -> dict[str, Any]:
     }
 
 
-def _require_agency_docx_malware_scan_ready(config: Any) -> None:
-    if getattr(config, "runtime_profile", None) == "onprem_production":
-        raise AgencyDocxMalwareScanRequiredError()
+async def _scan_agency_docx_before_processing(
+    *,
+    config: Any,
+    template_bytes: bytes,
+) -> None:
+    """Apply the shared fail-closed malware gate before DOCX processing."""
+    from ato_service.ssp_workspace.evidence import (
+        EvidenceUploadError,
+        _scan_before_processing,
+    )
+
+    try:
+        await _scan_before_processing(config=config, content=template_bytes)
+    except EvidenceUploadError as exc:
+        raise AgencyDocxUploadError(
+            "agency template rejected by malware scan",
+            failure_kind="malware_detected",
+        ) from exc
 
 
 def _stored_render_has_blocker(
